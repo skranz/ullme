@@ -40,7 +40,7 @@ ullme_handle_audio_upload = function(id, value, session, app=getApp(), ...) {
     url = urls[copied]
   )
 
-  app$glob$last_audio_recording = records[[length(records)]]
+  app$last_audio_recording = records[[length(records)]]
   callJS(
     .fun = "window.ullmeAudio.receiveStoredAudio",
     .args = list(records),
@@ -65,5 +65,5 @@ ullme_audio_record = function(id, name, size, type, path, url) {
 
 ullme_session_audio_dir = function(session, app=getApp()) {
   restore.point("ullme_session_audio_dir")
-  file.path(app$glob$audio_dir, ullme_session_dir_name(session=session))
+  file.path(app$audio_dir, ullme_session_dir_name(session=session))
 }

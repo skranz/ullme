@@ -6,6 +6,13 @@
     assistantRequests: {}
   };
 
+  var materialLabels = {
+    slides: "Slides",
+    ps: "Problem Sets",
+    quiz: "Quiz",
+    background: "Background"
+  };
+
   var icons = {
     copy: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M5 15V5h10"></path></svg>',
     check: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
@@ -32,6 +39,15 @@
     var voiceButton = byId("ullme_voice_btn");
     var sidebarClose = byId("ullme_sidebar_close");
     var sidebarToggle = byId("ullme_sidebar_toggle");
+    var roleSelect = byId("ullme_role_select");
+    var semesterSelect = byId("ullme_semester_select");
+    var coursePanel = byId("ullme_course_panel");
+    var addCourseButton = byId("ullme_add_course_btn");
+    var mainTabs = byId("ullme_main_tabs");
+    var settingsSave = byId("ullme_course_settings_save");
+    var materialCategories = byId("ullme_material_categories");
+    var materialUploadButton = byId("ullme_material_upload_btn");
+    var materialInput = byId("ullme_material_upload");
 
     if (!messages || !input || !submitButton) return;
 
@@ -82,6 +98,75 @@
     if (sidebarToggle) {
       sidebarToggle.addEventListener("click", function () {
         setSidebarHidden(false);
+      });
+    }
+
+    if (roleSelect) {
+      roleSelect.addEventListener("click", function (event) {
+        event.stopPropagation();
+        toggleSidebarMenu(roleSelect, function (role) {
+          sendSidebarEvent("ullme_role_select_event", { role: role });
+        });
+      });
+    }
+
+    if (semesterSelect) {
+      semesterSelect.addEventListener("click", function (event) {
+        event.stopPropagation();
+        toggleSidebarMenu(semesterSelect, function (semester) {
+          sendSidebarEvent("ullme_semester_select_event", { semester: semester });
+        });
+      });
+    }
+
+    document.addEventListener("click", closeSidebarMenus);
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeSidebarMenus();
+    });
+
+    if (coursePanel) {
+      coursePanel.addEventListener("click", function (event) {
+        var item = event.target.closest(".ullme-course-item");
+        if (!item || !coursePanel.contains(item)) return;
+        selectCourseItem(item.getAttribute("data-courseid") || "");
+        sendSidebarEvent("ullme_course_select_event", {
+          courseid: item.getAttribute("data-courseid") || ""
+        });
+      });
+    }
+
+    if (addCourseButton) {
+      addCourseButton.addEventListener("click", function () {
+        openAddCourseDialog();
+      });
+    }
+
+    if (mainTabs) {
+      mainTabs.addEventListener("click", function (event) {
+        var tab = event.target.closest(".ullme-main-tab");
+        if (!tab || !mainTabs.contains(tab)) return;
+        showMainPanel(tab.getAttribute("data-panel") || "chat");
+      });
+    }
+
+    if (settingsSave) {
+      settingsSave.addEventListener("click", function () {
+        sendSidebarEvent("ullme_course_settings_save_event", gatherCourseSettings());
+      });
+    }
+
+    if (materialCategories) {
+      materialCategories.addEventListener("click", function (event) {
+        var item = event.target.closest(".ullme-material-category");
+        if (!item || !materialCategories.contains(item)) return;
+        selectMaterialCategory(item.getAttribute("data-category") || "slides");
+      });
+    }
+
+    if (materialUploadButton && materialInput) {
+      materialUploadButton.addEventListener("click", function () {
+        sendSidebarEvent("ullme_material_category_event", { category: currentMaterialCategory() });
+        materialInput.click();
       });
     }
   }
@@ -180,6 +265,287 @@
     window.setTimeout(function () {
       receiveAssistantMessage(payload.assistantMessageId, "Fake AI answer to:\n" + payload.text);
     }, 450);
+  }
+
+  function sendSidebarEvent(inputId, payload) {
+    payload = payload || {};
+    payload.nonce = Math.random();
+    if (window.Shiny && Shiny.setInputValue) {
+      Shiny.setInputValue(inputId, payload, { priority: "event" });
+      return;
+    }
+    if (window.Shiny && Shiny.onInputChange) {
+      Shiny.onInputChange(inputId, payload);
+    }
+  }
+
+  function showMainPanel(panelName) {
+    var app = byId("ullme_app");
+    var tabs = byId("ullme_main_tabs");
+    if (app) {
+      app.classList.toggle("ullme-panel-chat", panelName === "chat");
+      app.classList.toggle("ullme-panel-settings", panelName === "settings");
+      app.classList.toggle("ullme-panel-material", panelName === "material");
+    }
+    if (tabs) {
+      Array.prototype.forEach.call(tabs.querySelectorAll(".ullme-main-tab"), function (tab) {
+        tab.classList.toggle("ullme-main-tab-active", tab.getAttribute("data-panel") === panelName);
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-main-panel"), function (panel) {
+      panel.classList.toggle("ullme-main-panel-active", panel.getAttribute("data-panel") === panelName);
+    });
+  }
+
+  function openAddCourseDialog() {
+    closeAddCourseDialog();
+    var overlay = document.createElement("div");
+    var dialog = document.createElement("div");
+    var title = document.createElement("div");
+    var idField = courseDialogField("Course ID", "ullme_new_courseid");
+    var nameField = courseDialogField("Course name", "ullme_new_coursename");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var create = document.createElement("button");
+
+    overlay.id = "ullme_add_course_overlay";
+    overlay.className = "ullme-dialog-overlay";
+    dialog.className = "ullme-dialog";
+    title.className = "ullme-dialog-title";
+    title.textContent = "Add Course";
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Cancel";
+    create.type = "button";
+    create.className = "ullme-primary-action";
+    create.textContent = "Create";
+
+    cancel.addEventListener("click", closeAddCourseDialog);
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeAddCourseDialog();
+    });
+    create.addEventListener("click", function () {
+      var courseid = idField.input.value.trim();
+      if (!courseid) {
+        idField.input.focus();
+        return;
+      }
+      sendSidebarEvent("ullme_add_course_event", {
+        courseid: courseid,
+        coursename: nameField.input.value.trim(),
+        times: []
+      });
+      closeAddCourseDialog();
+      showMainPanel("settings");
+    });
+
+    actions.appendChild(cancel);
+    actions.appendChild(create);
+    dialog.appendChild(title);
+    dialog.appendChild(idField.label);
+    dialog.appendChild(nameField.label);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    idField.input.focus();
+  }
+
+  function closeAddCourseDialog() {
+    var overlay = byId("ullme_add_course_overlay");
+    if (overlay) overlay.remove();
+  }
+
+  function courseDialogField(labelText, id) {
+    var label = document.createElement("label");
+    var span = document.createElement("span");
+    var input = document.createElement("input");
+    label.className = "ullme-field";
+    span.textContent = labelText;
+    input.id = id;
+    input.type = "text";
+    label.appendChild(span);
+    label.appendChild(input);
+    return { label: label, input: input };
+  }
+
+  function gatherCourseSettings() {
+    var name = byId("ullme_settings_coursename");
+    return {
+      coursename: name ? name.value.trim() : "",
+      times: gatherCourseTimes()
+    };
+  }
+
+  function gatherCourseTimes() {
+    var rows = document.querySelectorAll(".ullme-time-slot");
+    return Array.prototype.map.call(rows, function (row) {
+      return {
+        weekday: valueOf(row.querySelector(".ullme-time-weekday")),
+        start: valueOf(row.querySelector(".ullme-time-start")),
+        end: valueOf(row.querySelector(".ullme-time-end"))
+      };
+    }).filter(function (time) {
+      return time.weekday || time.start || time.end;
+    }).slice(0, 3);
+  }
+
+  function valueOf(input) {
+    return input ? input.value : "";
+  }
+
+  function fillCourseSettings(course) {
+    course = course || {};
+    setInputValue("ullme_settings_courseid", course.courseid || "");
+    setInputValue("ullme_settings_coursename", course.coursename || "");
+    fillCourseTimes(course.times || []);
+  }
+
+  function setInputValue(id, value) {
+    var input = byId(id);
+    if (input) input.value = value || "";
+  }
+
+  function fillCourseTimes(times) {
+    var rows = document.querySelectorAll(".ullme-time-slot");
+    Array.prototype.forEach.call(rows, function (row, index) {
+      var time = times[index] || {};
+      setElementValue(row.querySelector(".ullme-time-weekday"), time.weekday || "");
+      setElementValue(row.querySelector(".ullme-time-start"), time.start || "");
+      setElementValue(row.querySelector(".ullme-time-end"), time.end || "");
+    });
+  }
+
+  function setElementValue(element, value) {
+    if (element) element.value = value || "";
+  }
+
+  function selectMaterialCategory(category) {
+    var categories = byId("ullme_material_categories");
+    if (!categories) return;
+    Array.prototype.forEach.call(categories.querySelectorAll(".ullme-material-category"), function (item) {
+      item.classList.toggle("ullme-material-category-active", item.getAttribute("data-category") === category);
+    });
+    sendSidebarEvent("ullme_material_category_event", { category: category });
+    renderMaterialFiles(state.courseMaterial || {}, category);
+  }
+
+  function currentMaterialCategory() {
+    var active = document.querySelector(".ullme-material-category-active");
+    return active ? active.getAttribute("data-category") || "slides" : "slides";
+  }
+
+  function renderMaterialFiles(material, category) {
+    var list = byId("ullme_material_files");
+    if (!list) return;
+    category = category || currentMaterialCategory();
+    var files = material && material[category] ? material[category] : [];
+    list.innerHTML = "";
+
+    if (!files.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-material-empty";
+      empty.textContent = "No files";
+      list.appendChild(empty);
+      return;
+    }
+
+    files.forEach(function (path) {
+      var row = document.createElement("div");
+      var name = document.createElement("div");
+      var remove = document.createElement("button");
+      row.className = "ullme-material-file";
+      name.className = "ullme-material-file-name";
+      name.textContent = path;
+      remove.type = "button";
+      remove.className = "ullme-danger-action";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", function () {
+        sendSidebarEvent("ullme_material_delete_event", {
+          category: category,
+          path: path
+        });
+      });
+      row.appendChild(name);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+  }
+
+  function selectCourseItem(courseid) {
+    var list = byId("ullme_course_list");
+    if (!list) return;
+    Array.prototype.forEach.call(list.querySelectorAll(".ullme-course-item"), function (item) {
+      item.classList.toggle("ullme-course-item-active", item.getAttribute("data-courseid") === courseid);
+    });
+  }
+
+  function toggleSidebarMenu(button, onSelect) {
+    var existing = button.parentNode.querySelector(".ullme-sidebar-menu");
+    var wasOpen = Boolean(existing);
+    closeSidebarMenus();
+    if (wasOpen) return;
+
+    var options = sidebarOptions(button);
+    var current = button.getAttribute("data-value") || "";
+    if (!options.length) return;
+
+    var menu = document.createElement("div");
+    menu.className = "ullme-sidebar-menu";
+    menu.setAttribute("role", "menu");
+    menu.style.left = button.offsetLeft + "px";
+    menu.style.top = (button.offsetTop + button.offsetHeight + 3) + "px";
+    menu.addEventListener("click", function (event) {
+      event.stopPropagation();
+    });
+
+    options.forEach(function (value) {
+      var item = document.createElement("button");
+      item.className = "ullme-sidebar-menu-item";
+      if (value === current) item.classList.add("ullme-sidebar-menu-item-active");
+      item.type = "button";
+      item.setAttribute("role", "menuitem");
+      item.textContent = sidebarLabel(value, button.getAttribute("data-kind"));
+      item.addEventListener("click", function () {
+        setSidebarValue(button, value);
+        closeSidebarMenus();
+        onSelect(value);
+      });
+      menu.appendChild(item);
+    });
+
+    button.parentNode.appendChild(menu);
+    button.classList.add("ullme-sidebar-value-open");
+  }
+
+  function sidebarOptions(button) {
+    return (button.getAttribute("data-options") || "")
+      .split("|")
+      .map(function (value) { return value.trim(); })
+      .filter(Boolean);
+  }
+
+  function setSidebarValue(button, value) {
+    var arrow = button.querySelector(".ullme-sidebar-value-arrow");
+    button.setAttribute("data-value", value);
+    button.textContent = sidebarLabel(value, button.getAttribute("data-kind"));
+    if (arrow) button.appendChild(arrow);
+  }
+
+  function closeSidebarMenus() {
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-sidebar-menu"), function (menu) {
+      menu.remove();
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-sidebar-value-open"), function (button) {
+      button.classList.remove("ullme-sidebar-value-open");
+    });
+  }
+
+  function sidebarLabel(value, kind) {
+    if (kind === "role") {
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+    return value;
   }
 
   function appendUserMessage(message) {
@@ -534,6 +900,47 @@
     app.classList.toggle("ullme-sidebar-hidden", Boolean(hidden));
   }
 
+  function updateCourseList(courseids, selectedCourseid, showCourses, summary) {
+    var panel = byId("ullme_course_panel");
+    var list = byId("ullme_course_list");
+    var tabs = byId("ullme_main_tabs");
+    if (!panel || !list) return;
+
+    courseids = Array.isArray(courseids) ? courseids : [];
+    selectedCourseid = selectedCourseid || "";
+    panel.classList.toggle("ullme-course-panel-hidden", !showCourses);
+    if (tabs) tabs.classList.toggle("ullme-main-tabs-hidden", !selectedCourseid);
+    list.innerHTML = "";
+    updateActiveCourse(summary, selectedCourseid);
+
+    if (!courseids.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-course-empty";
+      empty.textContent = "No courses";
+      list.appendChild(empty);
+      return;
+    }
+
+    courseids.forEach(function (courseid) {
+      var button = document.createElement("button");
+      button.className = "ullme-course-item";
+      if (courseid === selectedCourseid) button.classList.add("ullme-course-item-active");
+      button.type = "button";
+      button.setAttribute("data-courseid", courseid);
+      button.textContent = courseid;
+      list.appendChild(button);
+    });
+  }
+
+  function updateActiveCourse(summary, selectedCourseid) {
+    var course = summary && summary.course ? summary.course : { courseid: selectedCourseid || "" };
+    var material = summary && summary.material ? summary.material : {};
+    state.courseMaterial = material;
+    fillCourseSettings(course);
+    renderMaterialFiles(material, currentMaterialCategory());
+    if (!selectedCourseid) showMainPanel("chat");
+  }
+
   function scrollMessagesToBottom() {
     var messages = byId("ullme_chat_messages");
     if (!messages) return;
@@ -544,6 +951,7 @@
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
   window.ullme.setSidebarHidden = setSidebarHidden;
+  window.ullme.updateCourseList = updateCourseList;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

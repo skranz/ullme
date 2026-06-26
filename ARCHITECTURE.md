@@ -28,7 +28,7 @@ The first assistant message is created through `ullme_intro_msg()`. It is curren
 
 ## Users And Roles
 
-`ullmeApp()` accepts `username` and `role`, where role is either `teacher` or `student`. For every username the app creates a role-independent user folder and both role-specific folders:
+`ullmeApp()` accepts `username`, `role`, and `allowed_roles`. Roles can include `teacher`, `student`, and `admin`. For every username the app creates a role-independent user folder and the teacher/student role-specific folders:
 
 ```text
 main_dir/users/<username>
@@ -36,7 +36,7 @@ main_dir/teachers/<username>
 main_dir/students/<username>
 ```
 
-The active role is still available in `app$glob$role_user_dir`. Shared server-side data that should follow the person across teacher/student contexts belongs under `main_dir/users/<username>`.
+The active role, semester, selected course, and user-specific paths live directly on the per-instance `app` object, for example `app$role`, `app$semester`, `app$courseid`, and `app$role_user_dir`. Shared server-side data that should follow the person across teacher/student contexts belongs under `main_dir/users/<username>`. `app$glob` is reserved for values shared across app instances, such as `main_dir`.
 
 ## Upload Storage
 
@@ -74,4 +74,4 @@ When the user presses Done, the browser creates an audio `File` from the recorde
 main_dir/users/<username>/cur_session/audio/<session-token>/<audio-id>_<clean-file-name>
 ```
 
-The handler then calls `window.ullmeAudio.receiveStoredAudio(...)` with the stored file record, including the server-side path. The most recent record is also kept in `app$glob$last_audio_recording`.
+The handler then calls `window.ullmeAudio.receiveStoredAudio(...)` with the stored file record, including the server-side path. The most recent record is also kept in `app$last_audio_recording`.

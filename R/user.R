@@ -11,10 +11,19 @@ ullme_clean_user_name = function(username) {
 ullme_normalize_role = function(role) {
   restore.point("ullme_normalize_role")
   role = tolower(paste0(role)[1])
-  if (!role %in% c("teacher", "student")) {
-    stop("role must be 'teacher' or 'student'.")
+  if (!role %in% c("teacher", "student", "admin")) {
+    stop("role must be 'teacher', 'student', or 'admin'.")
   }
   role
+}
+
+
+ullme_normalize_roles = function(roles) {
+  restore.point("ullme_normalize_roles")
+  roles = unique(tolower(paste0(roles)))
+  roles = roles[nzchar(roles)]
+  if (length(roles) == 0) stop("allowed_roles must contain at least one role.")
+  vapply(roles, ullme_normalize_role, character(1), USE.NAMES=FALSE)
 }
 
 
@@ -51,12 +60,12 @@ ullme_cur_session_audio_dir = function(cur_session_dir) {
 ullme_init_user_dirs = function(app=getApp()) {
   restore.point("ullme_init_user_dirs")
   dirs = c(
-    app$glob$user_dir,
-    ullme_role_user_dir(main_dir=app$glob$main_dir, username=app$glob$username, role="teacher"),
-    ullme_role_user_dir(main_dir=app$glob$main_dir, username=app$glob$username, role="student"),
-    app$glob$cur_session_dir,
-    app$glob$uploads_dir,
-    app$glob$audio_dir
+    app$user_dir,
+    ullme_role_user_dir(main_dir=app$glob$main_dir, username=app$username, role="teacher"),
+    ullme_role_user_dir(main_dir=app$glob$main_dir, username=app$username, role="student"),
+    app$cur_session_dir,
+    app$uploads_dir,
+    app$audio_dir
   )
   vapply(dirs, dir.create, logical(1), recursive=TRUE, showWarnings=FALSE)
   invisible(dirs)

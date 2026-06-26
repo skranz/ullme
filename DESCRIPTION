@@ -10,7 +10,8 @@ Authors@R: c(
     )
   )
 Description: Experimental app. See README.md for details
-Depends: shinyEvents, restorepoint, stringi, stringtools
+Depends: shinyEvents, restorepoint, stringi, stringtools, ellmer, yaml
+Suggests: plumber, jsonlite, rstudioapi
 License: GPL 3.0 (all non-R stuff also MIT)
 Encoding: UTF-8
 LazyData: true

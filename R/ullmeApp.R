@@ -6,23 +6,49 @@ example = function() {
   viewApp(app,launch.browser = TRUE)
 }
 
+ullme_main_dir = function(app=getApp()) {
+  main_dir = app$glob$main_dir
+  if (is.null(main_dir)) {
+    main_dir ="C:/libraries/ullme/ullme_main"
+  }
+  if (!dir.exists(main_dir)) {
+    stop(paste0("main_dir = ", main_dir, " does not exist."))
+  }
+  main_dir
+}
 
-ullmeApp = function(main_dir, username="skranz", role="teacher", uses_fake_ai=TRUE) {
+ullmeApp = function(main_dir, username="skranz", role="teacher", allowed_roles = c("teacher","student", "admin"), uses_fake_ai=TRUE) {
   restore.point("ullmeApp")
   app = eventsApp()
   glob = app$glob
+
+  # app is per Shiny app instance; app$glob is shared across all instances.
+  # Store only truly shared values in glob and keep user-specific state on app.
   glob$main_dir = main_dir
-  glob$username = ullme_clean_user_name(username)
-  glob$role = ullme_normalize_role(role)
-  glob$uses_fake_ai = uses_fake_ai
-  glob$user_dir = ullme_user_dir(main_dir=main_dir, username=glob$username)
-  glob$role_user_dir = ullme_role_user_dir(main_dir=main_dir, username=glob$username, role=glob$role)
-  glob$cur_session_dir = ullme_cur_session_dir(user_dir=glob$user_dir)
-  glob$uploads_dir = ullme_cur_session_images_dir(cur_session_dir=glob$cur_session_dir)
-  glob$audio_dir = ullme_cur_session_audio_dir(cur_session_dir=glob$cur_session_dir)
+  app$username = ullme_clean_user_name(username)
+  app$allowed_roles = ullme_normalize_roles(allowed_roles)
+  app$role = ullme_normalize_role(role)
+  if (!app$role %in% app$allowed_roles) {
+    stop("role must be one of allowed_roles.")
+  }
+  app$semester = ullme_semester()
+  app$uses_fake_ai = uses_fake_ai
+  app$user_dir = ullme_user_dir(main_dir=main_dir, username=app$username)
+  app$role_user_dir = ullme_role_user_dir(main_dir=main_dir, username=app$username, role=app$role)
+  app$cur_session_dir = ullme_cur_session_dir(user_dir=app$user_dir)
+  app$uploads_dir = ullme_cur_session_images_dir(cur_session_dir=app$cur_session_dir)
+  app$audio_dir = ullme_cur_session_audio_dir(cur_session_dir=app$cur_session_dir)
+  app$courseids = ullme_user_courseids(
+    main_dir=main_dir,
+    username=app$username,
+    role=app$role,
+    semester=app$semester
+  )
+  app$courseid = ullme_selected_courseid(app$courseids)
+  app$material_category = "slides"
 
   ullme_add_resource_paths(app=app)
-  app$ui = ullme_app_ui()
+  app$ui = ullme_app_ui(app=app)
   ullme_register_handlers(app=app)
 
   appInitHandler(function(...) {
@@ -36,12 +62,12 @@ ullmeApp = function(main_dir, username="skranz", role="teacher", uses_fake_ai=TR
 ullme_add_resource_paths = function(app=getApp()) {
   restore.point("ullme_add_resource_paths")
   www_dir = ullme_www_dir()
-  dir.create(app$glob$uploads_dir, recursive=TRUE, showWarnings=FALSE)
-  dir.create(app$glob$audio_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
 
   shiny::addResourcePath(prefix="ullme", directoryPath=www_dir)
-  shiny::addResourcePath(prefix="ullme-uploads", directoryPath=app$glob$uploads_dir)
-  shiny::addResourcePath(prefix="ullme-audio", directoryPath=app$glob$audio_dir)
+  shiny::addResourcePath(prefix="ullme-uploads", directoryPath=app$uploads_dir)
+  shiny::addResourcePath(prefix="ullme-audio", directoryPath=app$audio_dir)
   invisible(TRUE)
 }
 
@@ -61,9 +87,9 @@ ullme_www_dir = function() {
 ullme_init_storage = function(main_dir, app=getApp()) {
   restore.point("ullme_init_storage")
   dir.create(main_dir, recursive=TRUE, showWarnings=FALSE)
-  dir.create(app$glob$cur_session_dir, recursive=TRUE, showWarnings=FALSE)
-  dir.create(app$glob$uploads_dir, recursive=TRUE, showWarnings=FALSE)
-  dir.create(app$glob$audio_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$cur_session_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
   ullme_init_user_dirs(app=app)
   invisible(TRUE)
 }
@@ -82,12 +108,59 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_image_upload,
     app = app
   )
+  changeHandler(
+    id = "ullme_material_upload",
+    fun = ullme_handle_material_upload,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_role_select_event",
+    id = NULL,
+    fun = ullme_handle_role_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_semester_select_event",
+    id = NULL,
+    fun = ullme_handle_semester_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_select_event",
+    id = NULL,
+    fun = ullme_handle_course_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_add_course_event",
+    id = NULL,
+    fun = ullme_handle_add_course,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_settings_save_event",
+    id = NULL,
+    fun = ullme_handle_course_settings_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_category_event",
+    id = NULL,
+    fun = ullme_handle_material_category,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_delete_event",
+    id = NULL,
+    fun = ullme_handle_material_delete,
+    app = app
+  )
   ullme_register_audio_handlers(app=app)
   invisible(TRUE)
 }
 
 
-ullme_app_ui = function() {
+ullme_app_ui = function(app=getApp()) {
   restore.point("ullme_app_ui")
   intro = ullme_intro_msg()
   tagList(
@@ -115,8 +188,10 @@ ullme_app_ui = function() {
           tags$div(
             class = "ullme-brand",
             tags$div(class="ullme-brand-title", "uLLMe", title="Uni Ulm LLM for Economics Education: klein zählt doppelt!"),
-            tags$div(class="ullme-brand-note", "created by Sebastian Kranz")
-          )
+            HTML("")
+          ),
+          ullme_sidebar_controls_ui(app=app),
+          tags$div(class="ullme-brand-note", "created by Sebastian Kranz")
         ),
         tags$main(
           class = "ullme-main",
@@ -133,13 +208,17 @@ ullme_app_ui = function() {
             tags$div(class="ullme-chat-title", "Example chat"),
             tags$div(class="ullme-topbar-actions")
           ),
+          ullme_course_tabs_ui(app=app),
           tags$section(
             id = "ullme_chat_messages",
-            class = "ullme-chat-messages",
+            class = "ullme-chat-messages ullme-main-panel ullme-main-panel-active",
+            `data-panel` = "chat",
             `data-intro-role` = intro$role,
             `data-intro-text` = intro$text,
             `data-intro-meta` = intro$meta
           ),
+          ullme_course_settings_ui(app=app),
+          ullme_material_ui(app=app),
           ullme_composer_ui()
         ),
         tags$input(
@@ -154,10 +233,222 @@ ullme_app_ui = function() {
           class = "ullme-file-input",
           type = "file",
           accept = "audio/*"
+        ),
+        tags$input(
+          id = "ullme_material_upload",
+          class = "ullme-file-input",
+          type = "file",
+          multiple = "multiple"
         )
       )
     )
   )
+}
+
+
+ullme_sidebar_controls_ui = function(app=getApp()) {
+  restore.point("ullme_sidebar_controls_ui")
+  semesters = ullme_semester_sequence(center=app$semester)
+  show_courses = app$role %in% c("teacher", "student")
+  tags$div(
+    class = "ullme-sidebar-controls",
+    tags$div(
+      class = "ullme-sidebar-context",
+      tags$button(
+        id = "ullme_role_select",
+        class = "ullme-sidebar-value",
+        type = "button",
+        `data-value` = app$role,
+        `data-options` = paste(app$allowed_roles, collapse="|"),
+        `data-kind` = "role",
+        `aria-label` = "Role",
+        ullme_title_case(app$role),
+        tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
+      ),
+      tags$button(
+        id = "ullme_semester_select",
+        class = "ullme-sidebar-value",
+        type = "button",
+        `data-value` = app$semester,
+        `data-options` = paste(semesters, collapse="|"),
+        `data-kind` = "semester",
+        `aria-label` = "Semester",
+        app$semester,
+        tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
+      )
+    ),
+    tags$div(
+      id = "ullme_course_panel",
+      class = paste(
+        "ullme-course-panel",
+        if (!show_courses) "ullme-course-panel-hidden" else ""
+      ),
+      tags$div(
+        class = "ullme-course-panel-head",
+        tags$div(class = "ullme-sidebar-label ullme-course-label", "Courses"),
+        tags$button(
+          id = "ullme_add_course_btn",
+          class = "ullme-add-course-button",
+          type = "button",
+          "Add Course"
+        )
+      ),
+      ullme_course_list_ui(courseids=app$courseids, selected=app$courseid)
+    )
+  )
+}
+
+
+ullme_title_case = function(x) {
+  restore.point("ullme_title_case")
+  x = paste0(x)[1]
+  if (is.na(x) || !nzchar(x)) return("")
+  paste0(toupper(substr(x, 1, 1)), substr(x, 2, nchar(x)))
+}
+
+
+ullme_course_list_ui = function(courseids, selected="") {
+  restore.point("ullme_course_list_ui")
+  if (length(courseids) == 0) {
+    return(tags$div(
+      id = "ullme_course_list",
+      class = "ullme-course-list",
+      tags$div(class = "ullme-course-empty", "No courses")
+    ))
+  }
+  tags$div(
+    id = "ullme_course_list",
+    class = "ullme-course-list",
+    lapply(courseids, function(courseid) {
+      tags$button(
+        class = paste(
+          "ullme-course-item",
+          if (identical(courseid, selected)) "ullme-course-item-active" else ""
+        ),
+        type = "button",
+        `data-courseid` = courseid,
+        courseid
+      )
+    })
+  )
+}
+
+
+ullme_course_tabs_ui = function(app=getApp()) {
+  restore.point("ullme_course_tabs_ui")
+  active = !is.null(app$courseid) && nzchar(app$courseid)
+  tags$nav(
+    id = "ullme_main_tabs",
+    class = paste("ullme-main-tabs", if (!active) "ullme-main-tabs-hidden" else ""),
+    tags$button(class="ullme-main-tab ullme-main-tab-active", type="button", `data-panel`="chat", "Chat"),
+    tags$button(class="ullme-main-tab", type="button", `data-panel`="settings", "Course Settings"),
+    tags$button(class="ullme-main-tab", type="button", `data-panel`="material", "Material")
+  )
+}
+
+
+ullme_course_settings_ui = function(app=getApp()) {
+  restore.point("ullme_course_settings_ui")
+  tags$section(
+    id = "ullme_course_settings_panel",
+    class = "ullme-course-settings ullme-main-panel",
+    `data-panel` = "settings",
+    tags$div(
+      class = "ullme-panel-inner",
+      tags$div(class="ullme-panel-title", "Course Settings"),
+      tags$div(
+        class = "ullme-settings-grid",
+        tags$label(
+          class = "ullme-field",
+          tags$span("Course ID"),
+          tags$input(id="ullme_settings_courseid", type="text", readonly="readonly")
+        ),
+        tags$label(
+          class = "ullme-field",
+          tags$span("Course name"),
+          tags$input(id="ullme_settings_coursename", type="text")
+        )
+      ),
+      tags$div(class="ullme-field-label", "Times"),
+      tags$div(
+        id = "ullme_course_times",
+        class = "ullme-times-grid",
+        lapply(seq_len(3), function(i) ullme_time_slot_ui(i))
+      ),
+      tags$button(
+        id = "ullme_course_settings_save",
+        class = "ullme-primary-action",
+        type = "button",
+        "Save"
+      )
+    )
+  )
+}
+
+
+ullme_time_slot_ui = function(i) {
+  restore.point("ullme_time_slot_ui")
+  tags$div(
+    class = "ullme-time-slot",
+    `data-slot` = i,
+    tags$select(
+      class = "ullme-time-weekday",
+      `aria-label` = paste("Weekday", i),
+      tags$option(value="", ""),
+      lapply(
+        c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"),
+        function(day) tags$option(value=day, ullme_title_case(day))
+      )
+    ),
+    tags$input(class="ullme-time-start", type="time", `aria-label`=paste("Start time", i)),
+    tags$input(class="ullme-time-end", type="time", `aria-label`=paste("End time", i))
+  )
+}
+
+
+ullme_material_ui = function(app=getApp()) {
+  restore.point("ullme_material_ui")
+  categories = ullme_course_material_categories()
+  tags$section(
+    id = "ullme_material_panel",
+    class = "ullme-material ullme-main-panel",
+    `data-panel` = "material",
+    tags$div(
+      class = "ullme-panel-inner",
+      tags$div(
+        class = "ullme-panel-head",
+        tags$div(class="ullme-panel-title", "Material"),
+        tags$button(
+          id = "ullme_material_upload_btn",
+          class = "ullme-primary-action",
+          type = "button",
+          "Upload"
+        )
+      ),
+      tags$div(
+        id = "ullme_material_categories",
+        class = "ullme-material-categories",
+        lapply(seq_along(categories), function(i) {
+          category = categories[[i]]
+          tags$button(
+            class = paste("ullme-material-category", if (i == 1) "ullme-material-category-active" else ""),
+            type = "button",
+            `data-category` = category,
+            ullme_material_category_label(category)
+          )
+        })
+      ),
+      tags$div(id="ullme_material_files", class="ullme-material-files")
+    )
+  )
+}
+
+
+ullme_material_category_label = function(category) {
+  restore.point("ullme_material_category_label")
+  labels = c(slides="Slides", ps="Problem Sets", quiz="Quiz", background="Background")
+  label = labels[[category]]
+  if (is.null(label)) ullme_title_case(category) else label
 }
 
 
@@ -311,9 +602,161 @@ ullme_icon_svg = function(name) {
 }
 
 
+ullme_handle_role_select = function(role=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_role_select")
+  role = paste0(role)[1]
+  if (is.na(role)) return(invisible(NULL))
+  role = tryCatch(ullme_normalize_role(role), error=function(e) "")
+  if (!role %in% app$allowed_roles) return(invisible(NULL))
+
+  app$role = role
+  app$role_user_dir = ullme_role_user_dir(
+    main_dir=app$glob$main_dir,
+    username=app$username,
+    role=app$role
+  )
+  ullme_refresh_course_state(app=app)
+  ullme_send_course_state(app=app)
+  invisible(app$role)
+}
+
+
+ullme_handle_semester_select = function(semester=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_semester_select")
+  semester = toupper(paste0(semester)[1])
+  if (is.na(semester)) return(invisible(NULL))
+  index = tryCatch(ullme_semester_index(semester), error=function(e) NA_integer_)
+  if (is.na(index)) return(invisible(NULL))
+
+  app$semester = semester
+  ullme_refresh_course_state(app=app)
+  ullme_send_course_state(app=app)
+  invisible(app$semester)
+}
+
+
+ullme_handle_course_select = function(courseid=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_course_select")
+  courseid = paste0(courseid)[1]
+  if (is.na(courseid)) courseid = ""
+  if (nzchar(courseid) && !courseid %in% app$courseids) return(invisible(NULL))
+
+  app$courseid = courseid
+  ullme_send_course_state(app=app)
+  invisible(app$courseid)
+}
+
+
+ullme_handle_add_course = function(courseid=NULL, coursename="", times=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_add_course")
+  if (!app$role %in% c("teacher", "student")) return(invisible(NULL))
+  courseid = tryCatch(ullme_clean_courseid(courseid), error=function(e) "")
+  if (!nzchar(courseid)) return(invisible(NULL))
+
+  ullme_make_course(
+    main_dir=app$glob$main_dir,
+    username=app$username,
+    role=app$role,
+    semester=app$semester,
+    courseid=courseid,
+    coursename=coursename
+  )
+  app$courseid = courseid
+  course = list(courseid=courseid, coursename=paste0(coursename)[1], times=times)
+  ullme_save_course_settings(app=app, course=course)
+  ullme_refresh_course_state(app=app)
+  app$courseid = courseid
+  ullme_send_course_state(app=app)
+  invisible(app$courseid)
+}
+
+
+ullme_handle_course_settings_save = function(coursename="", times=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_course_settings_save")
+  if (is.null(app$courseid) || !nzchar(app$courseid)) return(invisible(NULL))
+  course = list(courseid=app$courseid, coursename=coursename, times=times)
+  ullme_save_course_settings(app=app, course=course)
+  ullme_send_course_state(app=app)
+  invisible(course)
+}
+
+
+ullme_handle_material_category = function(category="slides", app=getApp(), ...) {
+  restore.point("ullme_handle_material_category")
+  category = paste0(category)[1]
+  if (!category %in% ullme_course_material_categories()) return(invisible(NULL))
+  app$material_category = category
+  invisible(app$material_category)
+}
+
+
+ullme_handle_material_upload = function(id, value, app=getApp(), ...) {
+  restore.point("ullme_handle_material_upload")
+  category = app$material_category
+  if (is.null(category) || !category %in% ullme_course_material_categories()) category = "slides"
+  ullme_store_material_uploads(app=app, value=value, category=category)
+  ullme_send_course_state(app=app)
+  invisible(TRUE)
+}
+
+
+ullme_handle_material_delete = function(category=NULL, path=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_material_delete")
+  category = paste0(category)[1]
+  path = paste0(path)[1]
+  if (is.na(category) || is.na(path)) return(invisible(NULL))
+  ullme_delete_material_file(app=app, category=category, path=path)
+  ullme_send_course_state(app=app)
+  invisible(TRUE)
+}
+
+
+ullme_refresh_course_state = function(app=getApp()) {
+  restore.point("ullme_refresh_course_state")
+  app$courseids = ullme_user_courseids(
+    main_dir=app$glob$main_dir,
+    username=app$username,
+    role=app$role,
+    semester=app$semester
+  )
+  app$courseid = ullme_selected_courseid(
+    courseids=app$courseids,
+    preferred=app$courseid
+  )
+  invisible(app$courseids)
+}
+
+
+ullme_send_course_state = function(app=getApp()) {
+  restore.point("ullme_send_course_state")
+  summary = ullme_course_summary_for_js(app=app)
+  callJS(
+    .fun = "window.ullme.updateCourseList",
+    .args = list(
+      as.list(app$courseids),
+      app$courseid,
+      app$role %in% c("teacher", "student"),
+      summary
+    ),
+    .app = app
+  )
+  invisible(TRUE)
+}
+
+
+ullme_course_summary_for_js = function(app=getApp()) {
+  restore.point("ullme_course_summary_for_js")
+  summary = ullme_course_summary(app=app)
+  if (is.null(summary)) return(NULL)
+  summary$material = lapply(summary$material, as.list)
+  summary
+}
+
+
 ullme_init_app = function(app=getApp()) {
   restore.point("ullme_init_app")
   ullme_init_storage(main_dir=app$glob$main_dir, app=app)
+  ullme_send_course_state(app=app)
 }
 
 
@@ -394,7 +837,7 @@ ullme_upload_record = function(id, name, size, type, path, url) {
 
 ullme_session_upload_dir = function(session, app=getApp()) {
   restore.point("ullme_session_upload_dir")
-  file.path(app$glob$uploads_dir, ullme_session_dir_name(session=session))
+  file.path(app$uploads_dir, ullme_session_dir_name(session=session))
 }
 
 
@@ -418,5 +861,5 @@ ullme_clean_file_name = function(x) {
 
 ullme_uses_fake_ai = function(app=getApp()) {
   restore.point("ullme_uses_fake_ai")
-  isTRUE(app$glob$uses_fake_ai)
+  isTRUE(app$uses_fake_ai)
 }

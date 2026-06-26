@@ -1,0 +1,69 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "https://ullme.local/specs/course.schema.yaml"
+title: "course.yaml"
+description: "Schema for a course folder configuration file."
+type: object
+additionalProperties: false
+required:
+  - courseid
+  - coursename
+  - times
+properties:
+  courseid:
+    type: string
+    description: "Short stable course identifier used in folder names and references."
+    minLength: 1
+    pattern: "^[A-Za-z][A-Za-z0-9_-]*$"
+    examples:
+      - micro
+      - macro_1
+  coursename:
+    type: string
+    description: "Human-readable course name."
+    minLength: 1
+    examples:
+      - Microeconomics
+  times:
+    type: array
+    description: "Regular teaching times for the course."
+    maxItems: 3
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - weekday
+        - start
+        - end
+      properties:
+        weekday:
+          type: string
+          description: "Weekday 2 letters"
+          enum:
+            - mo
+            - tu
+            - we
+            - th
+            - fr
+            - sa
+            - su
+          examples:
+            - mo
+        start:
+          type: string
+          description: "Start time in 24-hour HH:MM format."
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          examples:
+            - "10:00"
+        end:
+          type: string
+          description: "End time in 24-hour HH:MM format."
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          examples:
+            - "11:30"
+examples:
+  - courseid: micro
+    coursename: Microeconomics
+    times:
+      - weekday: monday
+        start: "10:00"
+        end: "11:30"
