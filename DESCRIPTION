@@ -1,0 +1,17 @@
+Package: ullme
+Type: Package
+Title: Uni Ulm LLM for economics education: an AI powered shinyEvents App
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Sebastian", "Kranz",
+      email = "sebastian.kranz@uni-ulm.de",
+      role = c("aut", "cre")
+    )
+  )
+Description: Experimental app. See README.md for details
+Depends: shinyEvents, restorepoint, stringi, stringtools
+License: GPL 3.0 (all non-R stuff also MIT)
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3
