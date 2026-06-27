@@ -17,10 +17,18 @@ ullme_main_dir = function(app=getApp()) {
   main_dir
 }
 
-ullmeApp = function(main_dir, username="skranz", role="teacher", allowed_roles = c("teacher","student", "admin"), uses_fake_ai=TRUE) {
+ullmeApp = function(main_dir, username="skranz", role="teacher", allowed_roles = c("teacher","student", "admin"), uses_fake_ai=TRUE, max_upload_mb=100) {
   restore.point("ullmeApp")
   app = eventsApp()
   glob = app$glob
+
+  max_upload_mb = as.numeric(max_upload_mb)[1]
+  if (is.na(max_upload_mb) || max_upload_mb <= 0) {
+    stop("max_upload_mb must be a positive number.")
+  }
+  # Shiny's upload limit is process-wide, even though upload state is per app.
+  current_upload_limit = getOption("shiny.maxRequestSize", 5 * 1024^2)
+  options(shiny.maxRequestSize=max(current_upload_limit, max_upload_mb * 1024^2))
 
   # app is per Shiny app instance; app$glob is shared across all instances.
   # Store only truly shared values in glob and keep user-specific state on app.
@@ -352,7 +360,15 @@ ullme_course_tabs_ui = function(app=getApp()) {
     class = paste("ullme-course-tabs", if (!active) "ullme-course-tabs-hidden" else ""),
     tags$button(class="ullme-course-tab ullme-course-tab-active", type="button", `data-course-panel`="activities", "Activities"),
     tags$button(class="ullme-course-tab", type="button", `data-course-panel`="materials", "Materials"),
-    tags$button(class="ullme-course-tab", type="button", `data-course-panel`="settings", "Settings")
+    tags$button(class="ullme-course-tab", type="button", `data-course-panel`="settings", "Settings"),
+    tags$button(
+      id = "ullme_material_upload_btn",
+      class = "ullme-icon-button ullme-material-tab-upload",
+      type = "button",
+      `aria-label` = "Upload material",
+      title = "Upload material",
+      HTML(ullme_icon_svg("upload"))
+    )
   )
 }
 
@@ -425,16 +441,6 @@ ullme_material_ui = function(app=getApp()) {
     `data-course-panel` = "materials",
     tags$div(
       class = "ullme-panel-inner",
-      tags$div(
-        class = "ullme-panel-head",
-        tags$div(class="ullme-panel-title", "Materials"),
-        tags$button(
-          id = "ullme_material_upload_btn",
-          class = "ullme-primary-action",
-          type = "button",
-          "Upload"
-        )
-      ),
       tags$div(
         id = "ullme_material_categories",
         class = "ullme-material-categories",
@@ -619,7 +625,8 @@ ullme_icon_svg = function(name) {
     mic = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>',
     send = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
     plus = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
-    user = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>'
+    user = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>',
+    upload = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M5 20h14"></path></svg>'
   )
   icons[[name]]
 }

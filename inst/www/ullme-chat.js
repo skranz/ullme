@@ -4,10 +4,7 @@
     messageIndex: 0,
     isRecording: false,
     assistantRequests: {},
-    pendingMaterialInputId: "",
-    materialUploadQueue: [],
-    materialUploadActive: false,
-    dispatchingMaterialUpload: false
+    pendingMaterialInputId: ""
   };
 
   var materialLabels = {
@@ -185,19 +182,11 @@
       inputElement.addEventListener("click", function () {
         inputElement.value = "";
       });
-      inputElement.addEventListener("change", function (event) {
-        var files = Array.prototype.slice.call(inputElement.files || []);
-        if (!state.dispatchingMaterialUpload && files.length > 1) {
-          event.stopImmediatePropagation();
-          inputElement.value = "";
-          queueMaterialFiles(files, inputElement.getAttribute("data-category"));
-          return;
-        }
-        if (files.length) {
-          state.materialUploadActive = true;
+      inputElement.addEventListener("change", function () {
+        if (inputElement.files && inputElement.files.length) {
           state.pendingMaterialInputId = inputElement.id;
         }
-      }, true);
+      });
     });
     bindMaterialDropzone(materialDropzone);
   }
@@ -312,6 +301,7 @@
 
   function showCoursePanel(panelName) {
     var tabs = byId("ullme_course_tabs");
+    var uploadButton = byId("ullme_material_upload_btn");
     if (tabs) {
       Array.prototype.forEach.call(tabs.querySelectorAll(".ullme-course-tab"), function (tab) {
         tab.classList.toggle(
@@ -326,6 +316,9 @@
         panel.getAttribute("data-course-panel") === panelName
       );
     });
+    if (uploadButton) {
+      uploadButton.classList.toggle("ullme-material-tab-upload-visible", panelName === "materials");
+    }
   }
 
   function openAddCourseDialog() {
@@ -491,10 +484,7 @@
     dropzone.addEventListener("drop", function (event) {
       event.preventDefault();
       dropzone.classList.remove("ullme-material-dropzone-active");
-      queueMaterialFiles(
-        Array.prototype.slice.call(event.dataTransfer.files || []),
-        currentMaterialCategory()
-      );
+      queueMaterialFiles(Array.prototype.slice.call(event.dataTransfer.files || []));
     });
 
     dropzone.addEventListener("click", function () {
@@ -509,34 +499,15 @@
     });
   }
 
-  function queueMaterialFiles(files, category) {
-    if (!files.length || typeof DataTransfer === "undefined") return;
-    category = category || currentMaterialCategory();
-    files.forEach(function (file) {
-      state.materialUploadQueue.push({ file: file, category: category });
-    });
-    uploadNextMaterialFile();
-  }
-
-  function uploadNextMaterialFile() {
-    if (state.materialUploadActive || !state.materialUploadQueue.length) return;
-    var upload = state.materialUploadQueue.shift();
-    var input = materialInputForCategory(upload.category);
-    if (!input) {
-      uploadNextMaterialFile();
-      return;
-    }
-
+  function queueMaterialFiles(files) {
+    var input = materialInputForCategory(currentMaterialCategory());
+    if (!input || !files.length || typeof DataTransfer === "undefined") return;
     var transfer = new DataTransfer();
-    transfer.items.add(upload.file);
-    state.materialUploadActive = true;
-    state.dispatchingMaterialUpload = true;
-    try {
-      input.files = transfer.files;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    } finally {
-      state.dispatchingMaterialUpload = false;
-    }
+    files.forEach(function (file) {
+      transfer.items.add(file);
+    });
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   function renderMaterialFiles(material, category) {
@@ -1049,14 +1020,12 @@
     var input = byId(inputId);
     if (input) input.value = "";
     state.pendingMaterialInputId = "";
-    state.materialUploadActive = false;
 
     if (window.Shiny && Shiny.setInputValue) {
       Shiny.setInputValue(inputId, null, { priority: "event" });
     } else if (window.Shiny && Shiny.onInputChange) {
       Shiny.onInputChange(inputId, null);
     }
-    window.setTimeout(uploadNextMaterialFile, 0);
   }
 
   function scrollMessagesToBottom() {
