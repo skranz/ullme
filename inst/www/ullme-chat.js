@@ -4,7 +4,10 @@
     messageIndex: 0,
     isRecording: false,
     assistantRequests: {},
-    pendingMaterialInputId: ""
+    pendingMaterialInputId: "",
+    materialUploadQueue: [],
+    materialUploadActive: false,
+    dispatchingMaterialUpload: false
   };
 
   var materialLabels = {
@@ -182,11 +185,19 @@
       inputElement.addEventListener("click", function () {
         inputElement.value = "";
       });
-      inputElement.addEventListener("change", function () {
-        if (inputElement.files && inputElement.files.length) {
+      inputElement.addEventListener("change", function (event) {
+        var files = Array.prototype.slice.call(inputElement.files || []);
+        if (!state.dispatchingMaterialUpload && files.length > 1) {
+          event.stopImmediatePropagation();
+          inputElement.value = "";
+          queueMaterialFiles(files, inputElement.getAttribute("data-category"));
+          return;
+        }
+        if (files.length) {
+          state.materialUploadActive = true;
           state.pendingMaterialInputId = inputElement.id;
         }
-      });
+      }, true);
     });
     bindMaterialDropzone(materialDropzone);
   }
@@ -480,7 +491,10 @@
     dropzone.addEventListener("drop", function (event) {
       event.preventDefault();
       dropzone.classList.remove("ullme-material-dropzone-active");
-      queueMaterialFiles(Array.prototype.slice.call(event.dataTransfer.files || []));
+      queueMaterialFiles(
+        Array.prototype.slice.call(event.dataTransfer.files || []),
+        currentMaterialCategory()
+      );
     });
 
     dropzone.addEventListener("click", function () {
@@ -495,15 +509,34 @@
     });
   }
 
-  function queueMaterialFiles(files) {
-    var input = materialInputForCategory(currentMaterialCategory());
-    if (!input || !files.length || typeof DataTransfer === "undefined") return;
-    var transfer = new DataTransfer();
+  function queueMaterialFiles(files, category) {
+    if (!files.length || typeof DataTransfer === "undefined") return;
+    category = category || currentMaterialCategory();
     files.forEach(function (file) {
-      transfer.items.add(file);
+      state.materialUploadQueue.push({ file: file, category: category });
     });
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    uploadNextMaterialFile();
+  }
+
+  function uploadNextMaterialFile() {
+    if (state.materialUploadActive || !state.materialUploadQueue.length) return;
+    var upload = state.materialUploadQueue.shift();
+    var input = materialInputForCategory(upload.category);
+    if (!input) {
+      uploadNextMaterialFile();
+      return;
+    }
+
+    var transfer = new DataTransfer();
+    transfer.items.add(upload.file);
+    state.materialUploadActive = true;
+    state.dispatchingMaterialUpload = true;
+    try {
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    } finally {
+      state.dispatchingMaterialUpload = false;
+    }
   }
 
   function renderMaterialFiles(material, category) {
@@ -969,7 +1002,6 @@
     var courseTabs = byId("ullme_course_tabs");
     var addCourseButton = byId("ullme_add_course_btn");
 
-    completePendingMaterialUpload();
     courseids = Array.isArray(courseids) ? courseids : [];
     selectedCourseid = selectedCourseid || "";
     if (role) {
@@ -993,13 +1025,10 @@
     var course = summary && summary.course ? summary.course : { courseid: selectedCourseid || "" };
     var material = summary && summary.material ? summary.material : {};
     var courseWorkspace = byId("ullme_course_workspace");
-    var courseTitle = byId("ullme_course_title");
-    var title = course.coursename || selectedCourseid || "No course selected";
     state.courseMaterial = material;
     if (courseWorkspace) {
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
-    if (courseTitle) courseTitle.textContent = title;
     fillCourseSettings(course);
     renderMaterialFiles(material, currentMaterialCategory());
     if (!selectedCourseid) showCoursePanel("activities");
@@ -1013,18 +1042,21 @@
     });
   }
 
-  function completePendingMaterialUpload() {
-    var inputId = state.pendingMaterialInputId;
+  function completePendingMaterialUpload(inputId) {
+    inputId = inputId || state.pendingMaterialInputId;
     if (!inputId) return;
+    if (state.pendingMaterialInputId && inputId !== state.pendingMaterialInputId) return;
     var input = byId(inputId);
     if (input) input.value = "";
     state.pendingMaterialInputId = "";
+    state.materialUploadActive = false;
 
     if (window.Shiny && Shiny.setInputValue) {
       Shiny.setInputValue(inputId, null, { priority: "event" });
     } else if (window.Shiny && Shiny.onInputChange) {
       Shiny.onInputChange(inputId, null);
     }
+    window.setTimeout(uploadNextMaterialFile, 0);
   }
 
   function scrollMessagesToBottom() {
@@ -1036,6 +1068,7 @@
   window.ullme = window.ullme || {};
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
+  window.ullme.materialUploadComplete = completePendingMaterialUpload;
   window.ullme.updateCourseList = updateCourseList;
 
   if (document.readyState === "loading") {

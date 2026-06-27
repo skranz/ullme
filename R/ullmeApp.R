@@ -230,7 +230,7 @@ ullme_appbar_ui = function(app=getApp()) {
     class = "ullme-appbar",
     tags$div(
       class = "ullme-appbar-brand",
-      title = "Uni Ulm LLM for Economics Education: klein zählt doppelt!",
+      title = "created by Sebastian Kranz (Ulm University)",
       "uLLMe"
     ),
     ullme_context_controls_ui(app=app),
@@ -329,16 +329,9 @@ ullme_title_case = function(x) {
 
 ullme_course_workspace_ui = function(app=getApp()) {
   restore.point("ullme_course_workspace_ui")
-  summary = ullme_course_summary(app=app)
-  course = if (is.null(summary)) NULL else summary$course
-  title = ullme_course_display_title(course=course, courseid=app$courseid)
   tags$section(
     id = "ullme_course_workspace",
     class = paste("ullme-course-workspace", if (!nzchar(app$courseid)) "ullme-course-workspace-empty" else ""),
-    tags$header(
-      class = "ullme-course-header",
-      tags$div(id="ullme_course_title", class="ullme-course-title", title)
-    ),
     ullme_course_tabs_ui(app=app),
     tags$section(
       id = "ullme_activities_panel",
@@ -348,18 +341,6 @@ ullme_course_workspace_ui = function(app=getApp()) {
     ullme_material_ui(app=app),
     ullme_course_settings_ui(app=app)
   )
-}
-
-
-ullme_course_display_title = function(course=NULL, courseid="") {
-  restore.point("ullme_course_display_title")
-  courseid = paste0(courseid %||% "")[1]
-  coursename = if (is.null(course)) "" else paste0(course$coursename %||% "")[1]
-  if (is.na(courseid)) courseid = ""
-  if (is.na(coursename)) coursename = ""
-  if (nzchar(coursename)) return(coursename)
-  if (nzchar(courseid)) return(courseid)
-  "No course selected"
 }
 
 
@@ -741,6 +722,11 @@ ullme_handle_material_upload = function(id, value, app=getApp(), ...) {
   app$material_category = category
   ullme_store_material_uploads(app=app, value=value, category=category)
   ullme_send_course_state(app=app)
+  callJS(
+    .fun = "window.ullme.materialUploadComplete",
+    .args = list(id),
+    .app = app
+  )
   invisible(TRUE)
 }
 

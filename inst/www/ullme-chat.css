@@ -282,7 +282,7 @@ body {
 
 .ullme-course-workspace {
   display: none;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -305,28 +305,10 @@ body {
   border-left: 1px solid #e3e6e5;
 }
 
-.ullme-course-header {
-  display: flex;
-  align-items: center;
-  min-height: 60px;
-  padding: 10px 24px 6px;
-}
-
-.ullme-course-title {
-  min-width: 0;
-  color: #151515;
-  font-size: 20px;
-  font-weight: 680;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .ullme-course-tabs {
   display: flex;
   gap: 4px;
-  padding: 0 20px 8px;
+  padding: 12px 20px 8px;
 }
 
 .ullme-course-tabs-hidden {
