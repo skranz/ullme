@@ -95,7 +95,8 @@ ullme_clean_courseid = function(courseid) {
 
 
 ullme_course_material_categories = function() {
-  c("slides", "ps", "quiz", "background")
+  restore.point("ullme_course_material_categories")
+  c("general", "slides", "ps", "quiz", "background")
 }
 
 
@@ -103,7 +104,28 @@ ullme_course_material_dir = function(course_dir, category) {
   restore.point("ullme_course_material_dir")
   category = paste0(category)[1]
   if (!category %in% ullme_course_material_categories()) stop("Invalid material category.")
-  file.path(course_dir, category)
+  file.path(course_dir, "materials", category)
+}
+
+
+ullme_init_course_material_dirs = function(course_dir) {
+  restore.point("ullme_init_course_material_dirs")
+  categories = ullme_course_material_categories()
+  for (category in categories) {
+    target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
+    dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
+
+    legacy_dir = file.path(course_dir, category)
+    if (!dir.exists(legacy_dir)) next
+    files = list.files(legacy_dir, recursive=TRUE, full.names=FALSE, no..=TRUE)
+    files = files[!dir.exists(file.path(legacy_dir, files))]
+    for (file in files) {
+      target = file.path(target_dir, file)
+      dir.create(dirname(target), recursive=TRUE, showWarnings=FALSE)
+      if (!file.exists(target)) file.copy(file.path(legacy_dir, file), target)
+    }
+  }
+  invisible(file.path(course_dir, "materials"))
 }
 
 
@@ -134,13 +156,7 @@ ullme_make_course = function(main_dir, username, role, semester, courseid, cours
     courseid=courseid
   )
   dir.create(course_dir, recursive=TRUE, showWarnings=FALSE)
-  vapply(
-    file.path(course_dir, ullme_course_material_categories()),
-    dir.create,
-    logical(1),
-    recursive=TRUE,
-    showWarnings=FALSE
-  )
+  ullme_init_course_material_dirs(course_dir=course_dir)
   course = ullme_default_course(courseid=courseid, coursename=coursename)
   if (!file.exists(ullme_course_yaml_path(course_dir))) {
     ullme_write_course_yaml(course_dir=course_dir, course=course)
@@ -213,6 +229,7 @@ ullme_course_summary = function(app) {
     courseid=app$courseid
   )
   if (!dir.exists(course_dir)) return(NULL)
+  ullme_init_course_material_dirs(course_dir=course_dir)
   list(
     course = ullme_read_course_yaml(course_dir),
     material = ullme_course_material_files(course_dir)

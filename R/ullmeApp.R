@@ -45,7 +45,7 @@ ullmeApp = function(main_dir, username="skranz", role="teacher", allowed_roles =
     semester=app$semester
   )
   app$courseid = ullme_selected_courseid(app$courseids)
-  app$material_category = "slides"
+  app$material_category = "general"
 
   ullme_add_resource_paths(app=app)
   app$ui = ullme_app_ui(app=app)
@@ -108,11 +108,13 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_image_upload,
     app = app
   )
-  changeHandler(
-    id = "ullme_material_upload",
-    fun = ullme_handle_material_upload,
-    app = app
-  )
+  lapply(ullme_course_material_categories(), function(category) {
+    changeHandler(
+      id = paste0("ullme_material_upload_", category),
+      fun = ullme_handle_material_upload,
+      app = app
+    )
+  })
   eventHandler(
     eventId = "ullme_role_select_event",
     id = NULL,
@@ -174,52 +176,25 @@ ullme_app_ui = function(app=getApp()) {
       class = "ullme-fluid",
       tags$div(
         id = "ullme_app",
-        class = "ullme-app",
-        tags$aside(
-          class = "ullme-sidebar",
-          tags$button(
-            id = "ullme_sidebar_close",
-            class = "ullme-icon-button ullme-sidebar-close",
-            type = "button",
-            `aria-label` = "Hide sidebar",
-            title = "Hide sidebar",
-            HTML(ullme_icon_svg("panel"))
-          ),
-          tags$div(
-            class = "ullme-brand",
-            tags$div(class="ullme-brand-title", "uLLMe", title="Uni Ulm LLM for Economics Education: klein zählt doppelt!"),
-            HTML("")
-          ),
-          ullme_sidebar_controls_ui(app=app),
-          tags$div(class="ullme-brand-note", "created by Sebastian Kranz")
-        ),
+        class = paste("ullme-app", paste0("ullme-role-", app$role)),
+        ullme_appbar_ui(app=app),
         tags$main(
           class = "ullme-main",
-          tags$header(
-            class = "ullme-topbar",
-            tags$button(
-              id = "ullme_sidebar_toggle",
-              class = "ullme-icon-button ullme-sidebar-toggle",
-              type = "button",
-              `aria-label` = "Toggle sidebar",
-              title = "Show sidebar",
-              HTML(ullme_icon_svg("panel"))
-            ),
-            tags$div(class="ullme-chat-title", "Example chat"),
-            tags$div(class="ullme-topbar-actions")
-          ),
-          ullme_course_tabs_ui(app=app),
-          tags$section(
-            id = "ullme_chat_messages",
-            class = "ullme-chat-messages ullme-main-panel ullme-main-panel-active",
-            `data-panel` = "chat",
-            `data-intro-role` = intro$role,
-            `data-intro-text` = intro$text,
-            `data-intro-meta` = intro$meta
-          ),
-          ullme_course_settings_ui(app=app),
-          ullme_material_ui(app=app),
-          ullme_composer_ui()
+          tags$div(
+            class = "ullme-workspace",
+            ullme_course_workspace_ui(app=app),
+            tags$section(
+              class = "ullme-chat-pane",
+              tags$section(
+                id = "ullme_chat_messages",
+                class = "ullme-chat-messages",
+                `data-intro-role` = intro$role,
+                `data-intro-text` = intro$text,
+                `data-intro-meta` = intro$meta
+              ),
+              ullme_composer_ui()
+            )
+          )
         ),
         tags$input(
           id = "ullme_image_upload",
@@ -234,24 +209,62 @@ ullme_app_ui = function(app=getApp()) {
           type = "file",
           accept = "audio/*"
         ),
-        tags$input(
-          id = "ullme_material_upload",
-          class = "ullme-file-input",
-          type = "file",
-          multiple = "multiple"
-        )
+        lapply(ullme_course_material_categories(), function(category) {
+          tags$input(
+            id = paste0("ullme_material_upload_", category),
+            class = "ullme-file-input ullme-material-file-input",
+            type = "file",
+            multiple = "multiple",
+            `data-category` = category
+          )
+        })
       )
     )
   )
 }
 
 
-ullme_sidebar_controls_ui = function(app=getApp()) {
-  restore.point("ullme_sidebar_controls_ui")
+ullme_appbar_ui = function(app=getApp()) {
+  restore.point("ullme_appbar_ui")
+  tags$header(
+    class = "ullme-appbar",
+    tags$div(
+      class = "ullme-appbar-brand",
+      title = "Uni Ulm LLM for Economics Education: klein zählt doppelt!",
+      "uLLMe"
+    ),
+    ullme_context_controls_ui(app=app),
+    tags$div(class="ullme-appbar-spacer"),
+    tags$button(
+      id = "ullme_user_settings_btn",
+      class = "ullme-icon-button ullme-user-settings-button",
+      type = "button",
+      `aria-label` = "Personal settings",
+      title = "Personal settings",
+      HTML(ullme_icon_svg("user"))
+    ),
+    tags$div(
+      id = "ullme_user_settings",
+      class = "ullme-user-settings",
+      role = "dialog",
+      `aria-label` = "Personal settings",
+      tags$div(class="ullme-user-settings-title", "Personal settings"),
+      tags$label(
+        class = "ullme-user-settings-field",
+        tags$span("Username"),
+        tags$input(type="text", value=app$username, readonly="readonly")
+      )
+    )
+  )
+}
+
+
+ullme_context_controls_ui = function(app=getApp()) {
+  restore.point("ullme_context_controls_ui")
   semesters = ullme_semester_sequence(center=app$semester)
   show_courses = app$role %in% c("teacher", "student")
   tags$div(
-    class = "ullme-sidebar-controls",
+    class = "ullme-context-controls",
     tags$div(
       class = "ullme-sidebar-context",
       tags$button(
@@ -275,25 +288,32 @@ ullme_sidebar_controls_ui = function(app=getApp()) {
         `aria-label` = "Semester",
         app$semester,
         tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
+      ),
+      tags$button(
+        id = "ullme_course_select",
+        class = paste(
+          "ullme-sidebar-value ullme-course-select",
+          if (!show_courses) "ullme-course-select-hidden" else ""
+        ),
+        type = "button",
+        `data-value` = app$courseid,
+        `data-options` = paste(app$courseids, collapse="|"),
+        `data-kind` = "course",
+        `aria-label` = "Course",
+        if (nzchar(app$courseid)) app$courseid else "Course",
+        tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
       )
     ),
-    tags$div(
-      id = "ullme_course_panel",
+    tags$button(
+      id = "ullme_add_course_btn",
       class = paste(
-        "ullme-course-panel",
-        if (!show_courses) "ullme-course-panel-hidden" else ""
+        "ullme-icon-button ullme-add-course-button",
+        if (!show_courses) "ullme-add-course-button-hidden" else ""
       ),
-      tags$div(
-        class = "ullme-course-panel-head",
-        tags$div(class = "ullme-sidebar-label ullme-course-label", "Courses"),
-        tags$button(
-          id = "ullme_add_course_btn",
-          class = "ullme-add-course-button",
-          type = "button",
-          "Add Course"
-        )
-      ),
-      ullme_course_list_ui(courseids=app$courseids, selected=app$courseid)
+      type = "button",
+      `aria-label` = "Add course",
+      title = "Add course",
+      HTML(ullme_icon_svg("plus"))
     )
   )
 }
@@ -307,30 +327,39 @@ ullme_title_case = function(x) {
 }
 
 
-ullme_course_list_ui = function(courseids, selected="") {
-  restore.point("ullme_course_list_ui")
-  if (length(courseids) == 0) {
-    return(tags$div(
-      id = "ullme_course_list",
-      class = "ullme-course-list",
-      tags$div(class = "ullme-course-empty", "No courses")
-    ))
-  }
-  tags$div(
-    id = "ullme_course_list",
-    class = "ullme-course-list",
-    lapply(courseids, function(courseid) {
-      tags$button(
-        class = paste(
-          "ullme-course-item",
-          if (identical(courseid, selected)) "ullme-course-item-active" else ""
-        ),
-        type = "button",
-        `data-courseid` = courseid,
-        courseid
-      )
-    })
+ullme_course_workspace_ui = function(app=getApp()) {
+  restore.point("ullme_course_workspace_ui")
+  summary = ullme_course_summary(app=app)
+  course = if (is.null(summary)) NULL else summary$course
+  title = ullme_course_display_title(course=course, courseid=app$courseid)
+  tags$section(
+    id = "ullme_course_workspace",
+    class = paste("ullme-course-workspace", if (!nzchar(app$courseid)) "ullme-course-workspace-empty" else ""),
+    tags$header(
+      class = "ullme-course-header",
+      tags$div(id="ullme_course_title", class="ullme-course-title", title)
+    ),
+    ullme_course_tabs_ui(app=app),
+    tags$section(
+      id = "ullme_activities_panel",
+      class = "ullme-course-content-panel ullme-course-content-panel-active",
+      `data-course-panel` = "activities"
+    ),
+    ullme_material_ui(app=app),
+    ullme_course_settings_ui(app=app)
   )
+}
+
+
+ullme_course_display_title = function(course=NULL, courseid="") {
+  restore.point("ullme_course_display_title")
+  courseid = paste0(courseid %||% "")[1]
+  coursename = if (is.null(course)) "" else paste0(course$coursename %||% "")[1]
+  if (is.na(courseid)) courseid = ""
+  if (is.na(coursename)) coursename = ""
+  if (nzchar(coursename)) return(coursename)
+  if (nzchar(courseid)) return(courseid)
+  "No course selected"
 }
 
 
@@ -338,11 +367,11 @@ ullme_course_tabs_ui = function(app=getApp()) {
   restore.point("ullme_course_tabs_ui")
   active = !is.null(app$courseid) && nzchar(app$courseid)
   tags$nav(
-    id = "ullme_main_tabs",
-    class = paste("ullme-main-tabs", if (!active) "ullme-main-tabs-hidden" else ""),
-    tags$button(class="ullme-main-tab ullme-main-tab-active", type="button", `data-panel`="chat", "Chat"),
-    tags$button(class="ullme-main-tab", type="button", `data-panel`="settings", "Course Settings"),
-    tags$button(class="ullme-main-tab", type="button", `data-panel`="material", "Material")
+    id = "ullme_course_tabs",
+    class = paste("ullme-course-tabs", if (!active) "ullme-course-tabs-hidden" else ""),
+    tags$button(class="ullme-course-tab ullme-course-tab-active", type="button", `data-course-panel`="activities", "Activities"),
+    tags$button(class="ullme-course-tab", type="button", `data-course-panel`="materials", "Materials"),
+    tags$button(class="ullme-course-tab", type="button", `data-course-panel`="settings", "Settings")
   )
 }
 
@@ -351,8 +380,8 @@ ullme_course_settings_ui = function(app=getApp()) {
   restore.point("ullme_course_settings_ui")
   tags$section(
     id = "ullme_course_settings_panel",
-    class = "ullme-course-settings ullme-main-panel",
-    `data-panel` = "settings",
+    class = "ullme-course-settings ullme-course-content-panel",
+    `data-course-panel` = "settings",
     tags$div(
       class = "ullme-panel-inner",
       tags$div(class="ullme-panel-title", "Course Settings"),
@@ -411,13 +440,13 @@ ullme_material_ui = function(app=getApp()) {
   categories = ullme_course_material_categories()
   tags$section(
     id = "ullme_material_panel",
-    class = "ullme-material ullme-main-panel",
-    `data-panel` = "material",
+    class = "ullme-material ullme-course-content-panel",
+    `data-course-panel` = "materials",
     tags$div(
       class = "ullme-panel-inner",
       tags$div(
         class = "ullme-panel-head",
-        tags$div(class="ullme-panel-title", "Material"),
+        tags$div(class="ullme-panel-title", "Materials"),
         tags$button(
           id = "ullme_material_upload_btn",
           class = "ullme-primary-action",
@@ -438,6 +467,17 @@ ullme_material_ui = function(app=getApp()) {
           )
         })
       ),
+      tags$div(
+        id = "ullme_material_dropzone",
+        class = "ullme-material-dropzone",
+        tabindex = "0",
+        tags$div(class="ullme-material-dropzone-title", "Drop files here"),
+        tags$div(
+          class="ullme-material-dropzone-meta",
+          "Upload to ",
+          tags$span(id="ullme_material_drop_label", ullme_material_category_label(categories[[1]]))
+        )
+      ),
       tags$div(id="ullme_material_files", class="ullme-material-files")
     )
   )
@@ -446,7 +486,7 @@ ullme_material_ui = function(app=getApp()) {
 
 ullme_material_category_label = function(category) {
   restore.point("ullme_material_category_label")
-  labels = c(slides="Slides", ps="Problem Sets", quiz="Quiz", background="Background")
+  labels = c(general="General", slides="Slides", ps="Problem Sets", quiz="Quiz", background="Background")
   label = labels[[category]]
   if (is.null(label)) ullme_title_case(category) else label
 }
@@ -596,7 +636,9 @@ ullme_icon_svg = function(name) {
     panel = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M9 4v16"></path></svg>',
     image = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M21 15l-5-5L5 19"></path></svg>',
     mic = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>',
-    send = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>'
+    send = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
+    plus = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
+    user = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>'
   )
   icons[[name]]
 }
@@ -681,7 +723,7 @@ ullme_handle_course_settings_save = function(coursename="", times=NULL, app=getA
 }
 
 
-ullme_handle_material_category = function(category="slides", app=getApp(), ...) {
+ullme_handle_material_category = function(category="general", app=getApp(), ...) {
   restore.point("ullme_handle_material_category")
   category = paste0(category)[1]
   if (!category %in% ullme_course_material_categories()) return(invisible(NULL))
@@ -692,8 +734,11 @@ ullme_handle_material_category = function(category="slides", app=getApp(), ...) 
 
 ullme_handle_material_upload = function(id, value, app=getApp(), ...) {
   restore.point("ullme_handle_material_upload")
-  category = app$material_category
-  if (is.null(category) || !category %in% ullme_course_material_categories()) category = "slides"
+  if (is.null(value) || NROW(value) == 0) return(invisible(NULL))
+  category = sub("^ullme_material_upload_", "", paste0(id)[1])
+  if (!category %in% ullme_course_material_categories()) category = app$material_category
+  if (is.null(category) || !category %in% ullme_course_material_categories()) category = "general"
+  app$material_category = category
   ullme_store_material_uploads(app=app, value=value, category=category)
   ullme_send_course_state(app=app)
   invisible(TRUE)
@@ -736,7 +781,9 @@ ullme_send_course_state = function(app=getApp()) {
       as.list(app$courseids),
       app$courseid,
       app$role %in% c("teacher", "student"),
-      summary
+      summary,
+      app$role,
+      app$semester
     ),
     .app = app
   )
