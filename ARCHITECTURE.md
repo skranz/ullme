@@ -1,77 +1,262 @@
-# uLLMe Chat Architecture
+# uLLMe Architecture
 
-## UI Ownership
+## Runtime And State Ownership
 
-The chat screen is intentionally client-heavy. R builds a stable HTML shell and loads `inst/www/ullme-chat.css` and `inst/www/ullme-chat.js`; the browser owns transient UI state such as draft text, local image previews, message insertion, the thinking placeholder, composer resizing, model selection, and the voice button state.
+uLLMe is an R package built on Shiny and shinyEvents. `ullmeApp()` creates an
+`eventsApp()` and registers explicit event and change handlers instead of using
+reactive expressions throughout the application.
 
-This keeps the Shiny server focused on work that actually needs R: storing uploaded files, calling the AI backend, and sending the final assistant answer back to the browser.
+Each Shiny app instance has its own `app` object. User- and session-specific
+state therefore lives directly on `app`, including:
 
-## R / shinyEvents Boundary
+- `app$username`
+- `app$role` and `app$allowed_roles`
+- `app$semester`
+- `app$courseids` and `app$courseid`
+- user, session, image, and audio paths
+- the current material category
 
-The app uses `eventsApp()` and registers explicit shinyEvents handlers in `ullme_register_handlers()`.
+`app$glob` is shared across app instances. It is reserved for genuinely shared
+configuration, currently `app$glob$main_dir`. Per-user state must not be stored
+there.
 
-- `ullme_submit_chat_event`: sent by JavaScript when the user submits a message. The payload includes the text, selected model, client message id, assistant placeholder id, and upload metadata.
-- `ullme_image_upload`: handled through Shiny's file input binding when the hidden file input changes. The server copies uploaded image files into the active user's current session image folder.
+## Browser And Server Ownership
 
-The fake AI answer still comes from `ullme_ask_ai()`. When a real AI backend is added, `ullme_handle_chat_submit()` is the main integration point.
+R builds a stable HTML shell and loads:
 
-## Message Flow
+```text
+inst/www/ullme-chat.css
+inst/www/ullme-chat.js
+inst/www/ullme-audio.js
+```
 
-1. JavaScript appends the user message immediately.
-2. JavaScript appends an assistant placeholder with the matching `assistantMessageId`.
-3. JavaScript sends `ullme_submit_chat_event` to Shiny.
-4. R calls `ullme_ask_ai()`.
-5. R calls `window.ullme.receiveAssistantMessage(assistantMessageId, answer)`.
-6. JavaScript replaces the placeholder text and adds assistant action buttons.
+The browser owns transient interaction state: draft text, local image previews,
+message insertion, assistant placeholders, composer sizing, dropdown menus,
+course-tab selection, material-list rendering, and audio recording controls.
 
-The first assistant message is created through `ullme_intro_msg()`. It is currently simple on purpose so it can later become course-, user-, or context-specific.
+The R server owns persistent or trusted work: filesystem discovery, file
+storage and deletion, YAML reads and writes, role/semester/course state, and AI
+calls. R sends updated course state and final assistant answers back through
+explicit JavaScript calls.
 
-## Users And Roles
+## Application Layout
 
-`ullmeApp()` accepts `username`, `role`, and `allowed_roles`. Roles can include `teacher`, `student`, and `admin`. For every username the app creates a role-independent user folder and the teacher/student role-specific folders:
+All roles use one compact application bar containing:
+
+- the `uLLMe` brand
+- role selector
+- semester selector
+- course selector for teacher and student roles
+- add-course button for teacher and student roles
+- personal-settings button
+
+The personal-settings popover currently displays the instance username.
+
+Teacher mode divides the workspace into two equal panes. The course pane is on
+the left and chat is on the right. The course pane has these tabs:
+
+1. Activities
+2. Materials
+3. Settings
+
+Activities is currently empty. Materials and Settings remain mounted in the
+stable shell and are switched client-side. The material upload command is an
+icon at the right side of the tab row and is shown only for the Materials tab.
+
+Student and admin modes reuse the same chat pane at full width. They do not
+create a separate chat implementation.
+
+## shinyEvents Boundary
+
+`ullme_register_handlers()` registers the main application boundary:
+
+- `ullme_submit_chat_event`: submits text, model, message IDs, and image
+  metadata.
+- `ullme_image_upload`: stores images selected or pasted into the chat.
+- `ullme_role_select_event`: updates `app$role` and refreshes courses.
+- `ullme_semester_select_event`: updates `app$semester` and refreshes courses.
+- `ullme_course_select_event`: updates `app$courseid`.
+- `ullme_add_course_event`: creates and selects a course.
+- `ullme_course_settings_save_event`: writes course settings to `course.yaml`.
+- `ullme_material_category_event`: records the active material category.
+- `ullme_material_delete_event`: validates and deletes a material file.
+- `ullme_material_upload_<category>`: stores files for one material category.
+
+Audio handlers are registered separately by `ullme_register_audio_handlers()`.
+
+After role, semester, course, settings, material, or deletion changes, R calls
+`window.ullme.updateCourseList(...)`. The browser updates selectors, role-aware
+layout classes, settings fields, and material lists without rebuilding the UI.
+
+## Users, Roles, And Semesters
+
+`ullmeApp()` accepts `username`, `role`, and `allowed_roles`. Supported roles
+are `teacher`, `student`, and `admin`.
+
+The role-independent user directory is:
 
 ```text
 main_dir/users/<username>
+```
+
+Role-specific directories are:
+
+```text
 main_dir/teachers/<username>
 main_dir/students/<username>
 ```
 
-The active role, semester, selected course, and user-specific paths live directly on the per-instance `app` object, for example `app$role`, `app$semester`, `app$courseid`, and `app$role_user_dir`. Shared server-side data that should follow the person across teacher/student contexts belongs under `main_dir/users/<username>`. `app$glob` is reserved for values shared across app instances, such as `main_dir`.
+Course storage is currently available for teacher and student roles. Admin has
+no course directory.
 
-## Upload Storage
-
-Uploaded images are copied under:
+Semesters use these abbreviations:
 
 ```text
-main_dir/users/<username>/cur_session/images/<session-token>/<upload-id>_<clean-file-name>
+SS25
+WS2526
+SS26
+WS2627
 ```
 
-The app exposes `main_dir/users/<username>/cur_session/images` as the Shiny resource path `ullme-uploads`, so stored files can later be referenced from the browser if needed. The current UI uses local `FileReader` previews immediately and then records the server-side upload id once R confirms storage.
+The current semester is derived from the date. The browser selector receives a
+sequence around that semester, while R validates every selected abbreviation.
 
-Images can arrive either through the upload button or by pasting from the clipboard. The browser normalizes pasted clipboard images into named `File` objects, assigns them to the hidden Shiny file input, and shows thumbnail previews inside the composer.
+## Course Discovery And Storage
 
-## Current Placeholders
+Courses are discovered directly from directory names:
 
-The model selector is UI-ready but intentionally light. The selected model is included in the submit payload and can be connected to backend model routing without changing the chat layout.
+```text
+main_dir/<role>s/<username>/courses/<semester>/<courseid>
+```
 
-Assistant messages keep enough client-side metadata to support local action buttons. Copy reads the rendered answer text, while redo resends the saved submit payload and replaces the existing assistant answer when the server returns.
+For example:
 
-The sidebar is also client-owned. Its hide/show state toggles a class on the app shell, letting CSS move the main chat window and composer into the freed space without a server round-trip.
+```text
+main_dir/teachers/skranz/courses/SS26/Umwelt
+```
+
+`ullme_user_courseids()` lists and sorts the course directories for the active
+user, role, and semester. The first course is selected when no preferred
+selection remains available.
+
+Creating a course creates its directory, material subdirectories, and
+`course.yaml`. Course IDs are restricted to letters, numbers, underscores, and
+hyphens and must start with a letter.
+
+## Course YAML
+
+Each course directory contains:
+
+```text
+course.yaml
+```
+
+Its logical structure is:
+
+```yaml
+courseid: Umwelt
+coursename: Umweltökonomik
+times:
+  - weekday: monday
+    start: "10:00"
+    end: "12:00"
+```
+
+Up to three time slots are retained. Settings are normalized before writing,
+and missing `times` become an empty list.
+
+The intended JSON Schema, expressed as YAML, is stored at:
+
+```text
+inst/specs/course.schema.yaml
+```
+
+Runtime YAML reads and writes do not currently invoke schema validation. There
+is also a known contract mismatch to resolve before enabling validation: the UI
+writes full lowercase weekday names such as `monday`, while the schema
+currently enumerates two-letter values such as `mo`.
+
+## Materials
+
+Each course stores material below one common root:
+
+```text
+<course-dir>/materials/general
+<course-dir>/materials/slides
+<course-dir>/materials/ps
+<course-dir>/materials/quiz
+<course-dir>/materials/background
+```
+
+`general` is the destination for material that has not yet been classified.
+Existing files found in legacy top-level category directories are copied into
+the corresponding new directory when material storage is initialized.
+
+The browser supports the upload icon, clicking the drop area, and drag and
+drop. The selected category determines which hidden Shiny file input receives
+the files. After R stores an upload, it refreshes course state and calls
+`window.ullme.materialUploadComplete(...)`; the browser then clears both the
+DOM file input and its Shiny value so later uploads are treated as new input.
+
+Normal files are copied with cleaned filenames. ZIP files are unpacked into the
+selected category. ZIP entries with absolute paths or parent-directory
+traversal are rejected.
+
+Deletion accepts a category and relative path. R rejects absolute paths and
+parent traversal, normalizes the target, verifies that it remains inside the
+category directory, and only then deletes the file.
+
+`ullmeApp(max_upload_mb=100)` raises Shiny's process-wide request-size option
+to at least the configured value. Upload state itself remains instance-specific.
+
+## Chat And Image Flow
+
+Chat submission follows this sequence:
+
+1. JavaScript appends the user message immediately.
+2. JavaScript appends an assistant placeholder with an `assistantMessageId`.
+3. JavaScript sends `ullme_submit_chat_event`.
+4. R calls `ullme_ask_ai()`.
+5. R calls `window.ullme.receiveAssistantMessage(...)`.
+6. JavaScript replaces the placeholder and adds assistant actions.
+
+The first assistant message comes from `ullme_intro_msg()` and can later become
+course- or user-specific.
+
+Images can be selected with the composer button or pasted from the clipboard.
+The browser uses `FileReader` for immediate previews and assigns files to the
+hidden Shiny input. R copies them under:
+
+```text
+main_dir/users/<username>/cur_session/images/<session-token>/<upload-id>_<filename>
+```
+
+The image root is exposed as the `ullme-uploads` Shiny resource path.
+
+The model selector is included in the chat payload but backend model routing is
+still a placeholder. Copy and redo actions are client-side; redo resends the
+saved submit payload for that assistant message.
 
 ## Audio Recording
 
-Audio recording is implemented in `inst/www/ullme-audio.js` with the browser `MediaRecorder` API, avoiding an extra JavaScript dependency. Pressing the microphone button switches the composer into a recording state with cancel, timer/status, and done controls.
+`inst/www/ullme-audio.js` uses the browser `MediaRecorder` API. The composer
+provides cancel, timer/status, done, format, quality, and microphone-sensitivity
+controls.
 
-The recording UI offers format and quality choices. `Auto` prefers efficient Opus-based WebM when the browser supports it, then falls back through Ogg and MP4. Quality maps to `audioBitsPerSecond`: Small is 32 kbps, Standard is 64 kbps, and High is 128 kbps. Browsers may ignore or adjust these hints, so the client uses feature detection and falls back to the browser default if a selected MIME type is unavailable.
+Format selection prefers efficient Opus-based WebM and falls back through Ogg
+and MP4 according to browser support. Quality maps to requested bit rates of
+32, 64, or 128 kbps. Browsers may adjust or ignore these hints.
 
-While recording, a lightweight waveform is drawn on a canvas using the Web Audio `AnalyserNode`. This stays entirely client-side and is only a visual indication of current microphone level. The `Mic sensitivity` setting changes the waveform scaling, not guaranteed hardware microphone gain.
+A canvas waveform uses a Web Audio `AnalyserNode`. Microphone sensitivity
+changes waveform scaling, not guaranteed hardware gain.
 
-Audio format, quality, and mic sensitivity are stored in browser `localStorage` under an app-specific key. This is intentionally not a cookie and not server-side JSON: the preference is device/browser-specific, should not be sent with every request, and may sensibly differ between a laptop, office PC, or phone.
-
-When the user presses Done, the browser creates an audio `File` from the recorded blob and assigns it to the hidden Shiny file input `ullme_audio_upload`. The R handler in `R/audio.R` receives the normal Shiny upload metadata and copies the file into:
+Audio preferences are stored in browser `localStorage`. Finished recordings
+are assigned to `ullme_audio_upload` and copied to:
 
 ```text
-main_dir/users/<username>/cur_session/audio/<session-token>/<audio-id>_<clean-file-name>
+main_dir/users/<username>/cur_session/audio/<session-token>/<audio-id>_<filename>
 ```
 
-The handler then calls `window.ullmeAudio.receiveStoredAudio(...)` with the stored file record, including the server-side path. The most recent record is also kept in `app$last_audio_recording`.
+R returns the stored record through
+`window.ullmeAudio.receiveStoredAudio(...)` and keeps the latest record in
+`app$last_audio_recording`.
