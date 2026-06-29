@@ -1,10 +1,10 @@
-ullme_clean_user_name = function(username) {
+ullme_clean_user_name = function(userid) {
   restore.point("ullme_clean_user_name")
-  username = paste0(username)[1]
-  username = gsub("[^A-Za-z0-9._-]+", "_", username)
-  username = gsub("^_+|_+$", "", username)
-  if (!nzchar(username)) username = "user"
-  username
+  userid = paste0(userid)[1]
+  userid = gsub("[^A-Za-z0-9._-]+", "_", userid)
+  userid = gsub("^_+|_+$", "", userid)
+  if (!nzchar(userid)) userid = "user"
+  userid
 }
 
 
@@ -27,15 +27,15 @@ ullme_normalize_roles = function(roles) {
 }
 
 
-ullme_user_dir = function(main_dir, username) {
+ullme_user_dir = function(main_dir, userid) {
   restore.point("ullme_user_dir")
-  file.path(main_dir, "users", username)
+  file.path(main_dir, "users", userid)
 }
 
 
-ullme_role_user_dir = function(main_dir, username, role) {
+ullme_role_user_dir = function(main_dir, userid, role) {
   restore.point("ullme_role_user_dir")
-  file.path(main_dir, paste0(role, "s"), username)
+  file.path(main_dir, paste0(role, "s"), userid)
 }
 
 
@@ -61,8 +61,8 @@ ullme_init_user_dirs = function(app=getApp()) {
   restore.point("ullme_init_user_dirs")
   dirs = c(
     app$user_dir,
-    ullme_role_user_dir(main_dir=app$glob$main_dir, username=app$username, role="teacher"),
-    ullme_role_user_dir(main_dir=app$glob$main_dir, username=app$username, role="student"),
+    ullme_role_user_dir(main_dir=app$glob$main_dir, userid=app$userid, role="teacher"),
+    ullme_role_user_dir(main_dir=app$glob$main_dir, userid=app$userid, role="student"),
     app$cur_session_dir,
     app$uploads_dir,
     app$audio_dir

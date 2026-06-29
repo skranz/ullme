@@ -9,7 +9,7 @@ reactive expressions throughout the application.
 Each Shiny app instance has its own `app` object. User- and session-specific
 state therefore lives directly on `app`, including:
 
-- `app$username`
+- `app$userid`
 - `app$role` and `app$allowed_roles`
 - `app$semester`
 - `app$courseids` and `app$courseid`
@@ -32,7 +32,8 @@ inst/www/ullme-audio.js
 
 The browser owns transient interaction state: draft text, local image previews,
 message insertion, assistant placeholders, composer sizing, dropdown menus,
-course-tab selection, material-list rendering, and audio recording controls.
+course-tab selection, tutor- and skill-catalog rendering, material-list
+rendering, and audio recording controls.
 
 The R server owns persistent or trusted work: filesystem discovery, file
 storage and deletion, YAML reads and writes, role/semester/course state, and AI
@@ -50,18 +51,25 @@ All roles use one compact application bar containing:
 - add-course button for teacher and student roles
 - personal-settings button
 
-The personal-settings popover currently displays the instance username.
+The personal-settings popover currently displays the instance userid.
 
 Teacher mode divides the workspace into two equal panes. The course pane is on
 the left and chat is on the right. The course pane has these tabs:
 
-1. Activities
+1. AI Tutors
 2. Materials
 3. Settings
 
-Activities is currently empty. Materials and Settings remain mounted in the
-stable shell and are switched client-side. The material upload command is an
-icon at the right side of the tab row and is shown only for the Materials tab.
+AI Tutors contains the tutor families installed in the selected course and
+opens a library of resolved tutor definitions. Materials and Settings remain
+mounted in the stable shell and are switched client-side. The material upload
+command is an icon at the right side of the tab row and is shown only for the
+Materials tab.
+
+Skills belong to the teacher assistant rather than the course tab row. A
+composer button opens the resolved Skill catalog. Selecting a Skill displays
+its introduction, starter prompts, and composer placeholder above the composer
+until the teacher clears it or selects another Skill.
 
 Student and admin modes reuse the same chat pane at full width. They do not
 create a separate chat implementation.
@@ -81,29 +89,36 @@ create a separate chat implementation.
 - `ullme_material_category_event`: records the active material category.
 - `ullme_material_delete_event`: validates and deletes a material file.
 - `ullme_material_upload_<category>`: stores files for one material category.
+- `ullme_ai_tutor_add_event`: installs a resolved tutor definition in the
+  selected course.
+- `ullme_ai_tutor_toggle_event`: enables or disables an installed course tutor.
+- `ullme_skill_activate_event`: activates one resolved Skill for the teacher
+  assistant.
+- `ullme_skill_clear_event`: clears the active Skill.
 
 Audio handlers are registered separately by `ullme_register_audio_handlers()`.
 
-After role, semester, course, settings, material, or deletion changes, R calls
-`window.ullme.updateCourseList(...)`. The browser updates selectors, role-aware
-layout classes, settings fields, and material lists without rebuilding the UI.
+After role, semester, course, settings, material, Tutor, or Skill changes, R
+calls `window.ullme.updateCourseList(...)`. The browser updates selectors,
+role-aware layout classes, settings fields, tutor cards, Skill state, and
+material lists without rebuilding the UI.
 
 ## Users, Roles, And Semesters
 
-`ullmeApp()` accepts `username`, `role`, and `allowed_roles`. Supported roles
+`ullmeApp()` accepts `userid`, `role`, and `allowed_roles`. Supported roles
 are `teacher`, `student`, and `admin`.
 
 The role-independent user directory is:
 
 ```text
-main_dir/users/<username>
+main_dir/users/<userid>
 ```
 
 Role-specific directories are:
 
 ```text
-main_dir/teachers/<username>
-main_dir/students/<username>
+main_dir/teachers/<userid>
+main_dir/students/<userid>
 ```
 
 Course storage is currently available for teacher and student roles. Admin has
@@ -126,7 +141,7 @@ sequence around that semester, while R validates every selected abbreviation.
 Courses are discovered directly from directory names:
 
 ```text
-main_dir/<role>s/<username>/courses/<semester>/<courseid>
+main_dir/<role>s/<userid>/courses/<semester>/<courseid>
 ```
 
 For example:
@@ -228,7 +243,7 @@ The browser uses `FileReader` for immediate previews and assigns files to the
 hidden Shiny input. R copies them under:
 
 ```text
-main_dir/users/<username>/cur_session/images/<session-token>/<upload-id>_<filename>
+main_dir/users/<userid>/cur_session/images/<session-token>/<upload-id>_<filename>
 ```
 
 The image root is exposed as the `ullme-uploads` Shiny resource path.
@@ -254,7 +269,7 @@ Audio preferences are stored in browser `localStorage`. Finished recordings
 are assigned to `ullme_audio_upload` and copied to:
 
 ```text
-main_dir/users/<username>/cur_session/audio/<session-token>/<audio-id>_<filename>
+main_dir/users/<userid>/cur_session/audio/<session-token>/<audio-id>_<filename>
 ```
 
 R returns the stored record through

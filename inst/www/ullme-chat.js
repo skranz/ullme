@@ -4,7 +4,11 @@
     messageIndex: 0,
     isRecording: false,
     assistantRequests: {},
-    pendingMaterialInputId: ""
+    pendingMaterialInputId: "",
+    aiTutors: [],
+    aiTutorCatalog: [],
+    skills: [],
+    activeSkill: null
   };
 
   var materialLabels = {
@@ -50,6 +54,8 @@
     var materialDropzone = byId("ullme_material_dropzone");
     var userSettingsButton = byId("ullme_user_settings_btn");
     var userSettings = byId("ullme_user_settings");
+    var addTutorButton = byId("ullme_ai_tutor_add_btn");
+    var skillsButton = byId("ullme_skills_btn");
 
     if (!messages || !input || !submitButton) return;
 
@@ -141,6 +147,7 @@
       if (event.key !== "Escape") return;
       closeSidebarMenus();
       closeUserSettings();
+      closeCatalogDialog();
     });
 
     if (addCourseButton) {
@@ -153,7 +160,19 @@
       courseTabs.addEventListener("click", function (event) {
         var tab = event.target.closest(".ullme-course-tab");
         if (!tab || !courseTabs.contains(tab)) return;
-        showCoursePanel(tab.getAttribute("data-course-panel") || "activities");
+        showCoursePanel(tab.getAttribute("data-course-panel") || "ai-tutors");
+      });
+    }
+
+    if (addTutorButton) {
+      addTutorButton.addEventListener("click", function () {
+        openCatalogDialog("tutors");
+      });
+    }
+
+    if (skillsButton) {
+      skillsButton.addEventListener("click", function () {
+        openCatalogDialog("skills");
       });
     }
 
@@ -240,6 +259,7 @@
       assistantMessageId: assistantMessageId,
       text: text,
       model: modelSelect ? modelSelect.value : null,
+      skillid: state.activeSkill ? state.activeSkill.skillid : null,
       uploads: uploads.map(function (upload) {
         return {
           id: upload.serverId || upload.localId,
@@ -319,6 +339,275 @@
     if (uploadButton) {
       uploadButton.classList.toggle("ullme-material-tab-upload-visible", panelName === "materials");
     }
+  }
+
+  function renderAITutors(tutors) {
+    var list = byId("ullme_ai_tutor_list");
+    if (!list) return;
+    tutors = Array.isArray(tutors) ? tutors : [];
+    list.innerHTML = "";
+
+    if (!tutors.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-feature-empty";
+      empty.innerHTML = "<strong>No AI Tutors yet</strong><span>Add a tutor definition to make it available in this course.</span>";
+      list.appendChild(empty);
+      return;
+    }
+
+    tutors.forEach(function (tutor) {
+      var card = document.createElement("article");
+      var head = document.createElement("div");
+      var titleWrap = document.createElement("div");
+      var title = document.createElement("div");
+      var badge = document.createElement("span");
+      var description = document.createElement("div");
+      var footer = document.createElement("div");
+      var instances = document.createElement("span");
+      var toggleLabel = document.createElement("label");
+      var toggle = document.createElement("input");
+      var toggleTrack = document.createElement("span");
+
+      card.className = "ullme-feature-card";
+      head.className = "ullme-feature-card-head";
+      titleWrap.className = "ullme-feature-card-title-wrap";
+      title.className = "ullme-feature-card-title";
+      title.textContent = tutor.label || tutor.tutorid;
+      badge.className = "ullme-source-badge";
+      badge.textContent = sourceLabel(tutor.source);
+      description.className = "ullme-feature-card-description";
+      description.textContent = tutor.description || "No description";
+      footer.className = "ullme-feature-card-footer";
+      instances.className = "ullme-feature-card-meta";
+      instances.textContent = Number(tutor.instance_count || 0) + " instances";
+      toggleLabel.className = "ullme-toggle";
+      toggleLabel.title = tutor.enabled ? "Disable tutor" : "Enable tutor";
+      toggle.type = "checkbox";
+      toggle.checked = Boolean(tutor.enabled);
+      toggle.setAttribute("aria-label", "Enable " + (tutor.label || tutor.tutorid));
+      toggle.addEventListener("change", function () {
+        sendSidebarEvent("ullme_ai_tutor_toggle_event", {
+          tutorid: tutor.tutorid,
+          enabled: toggle.checked
+        });
+      });
+      toggleTrack.className = "ullme-toggle-track";
+
+      titleWrap.appendChild(title);
+      titleWrap.appendChild(badge);
+      head.appendChild(titleWrap);
+      toggleLabel.appendChild(toggle);
+      toggleLabel.appendChild(toggleTrack);
+      head.appendChild(toggleLabel);
+      footer.appendChild(instances);
+      appendMaterialRoles(footer, tutor.required_material_roles);
+      card.appendChild(head);
+      card.appendChild(description);
+      card.appendChild(footer);
+      list.appendChild(card);
+    });
+  }
+
+  function appendMaterialRoles(parent, roles) {
+    roles = Array.isArray(roles) ? roles.filter(Boolean) : [];
+    if (!roles.length) return;
+    var text = document.createElement("span");
+    text.className = "ullme-feature-card-meta";
+    text.textContent = "Uses " + roles.join(", ");
+    parent.appendChild(text);
+  }
+
+  function sourceLabel(source) {
+    var labels = {
+      course: "Course",
+      personal: "Personal",
+      general: "General",
+      package: "Package",
+      missing: "Missing"
+    };
+    return labels[source] || source || "Definition";
+  }
+
+  function openCatalogDialog(kind) {
+    closeCatalogDialog();
+    var isTutorCatalog = kind === "tutors";
+    var items = isTutorCatalog ? state.aiTutorCatalog : state.skills;
+    var overlay = document.createElement("div");
+    var dialog = document.createElement("section");
+    var head = document.createElement("div");
+    var heading = document.createElement("div");
+    var title = document.createElement("div");
+    var subtitle = document.createElement("div");
+    var close = document.createElement("button");
+    var list = document.createElement("div");
+    var note = document.createElement("div");
+
+    overlay.id = "ullme_catalog_overlay";
+    overlay.className = "ullme-dialog-overlay";
+    dialog.className = "ullme-catalog-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", isTutorCatalog ? "AI Tutor library" : "Skills");
+    head.className = "ullme-catalog-head";
+    heading.className = "ullme-catalog-heading";
+    title.className = "ullme-catalog-title";
+    title.textContent = isTutorCatalog ? "AI Tutor Library" : "Skills";
+    subtitle.className = "ullme-catalog-subtitle";
+    subtitle.textContent = isTutorCatalog
+      ? "Add a resolved tutor definition to this course."
+      : "Activate a reusable workflow for your next task.";
+    close.type = "button";
+    close.className = "ullme-icon-button";
+    close.setAttribute("aria-label", "Close");
+    close.innerHTML = icons.close;
+    close.addEventListener("click", closeCatalogDialog);
+    list.className = "ullme-catalog-list";
+    note.className = "ullme-catalog-note";
+    note.textContent = isTutorCatalog
+      ? "Definitions resolve in this order: course, personal, general, package."
+      : "Skills resolve in this order: personal, general, package.";
+
+    heading.appendChild(title);
+    heading.appendChild(subtitle);
+    head.appendChild(heading);
+    head.appendChild(close);
+    dialog.appendChild(head);
+
+    if (!items.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-feature-empty";
+      empty.innerHTML = "<strong>Nothing here yet</strong><span>Add definitions in the corresponding package, general, or personal directory.</span>";
+      list.appendChild(empty);
+    } else {
+      items.forEach(function (item) {
+        list.appendChild(catalogCard(item, kind));
+      });
+    }
+
+    dialog.appendChild(list);
+    dialog.appendChild(note);
+    overlay.appendChild(dialog);
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeCatalogDialog();
+    });
+    document.body.appendChild(overlay);
+    close.focus();
+  }
+
+  function catalogCard(item, kind) {
+    var isTutor = kind === "tutors";
+    var card = document.createElement("article");
+    var body = document.createElement("div");
+    var titleRow = document.createElement("div");
+    var title = document.createElement("div");
+    var badge = document.createElement("span");
+    var description = document.createElement("div");
+    var action = document.createElement("button");
+    var id = isTutor ? item.tutorid : item.skillid;
+    var installed = isTutor && state.aiTutors.some(function (tutor) {
+      return tutor.tutorid === id;
+    });
+
+    card.className = "ullme-catalog-card";
+    body.className = "ullme-catalog-card-body";
+    titleRow.className = "ullme-feature-card-title-wrap";
+    title.className = "ullme-feature-card-title";
+    title.textContent = item.label || id;
+    badge.className = "ullme-source-badge";
+    badge.textContent = sourceLabel(item.source);
+    description.className = "ullme-feature-card-description";
+    description.textContent = item.description || "No description";
+    action.type = "button";
+    action.className = installed ? "ullme-secondary-action" : "ullme-primary-action";
+    action.textContent = installed ? "Added" : (isTutor ? "Add" : "Use skill");
+    action.disabled = installed;
+    action.addEventListener("click", function () {
+      if (isTutor) {
+        sendSidebarEvent("ullme_ai_tutor_add_event", { tutorid: id });
+      } else {
+        sendSidebarEvent("ullme_skill_activate_event", { skillid: id });
+      }
+      closeCatalogDialog();
+    });
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(badge);
+    body.appendChild(titleRow);
+    body.appendChild(description);
+    card.appendChild(body);
+    card.appendChild(action);
+    return card;
+  }
+
+  function closeCatalogDialog() {
+    var overlay = byId("ullme_catalog_overlay");
+    if (overlay) overlay.remove();
+  }
+
+  function renderActiveSkill(skill) {
+    var container = byId("ullme_active_skill");
+    var input = byId("ullme_chat_input");
+    state.activeSkill = skill || null;
+    if (!container) return;
+    container.innerHTML = "";
+    container.classList.toggle("ullme-active-skill-visible", Boolean(skill));
+    if (input) input.placeholder = skill && skill.composer_placeholder
+      ? skill.composer_placeholder
+      : "Ask anything";
+    if (!skill) return;
+
+    var head = document.createElement("div");
+    var identity = document.createElement("div");
+    var icon = document.createElement("span");
+    var title = document.createElement("strong");
+    var clear = document.createElement("button");
+    var intro = document.createElement("div");
+    var starters = document.createElement("div");
+
+    head.className = "ullme-active-skill-head";
+    identity.className = "ullme-active-skill-identity";
+    icon.className = "ullme-active-skill-icon";
+    icon.innerHTML = ullmeSparklesIcon();
+    title.textContent = skill.label || skill.skillid;
+    clear.type = "button";
+    clear.className = "ullme-active-skill-clear";
+    clear.textContent = "Clear";
+    clear.addEventListener("click", function () {
+      sendSidebarEvent("ullme_skill_clear_event", {});
+    });
+    identity.appendChild(icon);
+    identity.appendChild(title);
+    head.appendChild(identity);
+    head.appendChild(clear);
+    container.appendChild(head);
+
+    if (skill.intro) {
+      intro.className = "ullme-active-skill-intro";
+      intro.textContent = skill.intro;
+      container.appendChild(intro);
+    }
+
+    var prompts = Array.isArray(skill.starter_prompts) ? skill.starter_prompts : [];
+    if (prompts.length) {
+      starters.className = "ullme-skill-starters";
+      prompts.forEach(function (prompt) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = prompt;
+        button.addEventListener("click", function () {
+          if (!input) return;
+          input.value = prompt;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.focus();
+        });
+        starters.appendChild(button);
+      });
+      container.appendChild(starters);
+    }
+  }
+
+  function ullmeSparklesIcon() {
+    return '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>';
   }
 
   function openAddCourseDialog() {
@@ -995,14 +1284,23 @@
   function updateActiveCourse(summary, selectedCourseid) {
     var course = summary && summary.course ? summary.course : { courseid: selectedCourseid || "" };
     var material = summary && summary.material ? summary.material : {};
+    var aiTutors = summary && Array.isArray(summary.ai_tutors) ? summary.ai_tutors : [];
+    var aiTutorCatalog = summary && Array.isArray(summary.ai_tutor_catalog) ? summary.ai_tutor_catalog : [];
+    var skills = summary && Array.isArray(summary.skills) ? summary.skills : [];
+    var activeSkill = summary ? summary.active_skill : null;
     var courseWorkspace = byId("ullme_course_workspace");
     state.courseMaterial = material;
+    state.aiTutors = aiTutors;
+    state.aiTutorCatalog = aiTutorCatalog;
+    state.skills = skills;
     if (courseWorkspace) {
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
     fillCourseSettings(course);
     renderMaterialFiles(material, currentMaterialCategory());
-    if (!selectedCourseid) showCoursePanel("activities");
+    renderAITutors(aiTutors);
+    renderActiveSkill(activeSkill);
+    if (!selectedCourseid) showCoursePanel("ai-tutors");
   }
 
   function setRoleLayout(role) {

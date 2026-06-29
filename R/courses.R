@@ -47,19 +47,19 @@ ullme_semester_from_index = function(index) {
 }
 
 
-ullme_courses_dir = function(main_dir, username, role, semester) {
+ullme_courses_dir = function(main_dir, userid, role, semester) {
   restore.point("ullme_courses_dir")
   role = ullme_normalize_role(role)
   if (!role %in% c("teacher", "student")) return(character(0))
-  file.path(ullme_role_user_dir(main_dir=main_dir, username=username, role=role), "courses", semester)
+  file.path(ullme_role_user_dir(main_dir=main_dir, userid=userid, role=role), "courses", semester)
 }
 
 
-ullme_user_courseids = function(main_dir, username, role, semester) {
+ullme_user_courseids = function(main_dir, userid, role, semester) {
   restore.point("ullme_user_courseids")
   course_dir = ullme_courses_dir(
     main_dir=main_dir,
-    username=username,
+    userid=userid,
     role=role,
     semester=semester
   )
@@ -71,11 +71,11 @@ ullme_user_courseids = function(main_dir, username, role, semester) {
 }
 
 
-ullme_course_dir = function(main_dir, username, role, semester, courseid) {
+ullme_course_dir = function(main_dir, userid, role, semester, courseid) {
   restore.point("ullme_course_dir")
   courseid = ullme_clean_courseid(courseid)
   file.path(
-    ullme_courses_dir(main_dir=main_dir, username=username, role=role, semester=semester),
+    ullme_courses_dir(main_dir=main_dir, userid=userid, role=role, semester=semester),
     courseid
   )
 }
@@ -145,12 +145,12 @@ ullme_default_course = function(courseid="", coursename="") {
 }
 
 
-ullme_make_course = function(main_dir, username, role, semester, courseid, coursename="") {
+ullme_make_course = function(main_dir, userid, role, semester, courseid, coursename="") {
   restore.point("ullme_make_course")
   courseid = ullme_clean_courseid(courseid)
   course_dir = ullme_course_dir(
     main_dir=main_dir,
-    username=username,
+    userid=userid,
     role=role,
     semester=semester,
     courseid=courseid
@@ -223,7 +223,7 @@ ullme_course_summary = function(app) {
   if (is.null(app$courseid) || !nzchar(app$courseid)) return(NULL)
   course_dir = ullme_course_dir(
     main_dir=app$glob$main_dir,
-    username=app$username,
+    userid=app$userid,
     role=app$role,
     semester=app$semester,
     courseid=app$courseid
@@ -266,7 +266,7 @@ ullme_active_course_dir = function(app=getApp()) {
   if (is.null(app$courseid) || !nzchar(app$courseid)) return(NULL)
   course_dir = ullme_course_dir(
     main_dir=app$glob$main_dir,
-    username=app$username,
+    userid=app$userid,
     role=app$role,
     semester=app$semester,
     courseid=app$courseid

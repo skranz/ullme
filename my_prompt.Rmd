@@ -1,0 +1,6039 @@
+
+Below are files from my ullme package
+
+
+# FILE: C:\libraries\ullme\ullme\ACTIVITIES.md
+```
+# uLLMe Activities
+
+Activities shall describe the actual helpful things uLLMe can do for teaching.
+
+We would like to have a structure where teachers can choose among default activities, but can also customize activities to their own course. Even students might be allowed some customization with limitation e.g. adapting the persona of their AI Tutor.
+
+The core idea is that the customizable aspects of activities are described in YAML files. Customization of activities can then be done also with the help of AI.
+
+Of course, some core functionality of activities must be fixed programmed. Finding the right balance between generality customization and tractability of activities is important.
+
+# Activity Runs
+
+An activity can be run several times, each instance is an activity run. We will store approbriate information about each activity run, typically as a YAML file.
+
+# Activity Types 
+
+The `type` field of an activity shall describe its core functionality. There will be a fixed list of activity types as each type requires support in our code base.
+
+## ai_tutor activities
+
+These will be AI tutors provided to students. These can be tutors mapped to particular problem sets, to particular chapters or for the whole course material. Students can get direct links to tutors or choose particular tutors in their app. 
+
+## quiz_maker activities
+
+These activities are targeted to the teacher and generate quiz files, e.g. based on particular lectures.
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\ACTIVITIES.md
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\AGENT_TOOLS.md
+```
+# uLLMe Agent Tools
+
+A core design principle of uLLMe shall be that an AI agent can also help to use uLLMe and do tasks like customizing activities or creating object instance files based on the uploaded materials.
+
+To do this the AI needs tools access, in particular to read or write files or get other information. On the other hand, for security reasons the AI should not have arbitraty access. E.g. all write operations must be limited to stuff the current user is allowed to edit.
+
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\AGENT_TOOLS.md
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\ARCHITECTURE.md
+```
+# uLLMe Architecture
+
+## Runtime And State Ownership
+
+uLLMe is an R package built on Shiny and shinyEvents. `ullmeApp()` creates an
+`eventsApp()` and registers explicit event and change handlers instead of using
+reactive expressions throughout the application.
+
+Each Shiny app instance has its own `app` object. User- and session-specific
+state therefore lives directly on `app`, including:
+
+- `app$userid`
+- `app$role` and `app$allowed_roles`
+- `app$semester`
+- `app$courseids` and `app$courseid`
+- user, session, image, and audio paths
+- the current material category
+
+`app$glob` is shared across app instances. It is reserved for genuinely shared
+configuration, currently `app$glob$main_dir`. Per-user state must not be stored
+there.
+
+## Browser And Server Ownership
+
+R builds a stable HTML shell and loads:
+
+```text
+inst/www/ullme-chat.css
+inst/www/ullme-chat.js
+inst/www/ullme-audio.js
+```
+
+The browser owns transient interaction state: draft text, local image previews,
+message insertion, assistant placeholders, composer sizing, dropdown menus,
+course-tab selection, material-list rendering, and audio recording controls.
+
+The R server owns persistent or trusted work: filesystem discovery, file
+storage and deletion, YAML reads and writes, role/semester/course state, and AI
+calls. R sends updated course state and final assistant answers back through
+explicit JavaScript calls.
+
+## Application Layout
+
+All roles use one compact application bar containing:
+
+- the `uLLMe` brand
+- role selector
+- semester selector
+- course selector for teacher and student roles
+- add-course button for teacher and student roles
+- personal-settings button
+
+The personal-settings popover currently displays the instance userid.
+
+Teacher mode divides the workspace into two equal panes. The course pane is on
+the left and chat is on the right. The course pane has these tabs:
+
+1. Activities
+2. Materials
+3. Settings
+
+Activities is currently empty. Materials and Settings remain mounted in the
+stable shell and are switched client-side. The material upload command is an
+icon at the right side of the tab row and is shown only for the Materials tab.
+
+Student and admin modes reuse the same chat pane at full width. They do not
+create a separate chat implementation.
+
+## shinyEvents Boundary
+
+`ullme_register_handlers()` registers the main application boundary:
+
+- `ullme_submit_chat_event`: submits text, model, message IDs, and image
+  metadata.
+- `ullme_image_upload`: stores images selected or pasted into the chat.
+- `ullme_role_select_event`: updates `app$role` and refreshes courses.
+- `ullme_semester_select_event`: updates `app$semester` and refreshes courses.
+- `ullme_course_select_event`: updates `app$courseid`.
+- `ullme_add_course_event`: creates and selects a course.
+- `ullme_course_settings_save_event`: writes course settings to `course.yaml`.
+- `ullme_material_category_event`: records the active material category.
+- `ullme_material_delete_event`: validates and deletes a material file.
+- `ullme_material_upload_<category>`: stores files for one material category.
+
+Audio handlers are registered separately by `ullme_register_audio_handlers()`.
+
+After role, semester, course, settings, material, or deletion changes, R calls
+`window.ullme.updateCourseList(...)`. The browser updates selectors, role-aware
+layout classes, settings fields, and material lists without rebuilding the UI.
+
+## Users, Roles, And Semesters
+
+`ullmeApp()` accepts `userid`, `role`, and `allowed_roles`. Supported roles
+are `teacher`, `student`, and `admin`.
+
+The role-independent user directory is:
+
+```text
+main_dir/users/<userid>
+```
+
+Role-specific directories are:
+
+```text
+main_dir/teachers/<userid>
+main_dir/students/<userid>
+```
+
+Course storage is currently available for teacher and student roles. Admin has
+no course directory.
+
+Semesters use these abbreviations:
+
+```text
+SS25
+WS2526
+SS26
+WS2627
+```
+
+The current semester is derived from the date. The browser selector receives a
+sequence around that semester, while R validates every selected abbreviation.
+
+## Course Discovery And Storage
+
+Courses are discovered directly from directory names:
+
+```text
+main_dir/<role>s/<userid>/courses/<semester>/<courseid>
+```
+
+For example:
+
+```text
+main_dir/teachers/skranz/courses/SS26/Umwelt
+```
+
+`ullme_user_courseids()` lists and sorts the course directories for the active
+user, role, and semester. The first course is selected when no preferred
+selection remains available.
+
+Creating a course creates its directory, material subdirectories, and
+`course.yaml`. Course IDs are restricted to letters, numbers, underscores, and
+hyphens and must start with a letter.
+
+## Course YAML
+
+Each course directory contains:
+
+```text
+course.yaml
+```
+
+Its logical structure is:
+
+```yaml
+courseid: Umwelt
+coursename: Umweltökonomik
+times:
+  - weekday: monday
+    start: "10:00"
+    end: "12:00"
+```
+
+Up to three time slots are retained. Settings are normalized before writing,
+and missing `times` become an empty list.
+
+The intended JSON Schema, expressed as YAML, is stored at:
+
+```text
+inst/specs/course.schema.yaml
+```
+
+Runtime YAML reads and writes do not currently invoke schema validation. There
+is also a known contract mismatch to resolve before enabling validation: the UI
+writes full lowercase weekday names such as `monday`, while the schema
+currently enumerates two-letter values such as `mo`.
+
+## Materials
+
+Each course stores material below one common root:
+
+```text
+<course-dir>/materials/general
+<course-dir>/materials/slides
+<course-dir>/materials/ps
+<course-dir>/materials/quiz
+<course-dir>/materials/background
+```
+
+`general` is the destination for material that has not yet been classified.
+Existing files found in legacy top-level category directories are copied into
+the corresponding new directory when material storage is initialized.
+
+The browser supports the upload icon, clicking the drop area, and drag and
+drop. The selected category determines which hidden Shiny file input receives
+the files. After R stores an upload, it refreshes course state and calls
+`window.ullme.materialUploadComplete(...)`; the browser then clears both the
+DOM file input and its Shiny value so later uploads are treated as new input.
+
+Normal files are copied with cleaned filenames. ZIP files are unpacked into the
+selected category. ZIP entries with absolute paths or parent-directory
+traversal are rejected.
+
+Deletion accepts a category and relative path. R rejects absolute paths and
+parent traversal, normalizes the target, verifies that it remains inside the
+category directory, and only then deletes the file.
+
+`ullmeApp(max_upload_mb=100)` raises Shiny's process-wide request-size option
+to at least the configured value. Upload state itself remains instance-specific.
+
+## Chat And Image Flow
+
+Chat submission follows this sequence:
+
+1. JavaScript appends the user message immediately.
+2. JavaScript appends an assistant placeholder with an `assistantMessageId`.
+3. JavaScript sends `ullme_submit_chat_event`.
+4. R calls `ullme_ask_ai()`.
+5. R calls `window.ullme.receiveAssistantMessage(...)`.
+6. JavaScript replaces the placeholder and adds assistant actions.
+
+The first assistant message comes from `ullme_intro_msg()` and can later become
+course- or user-specific.
+
+Images can be selected with the composer button or pasted from the clipboard.
+The browser uses `FileReader` for immediate previews and assigns files to the
+hidden Shiny input. R copies them under:
+
+```text
+main_dir/users/<userid>/cur_session/images/<session-token>/<upload-id>_<filename>
+```
+
+The image root is exposed as the `ullme-uploads` Shiny resource path.
+
+The model selector is included in the chat payload but backend model routing is
+still a placeholder. Copy and redo actions are client-side; redo resends the
+saved submit payload for that assistant message.
+
+## Audio Recording
+
+`inst/www/ullme-audio.js` uses the browser `MediaRecorder` API. The composer
+provides cancel, timer/status, done, format, quality, and microphone-sensitivity
+controls.
+
+Format selection prefers efficient Opus-based WebM and falls back through Ogg
+and MP4 according to browser support. Quality maps to requested bit rates of
+32, 64, or 128 kbps. Browsers may adjust or ignore these hints.
+
+A canvas waveform uses a Web Audio `AnalyserNode`. Microphone sensitivity
+changes waveform scaling, not guaranteed hardware gain.
+
+Audio preferences are stored in browser `localStorage`. Finished recordings
+are assigned to `ullme_audio_upload` and copied to:
+
+```text
+main_dir/users/<userid>/cur_session/audio/<session-token>/<audio-id>_<filename>
+```
+
+R returns the stored record through
+`window.ullmeAudio.receiveStoredAudio(...)` and keeps the latest record in
+`app$last_audio_recording`.
+```
+# END OF FILE: C:\libraries\ullme\ullme\ARCHITECTURE.md
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\OBJECTS.md
+```
+# uLLMe Objects
+
+Example for objects used by uLLme are slides, ps [problem sets], or lectures. Basic definitions are in inst/objects.
+
+Objects can be used by activities.
+
+## REQUIRED FIELDS OF AN OBJECT
+
+oid: object id that will be used in files and place holders to reference to an object
+
+name: a longer name of the object possibly used in some texts.
+
+level: (course) 
+  - course means we can have multiple instances of the object per course. A course always means a unique combination of course and semester.
+
+type: (doc|event)
+  - doc is used for documents like slides, or lectures. Each instance has at least one file stored in the materials directory. We can have multiple files in different formats for a document, like slides1.pdf and slides1.tex. There can also be extra materials for each object file to an instance like multiple images. They should be stored in a subdirectory postfix '_extra' like "slides1_extra"
+  
+descr:
+  - A verbal description of the object. Can help an AI or human user to understand it.
+  
+## OPTIONAL FIELDS OF AN OBJECT
+
+doc_dir: 
+  Preferred subdirectory of materials where the files of a document shall be stored.
+
+linked_to:
+  Example in ps_sol we have 'linked_to: ps' This means each ps_sol object instance is linked to a ps instance.
+
+progresses:
+  For event objects. They can progress object instances. E.g. for lecture we have  'progresses: [slides, script]' this means a lecture can progress slides or a script.
+  
+# Specifying object instances
+
+Consider course level objects. Each course directory shall contain for used objects instance files with name '{oid}_inst.yaml', e.g. 'ps_inst.yaml' for problem set instances of the course. Ideally this instance files can be automatically be generated by an LLM based on the course material and the object definition.
+
+
+## Object instances for doc objects 
+
+How does an instance file for a doc object look like? Let us take ps_sol_inst.yml as example:
+
+```
+- docid: ps1_sol
+  files: [ps1_sol.tex, ps1_sol.pdf]
+  linked_to: ps1
+  extra_files: [ps1_figure1.png, ps2_figure2.png]
+
+- docid: ps2a_sol
+  files: [ps2a_sol.tex, ps2a_sol.pdf]
+  linked_to: ps2a
+  extra_files: []
+```
+
+We don't specify the file directories but expect them in the doc_dir specified by the object. If the files are in some other directory we want to copy them.
+
+So docid is the ID of the document instance. As linked_to was set to ps in ps_sol: the values ps1 and ps2a are the docid of the corresponding ps object instances.
+
+Note that instance files should ideally sort the object instances in the correct order, i.e. problem sets in the sequence they are used in the course. An LLM should be hopefully be able to do it.
+
+## Object instances for event objects 
+
+Here an example for an instance file of the lecture object in a course, an event object.
+
+```
+- eventid: lecture_1
+  date: "2025-11-01"
+  start_time: "10:15"
+  end_time: "11:45"
+  progress:
+    slides:
+      oiid: [slides1a]
+      descr: |
+        Began course and finished the Cournot Model on the slides.
+        
+- eventid: lecture_2
+  date: "2025-11-04"
+  start_time: "10:15"
+  end_time: "11:45"
+  progress:
+    slides:
+      docid: [slides1a, slides1b]
+      descr: |
+        Finished slides 1a and also taught first 5 slides of 1b.
+```
+
+These instance files can help activities that may generate summaries after lectures or quizes.
+
+# Uses of objects
+
+Objects are mainly used by activities.
+
+## Using objects as placeholders in prompts and other texts
+
+There we would typically upload a text representation and possibly figures in the additiona material of the relevant object instance. We should specify some default ranking of file formats, like md before tex, before html, before image version of pdf.
+
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\OBJECTS.md
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\README.md
+```
+# Core ideas
+
+- We currently try to save everything in a well-structured file system instead of a data base. Seems to make debugging / adaption easier.
+
+- Roles: "teacher", "student", "admin"
+
+- A "user" can in principle have different roles, but "teacher" and "admin" roles will be restriced.
+
+- Each teacher can have multiple "courses". Courses are assigned to semester, multiple students can be registered to a course.
+
+- Settings can live on a course, user, or general level. Course setting can refine user settings, user settings can refine general settings. Essentially, if you don't specify a particular setting field on a deeper level, we use the value from the higher level as default.
+
+- Settings can be edited by hand using YAML files. Some very common settings can also have some nicer UI interface. 
+
+- The AI shall also be able to change settings via tool calls. Importantly, the tool calls will be more limited, e.g. the AI cannot determine the user for which the setting is changed, but the user is determined by the App, i.e. this disallows the AI to change settings for other users. 
+
+
+
+
+
+# UI Design
+
+- Try to make it look similar to known, widely used AI chat interfaces. 
+
+
+# Code Design
+
+- Use shinyEvents functionality which tries to work event-based instead of reactivity based shiny approach.
+
+- Try to put pure client functionality into dedicated .js code, only use R code where server is needed. E.g. if user submits a chat text and new output window will be generated below, this should ideally be done via js. But on the server side, we of course need to get the input text to start the API call to the AI. 
+
+- Start regular R functions with a `restore.point("funname")` call. Example helper functions like `example()` are exempt and should not start with a restore point.
+
+- Use `=` instead of `<-` in R code.
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\README.md
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\DESCRIPTION
+```
+Package: ullme
+Type: Package
+Title: Uni Ulm LLM for economics education: an AI powered shinyEvents App
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Sebastian", "Kranz",
+      email = "sebastian.kranz@uni-ulm.de",
+      role = c("aut", "cre")
+    )
+  )
+Description: Experimental app. See README.md for details
+Depends: shinyEvents, restorepoint, stringi, stringtools, ellmer, yaml
+Suggests: plumber, jsonlite, rstudioapi
+License: GPL 3.0 (all non-R stuff also MIT)
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3
+```
+# END OF FILE: C:\libraries\ullme\ullme\DESCRIPTION
+
+-----------------------------------------------------------
+
+
+
+# FILE: C:\libraries\ullme\ullme\R\ai_call.R
+```
+ullme_ask_ai = function(input, uses_fake_ai = ullme_uses_fake_ai()) {
+  restore.point("ullme_ask_ai")
+  if (uses_fake_ai) {
+    return(paste0("Fake AI answer to:\n",  input))
+  }
+  stop("Actual AI use not yet implement.")
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\ai_call.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\ai_tools.R
+```
+example = function() {
+  name = "describe_course_docs"
+  ullme_tool(name)
+}
+
+ullme_tool = function(name, descr="",perm=ullme_tool_perm()) {
+  restore.point("ullme_tool")
+  fun_name = stringi::stri_c("utool_", name)
+  namespace = asNamespace("ullme")
+  fun = get(fun_name, envir = namespace, inherits = FALSE)
+  args = names(formals(fun))
+
+  # these arguments will be set by uLLMe
+  auto_args = c("userid","teacherid")
+
+  # these arguments can be specified by the tool-calling LLM
+  tool_args = setdiff(args, auto_args)
+
+  # generate the actual tool fun
+  tool_fun_str = paste0('function(', paste0(tool_args, collapse=","),') {
+  userid = ullme_userid()
+  teacherid = ullme_teacherid()
+  args = as.list(environment())
+  res = ullme_check_tool_args(args, course_must_exist=', course_must_exist,')
+  if (!res$ok) {
+    return(res$msg)
+  }
+  ', fun_name,'(',paste0(args,"=", args, collapse=","),')
+}')
+  cat(tool_fun_str)
+
+  tool_fun = eval(parse(text = tool_fun_str))
+
+  arg_types = ullme_tool_arg_types(tool_args)
+
+
+  el_tool = ellmer::tool(
+    fun = tool_fun,
+    name = name,
+    description = descr,
+    arguments = arg_types[tool_args]
+  )
+
+  el_tool
+
+}
+
+ullme_tools = function() {
+  li = list(
+    ullme_tool("list_courses", "Get the list of existing courses. If 'semester' is not null only list coursed from that semester. 'teacherid' is the userid of the teacher of whom we want to list the courses."),
+    ullme_tool("cur_user", "Get the userid of the current user, the role and the possible roles.")
+  )
+  names = sapply(li, function(et) et@name)
+  names(li) = names
+  li
+}
+
+ullme_check_tool_args = function(args, perm = ullme_perm()) {
+  if (is.null(args$userid)) {
+    return(list(ok=FALSE, msg="No valid userid identified by ullme. Seems a bug in the R package."))
+  }
+  arg_names = names(args)
+
+  if (isTRUE(perm$only_teacher)) {
+    if (!identical(args$userid & args$teacherid)) {
+      return(list(ok=FALSE, msg = "This tool can only be called by the teacher of the course."))
+    }
+  }
+
+  if (isTRUE(perm$course_must_exist) & all(c("teacherid","semester","courseid") %in% arg_names)) {
+    has_course = ullme_has_course(teacherid, semester, courseid)
+    if (!has_course) {
+      return(list(ok=FALSE, msg=paste0("Course ", courseid, " in semester ", semester, " for teacher ", teacherid, " does not exist.")))
+    }
+  }
+  return(list(ok=TRUE))
+}
+
+ullme_has_course = function(teacherid, semester, courseid, main_dir=ullme_main_dir()) {
+  dir.exists(file.path(main_dir, "teachers", teacherid, "courses", semester, courseid))
+}
+
+
+
+ullme_default_tool_arg_spec = function() {
+  list(
+    teacherid = list(type="string", description="teacherid is the userid of the teacher a course belongs to.", required=TRUE),
+    courseid = list(type="string", description="courseid you can use the tool list_courses to get courseids.", required=TRUE),
+    semester = list(type="string", description= "The semester containing the course, e.g. WS2526 or SS27. Special cases: 'all' means all semester and 'sel' the currently selected semester.", required=TRUE),
+  )
+}
+
+
+
+ullme_tool_perm = function(course_must_exist=TRUE, only_teacher=TRUE) {
+  as.list(environment())
+}
+
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\ai_tools.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\audio.R
+```
+ullme_register_audio_handlers = function(app=getApp()) {
+  restore.point("ullme_register_audio_handlers")
+  changeHandler(
+    id = "ullme_audio_upload",
+    fun = ullme_handle_audio_upload,
+    app = app
+  )
+  invisible(TRUE)
+}
+
+
+ullme_handle_audio_upload = function(id, value, session, app=getApp(), ...) {
+  restore.point("ullme_handle_audio_upload")
+  if (is.null(value) || NROW(value) == 0) return(invisible(NULL))
+
+  audio_dir = ullme_session_audio_dir(session=session, app=app)
+  dir.create(audio_dir, recursive=TRUE, showWarnings=FALSE)
+
+  clean_names = ullme_clean_file_name(value$name)
+  audio_ids = paste0(
+    "audio_",
+    format(Sys.time(), "%Y%m%d%H%M%S"),
+    "_",
+    seq_len(NROW(value))
+  )
+  target_names = paste0(audio_ids, "_", clean_names)
+  target_paths = file.path(audio_dir, target_names)
+  copied = file.copy(value$datapath, target_paths, overwrite=TRUE)
+  if (!any(copied)) return(invisible(NULL))
+
+  session_dir = basename(audio_dir)
+  urls = paste("ullme-audio", session_dir, target_names, sep="/")
+  records = Map(
+    f = ullme_audio_record,
+    id = audio_ids[copied],
+    name = clean_names[copied],
+    size = value$size[copied],
+    type = value$type[copied],
+    path = normalizePath(target_paths[copied], winslash="/", mustWork=FALSE),
+    url = urls[copied]
+  )
+
+  app$last_audio_recording = records[[length(records)]]
+  callJS(
+    .fun = "window.ullmeAudio.receiveStoredAudio",
+    .args = list(records),
+    .app = app
+  )
+  invisible(records)
+}
+
+
+ullme_audio_record = function(id, name, size, type, path, url) {
+  restore.point("ullme_audio_record")
+  list(
+    id = id,
+    name = name,
+    size = size,
+    type = type,
+    path = path,
+    url = url
+  )
+}
+
+
+ullme_session_audio_dir = function(session, app=getApp()) {
+  restore.point("ullme_session_audio_dir")
+  file.path(app$audio_dir, ullme_session_dir_name(session=session))
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\audio.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\courses.R
+```
+ullme_semester = function(date=Sys.Date()) {
+  restore.point("ullme_semester")
+  date = as.Date(date)
+  year = as.integer(format(date, "%Y"))
+  month = as.integer(format(date, "%m"))
+
+  if (month >= 4 && month <= 9) {
+    return(sprintf("SS%02d", year %% 100))
+  }
+  if (month >= 10) {
+    return(sprintf("WS%02d%02d", year %% 100, (year + 1) %% 100))
+  }
+  sprintf("WS%02d%02d", (year - 1) %% 100, year %% 100)
+}
+
+
+ullme_semester_sequence = function(center=ullme_semester(), before=3, after=4) {
+  restore.point("ullme_semester_sequence")
+  center_index = ullme_semester_index(center)
+  indexes = seq.int(center_index - before, center_index + after)
+  vapply(indexes, ullme_semester_from_index, character(1), USE.NAMES=FALSE)
+}
+
+
+ullme_semester_index = function(semester) {
+  restore.point("ullme_semester_index")
+  semester = toupper(paste0(semester)[1])
+  if (grepl("^SS[0-9]{2}$", semester)) {
+    year = as.integer(substr(semester, 3, 4))
+    return(year * 2)
+  }
+  if (grepl("^WS[0-9]{4}$", semester)) {
+    year = as.integer(substr(semester, 3, 4))
+    return(year * 2 + 1)
+  }
+  stop("semester must use abbreviations like SS25 or WS2526.")
+}
+
+
+ullme_semester_from_index = function(index) {
+  restore.point("ullme_semester_from_index")
+  year = index %/% 2
+  if (index %% 2 == 0) {
+    return(sprintf("SS%02d", year %% 100))
+  }
+  sprintf("WS%02d%02d", year %% 100, (year + 1) %% 100)
+}
+
+
+ullme_courses_dir = function(main_dir, userid, role, semester) {
+  restore.point("ullme_courses_dir")
+  role = ullme_normalize_role(role)
+  if (!role %in% c("teacher", "student")) return(character(0))
+  file.path(ullme_role_user_dir(main_dir=main_dir, userid=userid, role=role), "courses", semester)
+}
+
+
+ullme_user_courseids = function(main_dir, userid, role, semester) {
+  restore.point("ullme_user_courseids")
+  course_dir = ullme_courses_dir(
+    main_dir=main_dir,
+    userid=userid,
+    role=role,
+    semester=semester
+  )
+  if (length(course_dir) == 0 || !dir.exists(course_dir)) return(character(0))
+
+  entries = list.files(course_dir, full.names=TRUE, no..=TRUE)
+  entries = entries[dir.exists(entries)]
+  sort(basename(entries))
+}
+
+
+ullme_course_dir = function(main_dir, userid, role, semester, courseid) {
+  restore.point("ullme_course_dir")
+  courseid = ullme_clean_courseid(courseid)
+  file.path(
+    ullme_courses_dir(main_dir=main_dir, userid=userid, role=role, semester=semester),
+    courseid
+  )
+}
+
+
+ullme_clean_courseid = function(courseid) {
+  restore.point("ullme_clean_courseid")
+  courseid = paste0(courseid)[1]
+  courseid = gsub("[^A-Za-z0-9_-]+", "_", courseid)
+  courseid = gsub("^_+|_+$", "", courseid)
+  if (!nzchar(courseid)) stop("courseid must not be empty.")
+  if (!grepl("^[A-Za-z][A-Za-z0-9_-]*$", courseid)) {
+    stop("courseid must start with a letter and contain only letters, numbers, underscores, or hyphens.")
+  }
+  courseid
+}
+
+
+ullme_course_material_categories = function() {
+  restore.point("ullme_course_material_categories")
+  c("general", "slides", "ps", "quiz", "background")
+}
+
+
+ullme_course_material_dir = function(course_dir, category) {
+  restore.point("ullme_course_material_dir")
+  category = paste0(category)[1]
+  if (!category %in% ullme_course_material_categories()) stop("Invalid material category.")
+  file.path(course_dir, "materials", category)
+}
+
+
+ullme_init_course_material_dirs = function(course_dir) {
+  restore.point("ullme_init_course_material_dirs")
+  categories = ullme_course_material_categories()
+  for (category in categories) {
+    target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
+    dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
+
+    legacy_dir = file.path(course_dir, category)
+    if (!dir.exists(legacy_dir)) next
+    files = list.files(legacy_dir, recursive=TRUE, full.names=FALSE, no..=TRUE)
+    files = files[!dir.exists(file.path(legacy_dir, files))]
+    for (file in files) {
+      target = file.path(target_dir, file)
+      dir.create(dirname(target), recursive=TRUE, showWarnings=FALSE)
+      if (!file.exists(target)) file.copy(file.path(legacy_dir, file), target)
+    }
+  }
+  invisible(file.path(course_dir, "materials"))
+}
+
+
+ullme_course_yaml_path = function(course_dir) {
+  restore.point("ullme_course_yaml_path")
+  file.path(course_dir, "course.yaml")
+}
+
+
+ullme_default_course = function(courseid="", coursename="") {
+  restore.point("ullme_default_course")
+  list(
+    courseid = paste0(courseid)[1],
+    coursename = paste0(coursename)[1],
+    times = list()
+  )
+}
+
+
+ullme_make_course = function(main_dir, userid, role, semester, courseid, coursename="") {
+  restore.point("ullme_make_course")
+  courseid = ullme_clean_courseid(courseid)
+  course_dir = ullme_course_dir(
+    main_dir=main_dir,
+    userid=userid,
+    role=role,
+    semester=semester,
+    courseid=courseid
+  )
+  dir.create(course_dir, recursive=TRUE, showWarnings=FALSE)
+  ullme_init_course_material_dirs(course_dir=course_dir)
+  course = ullme_default_course(courseid=courseid, coursename=coursename)
+  if (!file.exists(ullme_course_yaml_path(course_dir))) {
+    ullme_write_course_yaml(course_dir=course_dir, course=course)
+  }
+  invisible(course_dir)
+}
+
+
+ullme_read_course_yaml = function(course_dir) {
+  restore.point("ullme_read_course_yaml")
+  path = ullme_course_yaml_path(course_dir)
+  if (!file.exists(path)) return(ullme_default_course())
+  ullme_require_yaml()
+  course = yaml::read_yaml(path)
+  ullme_normalize_course(course)
+}
+
+
+ullme_write_course_yaml = function(course_dir, course) {
+  restore.point("ullme_write_course_yaml")
+  ullme_require_yaml()
+  course = ullme_normalize_course(course)
+  yaml::write_yaml(course, ullme_course_yaml_path(course_dir))
+  invisible(course)
+}
+
+
+ullme_normalize_course = function(course) {
+  restore.point("ullme_normalize_course")
+  if (is.null(course)) course = list()
+  course$courseid = paste0(course$courseid %||% "")[1]
+  course$coursename = paste0(course$coursename %||% "")[1]
+  times = course$times
+  if (is.null(times)) times = list()
+  if (is.data.frame(times)) times = split(times, seq_len(NROW(times)))
+  times = lapply(times, function(time) {
+    list(
+      weekday = paste0(time$weekday %||% "")[1],
+      start = paste0(time$start %||% "")[1],
+      end = paste0(time$end %||% "")[1]
+    )
+  })
+  course$times = times[seq_len(min(length(times), 3))]
+  course
+}
+
+
+`%||%` = function(x, y) {
+  if (is.null(x) || length(x) == 0) y else x
+}
+
+
+ullme_require_yaml = function() {
+  restore.point("ullme_require_yaml")
+  if (!requireNamespace("yaml", quietly=TRUE)) {
+    stop("Package 'yaml' is required for course.yaml files.")
+  }
+  invisible(TRUE)
+}
+
+
+ullme_course_summary = function(app) {
+  restore.point("ullme_course_summary")
+  if (is.null(app$courseid) || !nzchar(app$courseid)) return(NULL)
+  course_dir = ullme_course_dir(
+    main_dir=app$glob$main_dir,
+    userid=app$userid,
+    role=app$role,
+    semester=app$semester,
+    courseid=app$courseid
+  )
+  if (!dir.exists(course_dir)) return(NULL)
+  ullme_init_course_material_dirs(course_dir=course_dir)
+  list(
+    course = ullme_read_course_yaml(course_dir),
+    material = ullme_course_material_files(course_dir)
+  )
+}
+
+
+ullme_course_material_files = function(course_dir) {
+  restore.point("ullme_course_material_files")
+  categories = ullme_course_material_categories()
+  names(categories) = categories
+  lapply(categories, function(category) {
+    dir = ullme_course_material_dir(course_dir=course_dir, category=category)
+    if (!dir.exists(dir)) return(character(0))
+    files = list.files(dir, recursive=TRUE, full.names=FALSE, no..=TRUE)
+    paths = file.path(dir, files)
+    files = files[file.exists(paths) & !dir.exists(paths)]
+    sort(gsub("\\\\", "/", files))
+  })
+}
+
+
+ullme_save_course_settings = function(app, course) {
+  restore.point("ullme_save_course_settings")
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) return(NULL)
+  course$courseid = app$courseid
+  ullme_write_course_yaml(course_dir=course_dir, course=course)
+}
+
+
+ullme_active_course_dir = function(app=getApp()) {
+  restore.point("ullme_active_course_dir")
+  if (is.null(app$courseid) || !nzchar(app$courseid)) return(NULL)
+  course_dir = ullme_course_dir(
+    main_dir=app$glob$main_dir,
+    userid=app$userid,
+    role=app$role,
+    semester=app$semester,
+    courseid=app$courseid
+  )
+  if (!dir.exists(course_dir)) return(NULL)
+  course_dir
+}
+
+
+ullme_store_material_uploads = function(app, value, category) {
+  restore.point("ullme_store_material_uploads")
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir) || is.null(value) || NROW(value) == 0) return(character(0))
+  target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
+  dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
+
+  stored = character(0)
+  for (i in seq_len(NROW(value))) {
+    name = ullme_clean_file_name(value$name[[i]])
+    source = value$datapath[[i]]
+    if (tolower(tools::file_ext(name)) == "zip") {
+      stored = c(stored, ullme_unzip_material(source=source, target_dir=target_dir))
+    } else {
+      target = file.path(target_dir, name)
+      file.copy(source, target, overwrite=TRUE)
+      stored = c(stored, name)
+    }
+  }
+  invisible(stored)
+}
+
+
+ullme_unzip_material = function(source, target_dir) {
+  restore.point("ullme_unzip_material")
+  entries = utils::unzip(source, list=TRUE)$Name
+  entries = gsub("\\\\", "/", entries)
+  unsafe = grepl("^/|^[A-Za-z]:|(^|/)\\.\\.(/|$)", entries)
+  if (any(unsafe)) stop("ZIP contains unsafe paths.")
+  utils::unzip(source, exdir=target_dir)
+  entries[!grepl("/$", entries)]
+}
+
+
+ullme_delete_material_file = function(app, category, path) {
+  restore.point("ullme_delete_material_file")
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) return(FALSE)
+  category = paste0(category)[1]
+  if (is.na(category) || !category %in% ullme_course_material_categories()) return(FALSE)
+  path = gsub("\\\\", "/", paste0(path)[1])
+  if (is.na(path) || grepl("^/|^[A-Za-z]:|(^|/)\\.\\.(/|$)", path)) return(FALSE)
+  category_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
+  target = normalizePath(file.path(category_dir, path), winslash="/", mustWork=FALSE)
+  category_dir_norm = normalizePath(category_dir, winslash="/", mustWork=TRUE)
+  if (!startsWith(target, paste0(category_dir_norm, "/"))) return(FALSE)
+  if (!file.exists(target) || dir.exists(target)) return(FALSE)
+  unlink(target)
+  TRUE
+}
+
+
+ullme_selected_courseid = function(courseids, preferred=NULL) {
+  restore.point("ullme_selected_courseid")
+  courseids = paste0(courseids)
+  preferred = paste0(preferred)[1]
+  if (is.na(preferred)) preferred = ""
+  if (length(courseids) == 0) return("")
+  if (nzchar(preferred) && preferred %in% courseids) {
+    return(preferred)
+  }
+  courseids[[1]]
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\courses.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\mock_api.R
+```
+# Dear Codex / AI please don't remove my example functions!
+example = function() {
+  library(ullme)
+
+  ullme_start_mock_openai_api_job(port = 8124, tool_mode = "always")
+
+  chat = ullme_mock_ellmer_chat(port = 8124)
+  chat$register_tool(ullme_mock_time_tool())
+  chat$chat("Please call the time tool")
+  chat$chat("Hello")
+
+}
+
+
+if (!exists("restore.point", mode = "function")) {
+  restore.point = function(...) invisible(NULL)
+}
+
+
+ullme_mock_openai_api = function(model = "ullme-mock",
+                                response_text = NULL,
+                                tool_mode = c("auto", "always", "never")) {
+  restore.point("ullme_mock_openai_api")
+  ullme_mock_require_namespace("plumber")
+  ullme_mock_require_namespace("jsonlite")
+
+  tool_mode = match.arg(tool_mode)
+  api = plumber::pr()
+
+  api$handle("GET", "/", function() {
+    ullme_mock_status(model = model)
+  })
+  api$handle("GET", "/v1", function() {
+    ullme_mock_status(model = model)
+  })
+  api$handle("GET", "/models", function() {
+    ullme_mock_models(model = model)
+  })
+  api$handle("GET", "/v1/models", function() {
+    ullme_mock_models(model = model)
+  })
+
+  api$handle("POST", "/chat/completions", function(req, res) {
+    body = ullme_mock_request_body(req)
+    ullme_mock_chat_handler(
+      body = body,
+      res = res,
+      model = model,
+      response_text = response_text,
+      tool_mode = tool_mode
+    )
+  })
+  api$handle("POST", "/v1/chat/completions", function(req, res) {
+    body = ullme_mock_request_body(req)
+    ullme_mock_chat_handler(
+      body = body,
+      res = res,
+      model = model,
+      response_text = response_text,
+      tool_mode = tool_mode
+    )
+  })
+
+  api$handle("POST", "/responses", function(req, res) {
+    body = ullme_mock_request_body(req)
+    ullme_mock_responses_handler(
+      body = body,
+      res = res,
+      model = model,
+      response_text = response_text,
+      tool_mode = tool_mode
+    )
+  })
+  api$handle("POST", "/v1/responses", function(req, res) {
+    body = ullme_mock_request_body(req)
+    ullme_mock_responses_handler(
+      body = body,
+      res = res,
+      model = model,
+      response_text = response_text,
+      tool_mode = tool_mode
+    )
+  })
+
+  api
+}
+
+
+ullme_run_mock_openai_api = function(port = 8123,
+                                    host = "127.0.0.1",
+                                    model = "ullme-mock",
+                                    response_text = NULL,
+                                    tool_mode = c("auto", "always", "never")) {
+  restore.point("ullme_run_mock_openai_api")
+  tool_mode = match.arg(tool_mode)
+  api = ullme_mock_openai_api(
+    model = model,
+    response_text = response_text,
+    tool_mode = tool_mode
+  )
+  message("Mock OpenAI API: http://", host, ":", port, "/v1")
+  message("ellmer chat completions: ellmer::chat_openai_compatible(base_url = \"http://", host, ":", port, "/v1\", model = \"", model, "\", credentials = function() \"mock-key\")")
+  api$run(host = host, port = port)
+}
+
+
+ullme_start_mock_openai_api_job = function(port = 8123,
+                                          host = "127.0.0.1",
+                                          model = "ullme-mock",
+                                          response_text = NULL,
+                                          tool_mode = c("auto", "always", "never"),
+                                          name = "ullme mock OpenAI API",
+                                          source_file = file.path(getwd(), "R", "mock_api.R")) {
+  restore.point("ullme_start_mock_openai_api_job")
+  ullme_mock_require_namespace("rstudioapi")
+  if (!rstudioapi::isAvailable()) {
+    stop("rstudioapi is installed, but RStudio is not available.")
+  }
+
+  tool_mode = match.arg(tool_mode)
+  source_file = normalizePath(source_file, winslash = "/", mustWork = FALSE)
+  job_file = tempfile("ullme-mock-api-", fileext = ".R")
+  source_line = if (file.exists(source_file)) {
+    paste0("source(", deparse(source_file), ")")
+  } else {
+    "library(ullme)"
+  }
+
+  code = c(
+    "library(restorepoint)",
+    source_line,
+    "ullme_run_mock_openai_api(",
+    paste0("  port = ", as.integer(port), ","),
+    paste0("  host = ", deparse(host), ","),
+    paste0("  model = ", deparse(model), ","),
+    paste0("  response_text = ", deparse(response_text), ","),
+    paste0("  tool_mode = ", deparse(tool_mode)),
+    ")"
+  )
+  writeLines(code, job_file, useBytes = TRUE)
+
+  rstudioapi::jobRunScript(
+    path = job_file,
+    name = name,
+    workingDir = getwd(),
+    importEnv = FALSE
+  )
+  invisible(list(
+    port = port,
+    host = host,
+    base_url = paste0("http://", host, ":", port, "/v1"),
+    job_file = job_file
+  ))
+}
+
+
+ullme_mock_ellmer_chat = function(port = 8123,
+                                  host = "127.0.0.1",
+                                  model = "ullme-mock",
+                                  use_responses_api = FALSE,
+                                  stream = NULL,
+                                  api_args = list(),
+                                  ...) {
+  restore.point("ullme_mock_ellmer_chat")
+  ullme_mock_require_namespace("ellmer")
+  base_url = paste0("http://", host, ":", port, "/v1")
+  credentials = function() "mock-key"
+  if (!is.null(stream)) {
+    api_args = utils::modifyList(list(stream = stream), api_args)
+  }
+
+  if (isTRUE(use_responses_api)) {
+    return(ellmer::chat_openai(
+      base_url = base_url,
+      model = model,
+      credentials = credentials,
+      api_args = api_args,
+      ...
+    ))
+  }
+
+  ellmer::chat_openai_compatible(
+    base_url = base_url,
+    model = model,
+    credentials = credentials,
+    api_args = api_args,
+    ...
+  )
+}
+
+
+ullme_mock_time_tool = function() {
+  restore.point("ullme_mock_time_tool")
+  ullme_mock_require_namespace("ellmer")
+  ellmer::tool(
+    function(tz = "UTC") {
+      format(Sys.time(), tz = tz, usetz = TRUE)
+    },
+    name = "get_current_time",
+    description = "Returns the current time in the requested time zone.",
+    arguments = list(
+      tz = ellmer::type_string(
+        "Time zone to display the current time in. Defaults to UTC.",
+        required = FALSE
+      )
+    )
+  )
+}
+
+
+ullme_mock_weather_tool = function() {
+  restore.point("ullme_mock_weather_tool")
+  ullme_mock_require_namespace("ellmer")
+  ellmer::tool(
+    function(cities) {
+      raining = c(London = "heavy", Houston = "none", Chicago = "overcast", Ulm = "light")
+      temperature = c(London = "cool", Houston = "hot", Chicago = "warm", Ulm = "mild")
+      wind = c(London = "strong", Houston = "weak", Chicago = "strong", Ulm = "calm")
+      data.frame(
+        city = cities,
+        raining = unname(raining[cities]),
+        temperature = unname(temperature[cities]),
+        wind = unname(wind[cities])
+      )
+    },
+    name = "get_weather",
+    description = "Reports deterministic mock weather for one or more cities.",
+    arguments = list(
+      cities = ellmer::type_array(ellmer::type_string(), "City names")
+    )
+  )
+}
+
+
+ullme_mock_chat_handler = function(body, res, model, response_text, tool_mode) {
+  restore.point("ullme_mock_chat_handler")
+  tryCatch({
+    result = ullme_mock_chat_completion(
+      body = body,
+      model = model,
+      response_text = response_text,
+      tool_mode = tool_mode
+    )
+
+    if (isTRUE(body$stream)) {
+      res$setHeader("Content-Type", "text/event-stream")
+      res$setHeader("Cache-Control", "no-cache")
+      res$body = ullme_mock_chat_stream(result)
+      return(res)
+    }
+
+    result
+  }, error = function(e) {
+    ullme_mock_log_body(body = body, endpoint = "chat/completions")
+    ullme_mock_handler_error(e = e, res = res, endpoint = "chat/completions")
+  })
+}
+
+
+ullme_mock_responses_handler = function(body, res, model, response_text, tool_mode) {
+  restore.point("ullme_mock_responses_handler")
+  tryCatch({
+    result = ullme_mock_response_completion(
+      body = body,
+      model = model,
+      response_text = response_text,
+      tool_mode = tool_mode
+    )
+
+    if (isTRUE(body$stream)) {
+      res$setHeader("Content-Type", "text/event-stream")
+      res$setHeader("Cache-Control", "no-cache")
+      res$body = ullme_mock_response_stream(result)
+      return(res)
+    }
+
+    result
+  }, error = function(e) {
+    ullme_mock_log_body(body = body, endpoint = "responses")
+    ullme_mock_handler_error(e = e, res = res, endpoint = "responses")
+  })
+}
+
+
+ullme_mock_log_body = function(body, endpoint) {
+  restore.point("ullme_mock_log_body")
+  body_str = paste0(capture.output(str(body)), collapse = " ")
+  message("ullme mock API body at /", endpoint, ": ", body_str)
+}
+
+
+ullme_mock_handler_error = function(e, res, endpoint) {
+  restore.point("ullme_mock_handler_error")
+  msg = conditionMessage(e)
+  message("ullme mock API error at /", endpoint, ": ", msg)
+  res$status = 500
+  list(error = msg)
+}
+
+
+ullme_mock_chat_completion = function(body, model, response_text, tool_mode) {
+  restore.point("ullme_mock_chat_completion")
+  model = ullme_mock_value(body$model, model)
+  id = ullme_mock_id("chatcmpl")
+  created = as.integer(Sys.time())
+  messages = ullme_mock_value(body$messages, list())
+  input_text = ullme_mock_latest_text(messages, role = "user")
+  tool_text = ullme_mock_latest_text(messages, role = "tool")
+  tool = ullme_mock_selected_chat_tool(body = body, tool_mode = tool_mode)
+
+  if (!is.null(tool)) {
+    tool_call = ullme_mock_chat_tool_call(tool)
+    message = list(
+      role = "assistant",
+      content = "",
+      tool_calls = list(tool_call)
+    )
+    finish_reason = "tool_calls"
+  } else {
+    text = ullme_mock_answer_text(
+      input_text = input_text,
+      tool_text = tool_text,
+      response_text = response_text
+    )
+    message = list(
+      role = "assistant",
+      content = text
+    )
+    finish_reason = "stop"
+  }
+
+  list(
+    id = id,
+    object = "chat.completion",
+    created = created,
+    model = model,
+    choices = list(list(
+      index = 0,
+      message = message,
+      finish_reason = finish_reason
+    )),
+    usage = ullme_mock_chat_usage(messages = messages, message = message)
+  )
+}
+
+
+ullme_mock_response_completion = function(body, model, response_text, tool_mode) {
+  restore.point("ullme_mock_response_completion")
+  model = ullme_mock_value(body$model, model)
+  id = ullme_mock_id("resp")
+  input = ullme_mock_value(body$input, list())
+  input_text = ullme_mock_latest_response_text(input = input)
+  tool_text = ullme_mock_latest_response_tool_text(input = input)
+  tool = ullme_mock_selected_response_tool(body = body, tool_mode = tool_mode)
+
+  if (!is.null(tool)) {
+    output = list(ullme_mock_response_tool_call(tool))
+  } else {
+    text = ullme_mock_answer_text(
+      input_text = input_text,
+      tool_text = tool_text,
+      response_text = response_text
+    )
+    output = list(list(
+      type = "message",
+      id = ullme_mock_id("msg"),
+      role = "assistant",
+      content = list(list(type = "output_text", text = text))
+    ))
+  }
+
+  list(
+    id = id,
+    object = "response",
+    created_at = as.integer(Sys.time()),
+    status = "completed",
+    model = model,
+    output = output,
+    usage = ullme_mock_response_usage(input = input, output = output)
+  )
+}
+
+
+ullme_mock_selected_chat_tool = function(body, tool_mode) {
+  restore.point("ullme_mock_selected_chat_tool")
+  if (identical(tool_mode, "never")) return(NULL)
+  if (ullme_mock_has_tool_result(body$messages)) return(NULL)
+  if (identical(body$tool_choice, "none")) return(NULL)
+
+  tools = ullme_mock_value(body$tools, list())
+  if (length(tools) == 0) return(NULL)
+
+  if (is.list(body$tool_choice) && !is.null(body$tool_choice$`function`$name)) {
+    return(ullme_mock_find_chat_tool(tools, body$tool_choice$`function`$name))
+  }
+
+  if (identical(tool_mode, "always")) return(tools[[1]])
+
+  input_text = tolower(ullme_mock_latest_text(body$messages, role = "user"))
+  if (grepl("\\b(tool|call|weather|time|date|course)\\b", input_text)) {
+    return(tools[[1]])
+  }
+
+  NULL
+}
+
+
+ullme_mock_selected_response_tool = function(body, tool_mode) {
+  restore.point("ullme_mock_selected_response_tool")
+  if (identical(tool_mode, "never")) return(NULL)
+  if (ullme_mock_has_response_tool_result(body$input)) return(NULL)
+  if (identical(body$tool_choice, "none")) return(NULL)
+
+  tools = ullme_mock_value(body$tools, list())
+  if (length(tools) == 0) return(NULL)
+
+  if (is.list(body$tool_choice) && !is.null(body$tool_choice$name)) {
+    return(ullme_mock_find_response_tool(tools, body$tool_choice$name))
+  }
+
+  if (identical(tool_mode, "always")) return(tools[[1]])
+
+  input_text = tolower(ullme_mock_latest_response_text(body$input))
+  if (grepl("\\b(tool|call|weather|time|date|course)\\b", input_text)) {
+    return(tools[[1]])
+  }
+
+  NULL
+}
+
+
+ullme_mock_chat_tool_call = function(tool) {
+  restore.point("ullme_mock_chat_tool_call")
+  fn = ullme_mock_first_record(ullme_mock_value(tool$`function`, tool$unction))
+  fn = ullme_mock_value(fn, list())
+  arguments = ullme_mock_tool_arguments(fn$parameters)
+  list(
+    id = ullme_mock_id("call"),
+    type = "function",
+    `function` = list(
+      name = ullme_mock_value(fn$name, "mock_tool"),
+      arguments = ullme_mock_json(arguments)
+    )
+  )
+}
+
+
+ullme_mock_response_tool_call = function(tool) {
+  restore.point("ullme_mock_response_tool_call")
+  tool = ullme_mock_first_record(tool)
+  arguments = ullme_mock_tool_arguments(tool$parameters)
+  call_id = ullme_mock_id("call")
+  list(
+    type = "function_call",
+    id = call_id,
+    call_id = call_id,
+    name = ullme_mock_value(tool$name, "mock_tool"),
+    arguments = ullme_mock_json(arguments)
+  )
+}
+
+
+ullme_mock_answer_text = function(input_text, tool_text, response_text) {
+  restore.point("ullme_mock_answer_text")
+  if (!is.null(response_text)) return(response_text)
+  if (nzchar(tool_text)) {
+    return(paste0("Mock assistant used the tool result: ", tool_text))
+  }
+  if (!nzchar(input_text)) {
+    return("Mock assistant response.")
+  }
+  paste0("Mock assistant response to: ", input_text)
+}
+
+
+ullme_mock_chat_stream = function(result) {
+  restore.point("ullme_mock_chat_stream")
+  choice = result$choices[[1]]
+  chunk = list(
+    id = result$id,
+    object = "chat.completion.chunk",
+    created = result$created,
+    model = result$model,
+    choices = list(list(
+      index = 0,
+      delta = choice$message,
+      finish_reason = choice$finish_reason
+    )),
+    usage = result$usage
+  )
+  paste0(
+    "data: ", ullme_mock_json(chunk), "\n\n",
+    "data: [DONE]\n\n"
+  )
+}
+
+
+ullme_mock_response_stream = function(result) {
+  restore.point("ullme_mock_response_stream")
+  output = result$output[[1]]
+  events = list()
+
+  if (identical(output$type, "message")) {
+    text = output$content[[1]]$text
+    events[[length(events) + 1]] = list(
+      type = "response.output_text.delta",
+      item_id = output$id,
+      output_index = 0,
+      content_index = 0,
+      delta = text
+    )
+  }
+
+  events[[length(events) + 1]] = list(
+    type = "response.completed",
+    response = result
+  )
+
+  lines = vapply(events, function(event) {
+    paste0("data: ", ullme_mock_json(event), "\n\n")
+  }, character(1))
+  paste0(paste0(lines, collapse = ""), "data: [DONE]\n\n")
+}
+
+
+ullme_mock_request_body = function(req) {
+  restore.point("ullme_mock_request_body")
+  body = req$body
+  if (is.list(body) && length(body) > 0) return(ullme_mock_normalize_json(body))
+  parsed_body = ullme_mock_parse_json_body(body)
+  if (is.list(parsed_body)) return(ullme_mock_normalize_json(parsed_body))
+
+  post_body = req$postBody
+  parsed_post_body = ullme_mock_parse_json_body(post_body)
+  if (is.list(parsed_post_body)) return(ullme_mock_normalize_json(parsed_post_body))
+
+  list()
+}
+
+
+ullme_mock_normalize_json = function(x) {
+  restore.point("ullme_mock_normalize_json")
+  if (is.data.frame(x)) {
+    rows = lapply(seq_len(NROW(x)), function(i) {
+      ullme_mock_normalize_json(as.list(x[i, , drop = FALSE]))
+    })
+    return(rows)
+  }
+  if (is.list(x)) {
+    out = lapply(x, ullme_mock_normalize_json)
+    names(out) = names(x)
+    return(out)
+  }
+  if (length(x) == 1) return(x[[1]])
+  x
+}
+
+
+ullme_mock_first_record = function(x) {
+  restore.point("ullme_mock_first_record")
+  while (is.list(x) && length(x) == 1 && is.null(names(x))) {
+    x = x[[1]]
+  }
+  x
+}
+
+
+ullme_mock_parse_json_body = function(x) {
+  restore.point("ullme_mock_parse_json_body")
+  if (is.null(x)) return(NULL)
+  if (is.raw(x)) x = rawToChar(x)
+  if (!is.character(x) || length(x) == 0) return(NULL)
+
+  x = paste0(x, collapse = "")
+  x = trimws(x)
+  if (!nzchar(x)) return(NULL)
+
+  parsed = tryCatch(
+    jsonlite::fromJSON(x, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+  if (is.character(parsed) && length(parsed) == 1) {
+    parsed2 = tryCatch(
+      jsonlite::fromJSON(parsed, simplifyVector = FALSE),
+      error = function(e) NULL
+    )
+    if (is.list(parsed2)) return(parsed2)
+  }
+  if (is.list(parsed)) return(parsed)
+  NULL
+}
+
+
+ullme_mock_tool_arguments = function(parameters) {
+  restore.point("ullme_mock_tool_arguments")
+  parameters = ullme_mock_first_record(parameters)
+  properties = parameters$properties
+  properties = ullme_mock_first_record(properties)
+  if (is.null(properties) || length(properties) == 0) return(list())
+
+  args = lapply(names(properties), function(name) {
+    ullme_mock_schema_value(schema = properties[[name]], name = name)
+  })
+  names(args) = names(properties)
+  args
+}
+
+
+ullme_mock_schema_value = function(schema, name = "") {
+  restore.point("ullme_mock_schema_value")
+  schema = ullme_mock_first_record(schema)
+  type = schema$type
+  if (is.list(type)) type = type[[1]]
+  if (is.character(type) && "null" %in% type && length(type) > 1) {
+    type = type[type != "null"][[1]]
+  }
+  if (!is.null(schema$enum) && length(schema$enum) > 0) {
+    return(schema$enum[[1]])
+  }
+
+  switch(
+    type,
+    string = ullme_mock_string_value(name),
+    integer = 1L,
+    number = 1,
+    boolean = TRUE,
+    array = list(
+      ullme_mock_schema_value(
+        schema = ullme_mock_value(schema$items, list(type = "string")),
+        name = sub("s$", "", name)
+      )
+    ),
+    object = ullme_mock_tool_arguments(schema),
+    ullme_mock_string_value(name)
+  )
+}
+
+
+ullme_mock_string_value = function(name) {
+  restore.point("ullme_mock_string_value")
+  name = tolower(name)
+  if (name %in% c("tz", "timezone", "time_zone")) return("UTC")
+  if (name %in% c("city", "location", "place")) return("Ulm")
+  if (name %in% c("courseid", "course_id")) return("micro")
+  if (name %in% c("coursename", "course_name")) return("Microeconomics")
+  "mock-value"
+}
+
+
+ullme_mock_latest_text = function(messages, role = "user") {
+  restore.point("ullme_mock_latest_text")
+  if (is.null(messages) || length(messages) == 0) return("")
+  roles = vapply(messages, function(message) {
+    ullme_mock_value(message$role, "")
+  }, character(1))
+  idx = which(roles == role)
+  if (length(idx) == 0) return("")
+  ullme_mock_content_text(messages[[idx[[length(idx)]]]]$content)
+}
+
+
+ullme_mock_latest_response_text = function(input) {
+  restore.point("ullme_mock_latest_response_text")
+  if (is.null(input) || length(input) == 0) return("")
+  texts = vapply(input, function(item) {
+    if (!is.null(item$content)) return(ullme_mock_content_text(item$content))
+    ""
+  }, character(1))
+  texts = texts[nzchar(texts)]
+  if (length(texts) == 0) return("")
+  texts[[length(texts)]]
+}
+
+
+ullme_mock_latest_response_tool_text = function(input) {
+  restore.point("ullme_mock_latest_response_tool_text")
+  if (is.null(input) || length(input) == 0) return("")
+  texts = vapply(input, function(item) {
+    if (identical(item$type, "function_call_output")) {
+      return(ullme_mock_value(item$output, ""))
+    }
+    ""
+  }, character(1))
+  texts = texts[nzchar(texts)]
+  if (length(texts) == 0) return("")
+  texts[[length(texts)]]
+}
+
+
+ullme_mock_content_text = function(content) {
+  restore.point("ullme_mock_content_text")
+  if (is.null(content)) return("")
+  if (is.character(content)) return(paste0(content, collapse = "\n"))
+  if (!is.list(content)) return(paste0(content))
+
+  parts = vapply(content, function(part) {
+    if (is.null(part)) return("")
+    part = ullme_mock_first_record(part)
+    if (is.null(part)) return("")
+    if (is.character(part)) return(paste0(part, collapse = " "))
+    if (!is.list(part)) return(paste0(part))
+    if (!is.null(part$text)) return(paste0(part$text, collapse = " "))
+    if (!is.null(part$image_url)) return("[image]")
+    if (!is.null(part$file)) return("[file]")
+    ullme_mock_content_text(part)
+  }, character(1))
+  paste0(parts[nzchar(parts)], collapse = "\n")
+}
+
+
+ullme_mock_has_tool_result = function(messages) {
+  restore.point("ullme_mock_has_tool_result")
+  if (is.null(messages) || length(messages) == 0) return(FALSE)
+  any(vapply(messages, function(message) identical(message$role, "tool"), logical(1)))
+}
+
+
+ullme_mock_has_response_tool_result = function(input) {
+  restore.point("ullme_mock_has_response_tool_result")
+  if (is.null(input) || length(input) == 0) return(FALSE)
+  any(vapply(input, function(item) identical(item$type, "function_call_output"), logical(1)))
+}
+
+
+ullme_mock_find_chat_tool = function(tools, name) {
+  restore.point("ullme_mock_find_chat_tool")
+  for (tool in tools) {
+    fn = ullme_mock_first_record(ullme_mock_value(tool$`function`, tool$unction))
+    if (identical(fn$name, name)) return(tool)
+  }
+  NULL
+}
+
+
+ullme_mock_find_response_tool = function(tools, name) {
+  restore.point("ullme_mock_find_response_tool")
+  for (tool in tools) {
+    if (identical(tool$name, name)) return(tool)
+  }
+  NULL
+}
+
+
+ullme_mock_models = function(model) {
+  restore.point("ullme_mock_models")
+  list(
+    object = "list",
+    data = list(list(
+      id = model,
+      object = "model",
+      created = as.integer(Sys.time()),
+      owned_by = "ullme"
+    ))
+  )
+}
+
+
+ullme_mock_status = function(model) {
+  restore.point("ullme_mock_status")
+  list(
+    ok = TRUE,
+    name = "ullme mock OpenAI API",
+    model = model,
+    endpoints = c(
+      "/v1/models",
+      "/v1/chat/completions",
+      "/v1/responses"
+    )
+  )
+}
+
+
+ullme_mock_chat_usage = function(messages, message) {
+  restore.point("ullme_mock_chat_usage")
+  prompt_text = paste0(vapply(messages, function(x) {
+    ullme_mock_content_text(x$content)
+  }, character(1)), collapse = "\n")
+  completion_text = ullme_mock_content_text(message$content)
+  list(
+    prompt_tokens = ullme_mock_token_count(prompt_text),
+    completion_tokens = ullme_mock_token_count(completion_text),
+    total_tokens = ullme_mock_token_count(prompt_text) + ullme_mock_token_count(completion_text),
+    prompt_tokens_details = list(cached_tokens = 0)
+  )
+}
+
+
+ullme_mock_response_usage = function(input, output) {
+  restore.point("ullme_mock_response_usage")
+  input_text = ullme_mock_latest_response_text(input)
+  output_text = if (identical(output[[1]]$type, "message")) {
+    output[[1]]$content[[1]]$text
+  } else {
+    output[[1]]$arguments
+  }
+  list(
+    input_tokens = ullme_mock_token_count(input_text),
+    output_tokens = ullme_mock_token_count(output_text),
+    total_tokens = ullme_mock_token_count(input_text) + ullme_mock_token_count(output_text),
+    input_tokens_details = list(cached_tokens = 0)
+  )
+}
+
+
+ullme_mock_token_count = function(x) {
+  restore.point("ullme_mock_token_count")
+  max(1L, as.integer(ceiling(nchar(paste0(x), type = "chars") / 4)))
+}
+
+
+ullme_mock_json = function(x) {
+  restore.point("ullme_mock_json")
+  paste0(jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", digits = NA))
+}
+
+
+ullme_mock_id = function(prefix) {
+  restore.point("ullme_mock_id")
+  paste0(prefix, "_", format(Sys.time(), "%Y%m%d%H%M%OS3"), "_", as.integer(runif(1, 1, 1e8)))
+}
+
+
+ullme_mock_value = function(x, default) {
+  restore.point("ullme_mock_value")
+  if (is.null(x)) return(default)
+  x
+}
+
+
+ullme_mock_require_namespace = function(package) {
+  restore.point("ullme_mock_require_namespace")
+  if (!requireNamespace(package, quietly = TRUE)) {
+    stop("Package '", package, "' is required for this mock API helper.")
+  }
+  invisible(TRUE)
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\mock_api.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\tool_fun.R
+```
+utool_list_courses = function(teacherid = ullme_teacherid(),semester=NULL) {
+  ullme_list_courses(teacherid=teacherid, semester=semester)
+}
+
+
+utool_cur_user = function() {
+  paste0("userid=", ullme_userid(), "\nrole=", ullme_user_role(), "\nallowed_roles=", paste0(ullme_user_allowed_roles(), collapse=", "))
+}
+
+utool_describe_course_docs = function(teacherid = ullme_teacherid(), courseid, semester, doc_types) {
+  "Tool not yet implemented"
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\tool_fun.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\tools.R
+```
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\tools.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\ullmeApp.R
+```
+example = function() {
+  library(ullme)
+  restore.point.options(display.restore.point = TRUE)
+  main_dir = "C:/libraries/ullme/ullme_main"
+  app = ullmeApp(main_dir)
+  viewApp(app,launch.browser = TRUE)
+}
+
+ullme_main_dir = function(app=getApp()) {
+  main_dir = app$glob$main_dir
+  if (is.null(main_dir)) {
+    main_dir ="C:/libraries/ullme/ullme_main"
+  }
+  if (!dir.exists(main_dir)) {
+    stop(paste0("main_dir = ", main_dir, " does not exist."))
+  }
+  main_dir
+}
+
+ullme_user_role = function(app=getApp()) {
+  app$role
+}
+
+ullme_user_allowed_roles = function(app=getApp()) {
+  app$allowed_roles
+}
+
+
+ullme_userid = function(app=getApp()) {
+  app$userid
+}
+
+ullme_teacherid = function(app=getApp()) {
+  app$teacherid
+}
+
+
+ullmeApp = function(main_dir, userid="skranz", role="teacher", allowed_roles = c("teacher","student", "admin"), uses_fake_ai=TRUE, max_upload_mb=100) {
+  restore.point("ullmeApp")
+  app = eventsApp()
+  glob = app$glob
+
+  max_upload_mb = as.numeric(max_upload_mb)[1]
+  if (is.na(max_upload_mb) || max_upload_mb <= 0) {
+    stop("max_upload_mb must be a positive number.")
+  }
+  # Shiny's upload limit is process-wide, even though upload state is per app.
+  current_upload_limit = getOption("shiny.maxRequestSize", 5 * 1024^2)
+  options(shiny.maxRequestSize=max(current_upload_limit, max_upload_mb * 1024^2))
+
+  # app is per Shiny app instance; app$glob is shared across all instances.
+  # Store only truly shared values in glob and keep user-specific state on app.
+  glob$main_dir = main_dir
+  app$userid = ullme_clean_user_name(userid)
+
+  # Need to update setting of teacherid
+  app$teacherid = app$userid
+
+  app$allowed_roles = ullme_normalize_roles(allowed_roles)
+  app$role = ullme_normalize_role(role)
+  if (!app$role %in% app$allowed_roles) {
+    stop("role must be one of allowed_roles.")
+  }
+  app$semester = ullme_semester()
+  app$uses_fake_ai = uses_fake_ai
+  app$user_dir = ullme_user_dir(main_dir=main_dir, userid=app$userid)
+  app$role_user_dir = ullme_role_user_dir(main_dir=main_dir, userid=app$userid, role=app$role)
+  app$cur_session_dir = ullme_cur_session_dir(user_dir=app$user_dir)
+  app$uploads_dir = ullme_cur_session_images_dir(cur_session_dir=app$cur_session_dir)
+  app$audio_dir = ullme_cur_session_audio_dir(cur_session_dir=app$cur_session_dir)
+  app$courseids = ullme_user_courseids(
+    main_dir=main_dir,
+    userid=app$userid,
+    role=app$role,
+    semester=app$semester
+  )
+  app$courseid = ullme_selected_courseid(app$courseids)
+  app$material_category = "general"
+
+  ullme_add_resource_paths(app=app)
+  app$ui = ullme_app_ui(app=app)
+  ullme_register_handlers(app=app)
+
+  appInitHandler(function(...) {
+    restore.point("ullme_init")
+    ullme_init_app()
+  })
+  app
+}
+
+
+ullme_add_resource_paths = function(app=getApp()) {
+  restore.point("ullme_add_resource_paths")
+  www_dir = ullme_www_dir()
+  dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
+
+  shiny::addResourcePath(prefix="ullme", directoryPath=www_dir)
+  shiny::addResourcePath(prefix="ullme-uploads", directoryPath=app$uploads_dir)
+  shiny::addResourcePath(prefix="ullme-audio", directoryPath=app$audio_dir)
+  invisible(TRUE)
+}
+
+
+ullme_www_dir = function() {
+  restore.point("ullme_www_dir")
+  www_dir = system.file("www", package="ullme")
+  if (nzchar(www_dir)) return(www_dir)
+
+  src_dir = file.path(getwd(), "inst", "www")
+  if (dir.exists(src_dir)) return(normalizePath(src_dir, winslash="/"))
+
+  stop("Cannot find ullme www assets.")
+}
+
+
+ullme_init_storage = function(main_dir, app=getApp()) {
+  restore.point("ullme_init_storage")
+  dir.create(main_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$cur_session_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
+  ullme_init_user_dirs(app=app)
+  invisible(TRUE)
+}
+
+
+ullme_register_handlers = function(app=getApp()) {
+  restore.point("ullme_register_handlers")
+  eventHandler(
+    eventId = "ullme_submit_chat_event",
+    id = NULL,
+    fun = ullme_handle_chat_submit,
+    app = app
+  )
+  changeHandler(
+    id = "ullme_image_upload",
+    fun = ullme_handle_image_upload,
+    app = app
+  )
+  lapply(ullme_course_material_categories(), function(category) {
+    changeHandler(
+      id = paste0("ullme_material_upload_", category),
+      fun = ullme_handle_material_upload,
+      app = app
+    )
+  })
+  eventHandler(
+    eventId = "ullme_role_select_event",
+    id = NULL,
+    fun = ullme_handle_role_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_semester_select_event",
+    id = NULL,
+    fun = ullme_handle_semester_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_select_event",
+    id = NULL,
+    fun = ullme_handle_course_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_add_course_event",
+    id = NULL,
+    fun = ullme_handle_add_course,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_settings_save_event",
+    id = NULL,
+    fun = ullme_handle_course_settings_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_category_event",
+    id = NULL,
+    fun = ullme_handle_material_category,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_delete_event",
+    id = NULL,
+    fun = ullme_handle_material_delete,
+    app = app
+  )
+  ullme_register_audio_handlers(app=app)
+  invisible(TRUE)
+}
+
+
+ullme_app_ui = function(app=getApp()) {
+  restore.point("ullme_app_ui")
+  intro = ullme_intro_msg()
+  tagList(
+  tags$head(
+      tags$meta(name="viewport", content="width=device-width, initial-scale=1"),
+      tags$link(rel="stylesheet", type="text/css", href="ullme/ullme-chat.css"),
+      tags$script(src="ullme/ullme-chat.js"),
+      tags$script(src="ullme/ullme-audio.js")
+    ),
+    tags$div(
+      class = "ullme-fluid",
+      tags$div(
+        id = "ullme_app",
+        class = paste("ullme-app", paste0("ullme-role-", app$role)),
+        ullme_appbar_ui(app=app),
+        tags$main(
+          class = "ullme-main",
+          tags$div(
+            class = "ullme-workspace",
+            ullme_course_workspace_ui(app=app),
+            tags$section(
+              class = "ullme-chat-pane",
+              tags$section(
+                id = "ullme_chat_messages",
+                class = "ullme-chat-messages",
+                `data-intro-role` = intro$role,
+                `data-intro-text` = intro$text,
+                `data-intro-meta` = intro$meta
+              ),
+              ullme_composer_ui()
+            )
+          )
+        ),
+        tags$input(
+          id = "ullme_image_upload",
+          class = "ullme-file-input",
+          type = "file",
+          accept = "image/*",
+          multiple = "multiple"
+        ),
+        tags$input(
+          id = "ullme_audio_upload",
+          class = "ullme-file-input",
+          type = "file",
+          accept = "audio/*"
+        ),
+        lapply(ullme_course_material_categories(), function(category) {
+          tags$input(
+            id = paste0("ullme_material_upload_", category),
+            class = "ullme-file-input ullme-material-file-input",
+            type = "file",
+            multiple = "multiple",
+            `data-category` = category
+          )
+        })
+      )
+    )
+  )
+}
+
+
+ullme_appbar_ui = function(app=getApp()) {
+  restore.point("ullme_appbar_ui")
+  tags$header(
+    class = "ullme-appbar",
+    tags$div(
+      class = "ullme-appbar-brand",
+      title = "created by Sebastian Kranz (Ulm University)",
+      "uLLMe"
+    ),
+    ullme_context_controls_ui(app=app),
+    tags$div(class="ullme-appbar-spacer"),
+    tags$button(
+      id = "ullme_user_settings_btn",
+      class = "ullme-icon-button ullme-user-settings-button",
+      type = "button",
+      `aria-label` = "Personal settings",
+      title = "Personal settings",
+      HTML(ullme_icon_svg("user"))
+    ),
+    tags$div(
+      id = "ullme_user_settings",
+      class = "ullme-user-settings",
+      role = "dialog",
+      `aria-label` = "Personal settings",
+      tags$div(class="ullme-user-settings-title", "Personal settings"),
+      tags$label(
+        class = "ullme-user-settings-field",
+        tags$span("Username"),
+        tags$input(type="text", value=app$userid, readonly="readonly")
+      )
+    )
+  )
+}
+
+
+ullme_context_controls_ui = function(app=getApp()) {
+  restore.point("ullme_context_controls_ui")
+  semesters = ullme_semester_sequence(center=app$semester)
+  show_courses = app$role %in% c("teacher", "student")
+  tags$div(
+    class = "ullme-context-controls",
+    tags$div(
+      class = "ullme-sidebar-context",
+      tags$button(
+        id = "ullme_role_select",
+        class = "ullme-sidebar-value",
+        type = "button",
+        `data-value` = app$role,
+        `data-options` = paste(app$allowed_roles, collapse="|"),
+        `data-kind` = "role",
+        `aria-label` = "Role",
+        ullme_title_case(app$role),
+        tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
+      ),
+      tags$button(
+        id = "ullme_semester_select",
+        class = "ullme-sidebar-value",
+        type = "button",
+        `data-value` = app$semester,
+        `data-options` = paste(semesters, collapse="|"),
+        `data-kind` = "semester",
+        `aria-label` = "Semester",
+        app$semester,
+        tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
+      ),
+      tags$button(
+        id = "ullme_course_select",
+        class = paste(
+          "ullme-sidebar-value ullme-course-select",
+          if (!show_courses) "ullme-course-select-hidden" else ""
+        ),
+        type = "button",
+        `data-value` = app$courseid,
+        `data-options` = paste(app$courseids, collapse="|"),
+        `data-kind` = "course",
+        `aria-label` = "Course",
+        if (nzchar(app$courseid)) app$courseid else "Course",
+        tags$span(class = "ullme-sidebar-value-arrow", HTML("&#9662;"))
+      )
+    ),
+    tags$button(
+      id = "ullme_add_course_btn",
+      class = paste(
+        "ullme-icon-button ullme-add-course-button",
+        if (!show_courses) "ullme-add-course-button-hidden" else ""
+      ),
+      type = "button",
+      `aria-label` = "Add course",
+      title = "Add course",
+      HTML(ullme_icon_svg("plus"))
+    )
+  )
+}
+
+
+ullme_title_case = function(x) {
+  restore.point("ullme_title_case")
+  x = paste0(x)[1]
+  if (is.na(x) || !nzchar(x)) return("")
+  paste0(toupper(substr(x, 1, 1)), substr(x, 2, nchar(x)))
+}
+
+
+ullme_course_workspace_ui = function(app=getApp()) {
+  restore.point("ullme_course_workspace_ui")
+  tags$section(
+    id = "ullme_course_workspace",
+    class = paste("ullme-course-workspace", if (!nzchar(app$courseid)) "ullme-course-workspace-empty" else ""),
+    ullme_course_tabs_ui(app=app),
+    tags$section(
+      id = "ullme_activities_panel",
+      class = "ullme-course-content-panel ullme-course-content-panel-active",
+      `data-course-panel` = "activities"
+    ),
+    ullme_material_ui(app=app),
+    ullme_course_settings_ui(app=app)
+  )
+}
+
+
+ullme_course_tabs_ui = function(app=getApp()) {
+  restore.point("ullme_course_tabs_ui")
+  active = !is.null(app$courseid) && nzchar(app$courseid)
+  tags$nav(
+    id = "ullme_course_tabs",
+    class = paste("ullme-course-tabs", if (!active) "ullme-course-tabs-hidden" else ""),
+    tags$button(class="ullme-course-tab ullme-course-tab-active", type="button", `data-course-panel`="activities", "Activities"),
+    tags$button(class="ullme-course-tab", type="button", `data-course-panel`="materials", "Materials"),
+    tags$button(class="ullme-course-tab", type="button", `data-course-panel`="settings", "Settings"),
+    tags$button(
+      id = "ullme_material_upload_btn",
+      class = "ullme-icon-button ullme-material-tab-upload",
+      type = "button",
+      `aria-label` = "Upload material",
+      title = "Upload material",
+      HTML(ullme_icon_svg("upload"))
+    )
+  )
+}
+
+
+ullme_course_settings_ui = function(app=getApp()) {
+  restore.point("ullme_course_settings_ui")
+  tags$section(
+    id = "ullme_course_settings_panel",
+    class = "ullme-course-settings ullme-course-content-panel",
+    `data-course-panel` = "settings",
+    tags$div(
+      class = "ullme-panel-inner",
+      tags$div(class="ullme-panel-title", "Course Settings"),
+      tags$div(
+        class = "ullme-settings-grid",
+        tags$label(
+          class = "ullme-field",
+          tags$span("Course ID"),
+          tags$input(id="ullme_settings_courseid", type="text", readonly="readonly")
+        ),
+        tags$label(
+          class = "ullme-field",
+          tags$span("Course name"),
+          tags$input(id="ullme_settings_coursename", type="text")
+        )
+      ),
+      tags$div(class="ullme-field-label", "Times"),
+      tags$div(
+        id = "ullme_course_times",
+        class = "ullme-times-grid",
+        lapply(seq_len(3), function(i) ullme_time_slot_ui(i))
+      ),
+      tags$button(
+        id = "ullme_course_settings_save",
+        class = "ullme-primary-action",
+        type = "button",
+        "Save"
+      )
+    )
+  )
+}
+
+
+ullme_time_slot_ui = function(i) {
+  restore.point("ullme_time_slot_ui")
+  tags$div(
+    class = "ullme-time-slot",
+    `data-slot` = i,
+    tags$select(
+      class = "ullme-time-weekday",
+      `aria-label` = paste("Weekday", i),
+      tags$option(value="", ""),
+      lapply(
+        c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"),
+        function(day) tags$option(value=day, ullme_title_case(day))
+      )
+    ),
+    tags$input(class="ullme-time-start", type="time", `aria-label`=paste("Start time", i)),
+    tags$input(class="ullme-time-end", type="time", `aria-label`=paste("End time", i))
+  )
+}
+
+
+ullme_material_ui = function(app=getApp()) {
+  restore.point("ullme_material_ui")
+  categories = ullme_course_material_categories()
+  tags$section(
+    id = "ullme_material_panel",
+    class = "ullme-material ullme-course-content-panel",
+    `data-course-panel` = "materials",
+    tags$div(
+      class = "ullme-panel-inner",
+      tags$div(
+        id = "ullme_material_categories",
+        class = "ullme-material-categories",
+        lapply(seq_along(categories), function(i) {
+          category = categories[[i]]
+          tags$button(
+            class = paste("ullme-material-category", if (i == 1) "ullme-material-category-active" else ""),
+            type = "button",
+            `data-category` = category,
+            ullme_material_category_label(category)
+          )
+        })
+      ),
+      tags$div(
+        id = "ullme_material_dropzone",
+        class = "ullme-material-dropzone",
+        tabindex = "0",
+        tags$div(class="ullme-material-dropzone-title", "Drop files here"),
+        tags$div(
+          class="ullme-material-dropzone-meta",
+          "Upload to ",
+          tags$span(id="ullme_material_drop_label", ullme_material_category_label(categories[[1]]))
+        )
+      ),
+      tags$div(id="ullme_material_files", class="ullme-material-files")
+    )
+  )
+}
+
+
+ullme_material_category_label = function(category) {
+  restore.point("ullme_material_category_label")
+  labels = c(general="General", slides="Slides", ps="Problem Sets", quiz="Quiz", background="Background")
+  label = labels[[category]]
+  if (is.null(label)) ullme_title_case(category) else label
+}
+
+
+ullme_intro_msg = function() {
+  restore.point("ullme_intro_msg")
+  list(
+    role = "assistant",
+    meta = "Thought for a couple of seconds",
+    text = "Hi! I am ullme. What would you like to try today?"
+  )
+}
+
+
+ullme_composer_ui = function() {
+  restore.point("ullme_composer_ui")
+  tags$footer(
+    class = "ullme-composer-wrap",
+    tags$div(
+      class = "ullme-composer",
+      ullme_audio_recording_ui(),
+      tags$div(
+        id = "ullme_upload_preview",
+        class = "ullme-upload-preview",
+        `aria-live` = "polite"
+      ),
+      tags$button(
+        id = "ullme_upload_btn",
+        class = "ullme-icon-button",
+        type = "button",
+        `aria-label` = "Upload image",
+        title = "Upload image",
+        HTML(ullme_icon_svg("image"))
+      ),
+      tags$textarea(
+        id = "ullme_chat_input",
+        class = "ullme-chat-input",
+        rows = "1",
+        placeholder = "Ask anything",
+        `aria-label` = "Chat message"
+      ),
+      tags$select(
+        id = "ullme_model_select",
+        class = "ullme-model-select",
+        `aria-label` = "Model",
+        title = "Choose model",
+        tags$option(value="high", selected="selected", "High"),
+        tags$option(value="fast", "Fast"),
+        tags$option(value="local", "Local")
+      ),
+      tags$button(
+        id = "ullme_voice_btn",
+        class = "ullme-icon-button",
+        type = "button",
+        `aria-label` = "Voice recording",
+        title = "Voice input",
+        HTML(ullme_icon_svg("mic"))
+      ),
+      tags$button(
+        id = "ullme_submit_btn",
+        class = "ullme-submit-button",
+        type = "button",
+        `aria-label` = "Submit chat",
+        title = "Send message",
+        HTML(ullme_icon_svg("send"))
+      )
+    )
+  )
+}
+
+
+ullme_audio_recording_ui = function() {
+  restore.point("ullme_audio_recording_ui")
+  tags$div(
+    id = "ullme_recording_panel",
+    class = "ullme-recording-panel",
+    tags$button(
+      id = "ullme_recording_cancel",
+      class = "ullme-recording-cancel",
+      type = "button",
+      `aria-label` = "Cancel recording",
+      title = "Cancel recording",
+      "Cancel"
+    ),
+    tags$div(
+      class = "ullme-recording-status",
+      tags$span(class="ullme-recording-dot"),
+      tags$span(id="ullme_recording_timer", class="ullme-recording-timer", "0:00"),
+      tags$span(class="ullme-recording-label", "Recording"),
+      tags$canvas(
+        id = "ullme_recording_wave",
+        class = "ullme-recording-wave",
+        width = "180",
+        height = "34",
+        `aria-label` = "Recording level"
+      )
+    ),
+    tags$div(
+      class = "ullme-recording-options",
+      tags$select(
+        id = "ullme_audio_format",
+        class = "ullme-audio-select",
+        `aria-label` = "Audio format",
+        title = "Audio format",
+        tags$option(value="auto", selected="selected", "Auto"),
+        tags$option(value="webm", "WebM"),
+        tags$option(value="ogg", "Ogg"),
+        tags$option(value="mp4", "MP4")
+      ),
+      tags$select(
+        id = "ullme_audio_quality",
+        class = "ullme-audio-select",
+        `aria-label` = "Audio quality",
+        title = "Audio quality",
+        tags$option(value="standard", selected="selected", "Standard"),
+        tags$option(value="small", "Small"),
+        tags$option(value="high", "High")
+      ),
+      tags$select(
+        id = "ullme_mic_sensitivity",
+        class = "ullme-audio-select",
+        `aria-label` = "Mic sensitivity",
+        title = "Mic sensitivity",
+        tags$option(value="1", "Natural"),
+        tags$option(value="2", "Normal"),
+        tags$option(value="3", selected="selected", "Boost"),
+        tags$option(value="5", "High"),
+        tags$option(value="8", "Max")
+      )
+    ),
+    tags$button(
+      id = "ullme_recording_finish",
+      class = "ullme-recording-finish",
+      type = "button",
+      `aria-label` = "Finish recording",
+      title = "Finish recording",
+      "Done"
+    )
+  )
+}
+
+
+ullme_icon_svg = function(name) {
+  restore.point("ullme_icon_svg")
+  icons = list(
+    panel = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M9 4v16"></path></svg>',
+    image = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M21 15l-5-5L5 19"></path></svg>',
+    mic = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>',
+    send = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
+    plus = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
+    user = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>',
+    upload = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M5 20h14"></path></svg>'
+  )
+  icons[[name]]
+}
+
+
+ullme_handle_role_select = function(role=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_role_select")
+  role = paste0(role)[1]
+  if (is.na(role)) return(invisible(NULL))
+  role = tryCatch(ullme_normalize_role(role), error=function(e) "")
+  if (!role %in% app$allowed_roles) return(invisible(NULL))
+
+  app$role = role
+  app$role_user_dir = ullme_role_user_dir(
+    main_dir=app$glob$main_dir,
+    userid=app$userid,
+    role=app$role
+  )
+  ullme_refresh_course_state(app=app)
+  ullme_send_course_state(app=app)
+  invisible(app$role)
+}
+
+
+ullme_handle_semester_select = function(semester=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_semester_select")
+  semester = toupper(paste0(semester)[1])
+  if (is.na(semester)) return(invisible(NULL))
+  index = tryCatch(ullme_semester_index(semester), error=function(e) NA_integer_)
+  if (is.na(index)) return(invisible(NULL))
+
+  app$semester = semester
+  ullme_refresh_course_state(app=app)
+  ullme_send_course_state(app=app)
+  invisible(app$semester)
+}
+
+
+ullme_handle_course_select = function(courseid=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_course_select")
+  courseid = paste0(courseid)[1]
+  if (is.na(courseid)) courseid = ""
+  if (nzchar(courseid) && !courseid %in% app$courseids) return(invisible(NULL))
+
+  app$courseid = courseid
+  ullme_send_course_state(app=app)
+  invisible(app$courseid)
+}
+
+
+ullme_handle_add_course = function(courseid=NULL, coursename="", times=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_add_course")
+  if (!app$role %in% c("teacher", "student")) return(invisible(NULL))
+  courseid = tryCatch(ullme_clean_courseid(courseid), error=function(e) "")
+  if (!nzchar(courseid)) return(invisible(NULL))
+
+  ullme_make_course(
+    main_dir=app$glob$main_dir,
+    userid=app$userid,
+    role=app$role,
+    semester=app$semester,
+    courseid=courseid,
+    coursename=coursename
+  )
+  app$courseid = courseid
+  course = list(courseid=courseid, coursename=paste0(coursename)[1], times=times)
+  ullme_save_course_settings(app=app, course=course)
+  ullme_refresh_course_state(app=app)
+  app$courseid = courseid
+  ullme_send_course_state(app=app)
+  invisible(app$courseid)
+}
+
+
+ullme_handle_course_settings_save = function(coursename="", times=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_course_settings_save")
+  if (is.null(app$courseid) || !nzchar(app$courseid)) return(invisible(NULL))
+  course = list(courseid=app$courseid, coursename=coursename, times=times)
+  ullme_save_course_settings(app=app, course=course)
+  ullme_send_course_state(app=app)
+  invisible(course)
+}
+
+
+ullme_handle_material_category = function(category="general", app=getApp(), ...) {
+  restore.point("ullme_handle_material_category")
+  category = paste0(category)[1]
+  if (!category %in% ullme_course_material_categories()) return(invisible(NULL))
+  app$material_category = category
+  invisible(app$material_category)
+}
+
+
+ullme_handle_material_upload = function(id, value, app=getApp(), ...) {
+  restore.point("ullme_handle_material_upload")
+  if (is.null(value) || NROW(value) == 0) return(invisible(NULL))
+  category = sub("^ullme_material_upload_", "", paste0(id)[1])
+  if (!category %in% ullme_course_material_categories()) category = app$material_category
+  if (is.null(category) || !category %in% ullme_course_material_categories()) category = "general"
+  app$material_category = category
+  ullme_store_material_uploads(app=app, value=value, category=category)
+  ullme_send_course_state(app=app)
+  callJS(
+    .fun = "window.ullme.materialUploadComplete",
+    .args = list(id),
+    .app = app
+  )
+  invisible(TRUE)
+}
+
+
+ullme_handle_material_delete = function(category=NULL, path=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_material_delete")
+  category = paste0(category)[1]
+  path = paste0(path)[1]
+  if (is.na(category) || is.na(path)) return(invisible(NULL))
+  ullme_delete_material_file(app=app, category=category, path=path)
+  ullme_send_course_state(app=app)
+  invisible(TRUE)
+}
+
+
+ullme_refresh_course_state = function(app=getApp()) {
+  restore.point("ullme_refresh_course_state")
+  app$courseids = ullme_user_courseids(
+    main_dir=app$glob$main_dir,
+    userid=app$userid,
+    role=app$role,
+    semester=app$semester
+  )
+  app$courseid = ullme_selected_courseid(
+    courseids=app$courseids,
+    preferred=app$courseid
+  )
+  invisible(app$courseids)
+}
+
+
+ullme_send_course_state = function(app=getApp()) {
+  restore.point("ullme_send_course_state")
+  summary = ullme_course_summary_for_js(app=app)
+  callJS(
+    .fun = "window.ullme.updateCourseList",
+    .args = list(
+      as.list(app$courseids),
+      app$courseid,
+      app$role %in% c("teacher", "student"),
+      summary,
+      app$role,
+      app$semester
+    ),
+    .app = app
+  )
+  invisible(TRUE)
+}
+
+
+ullme_course_summary_for_js = function(app=getApp()) {
+  restore.point("ullme_course_summary_for_js")
+  summary = ullme_course_summary(app=app)
+  if (is.null(summary)) return(NULL)
+  summary$material = lapply(summary$material, as.list)
+  summary
+}
+
+
+ullme_init_app = function(app=getApp()) {
+  restore.point("ullme_init_app")
+  ullme_init_storage(main_dir=app$glob$main_dir, app=app)
+  ullme_send_course_state(app=app)
+}
+
+
+ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, uploads=NULL,
+                                  clientMessageId=NULL, assistantMessageId=NULL,
+                                  session=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_chat_submit")
+  text = paste0(text, collapse="\n")
+  has_uploads = length(uploads) > 0
+  if (!nzchar(trimws(text)) && !has_uploads) return(invisible(NULL))
+
+  ai_input = if (nzchar(trimws(text))) text else "[uploaded image]"
+  answer = ullme_ask_ai(input=ai_input, uses_fake_ai=ullme_uses_fake_ai(app=app))
+  if (is.null(assistantMessageId) || !nzchar(assistantMessageId)) {
+    assistantMessageId = paste0("assistant_", as.integer(runif(1, 1, 1e9)))
+  }
+  callJS(
+    .fun = "window.ullme.receiveAssistantMessage",
+    .args = list(assistantMessageId, answer),
+    .app = app
+  )
+  invisible(answer)
+}
+
+
+ullme_handle_image_upload = function(id, value, session, app=getApp(), ...) {
+  restore.point("ullme_handle_image_upload")
+  if (is.null(value) || NROW(value) == 0) return(invisible(NULL))
+
+  upload_dir = ullme_session_upload_dir(session=session, app=app)
+  dir.create(upload_dir, recursive=TRUE, showWarnings=FALSE)
+
+  clean_names = ullme_clean_file_name(value$name)
+  upload_ids = paste0(
+    "img_",
+    format(Sys.time(), "%Y%m%d%H%M%S"),
+    "_",
+    seq_len(NROW(value))
+  )
+  target_names = paste0(upload_ids, "_", clean_names)
+  target_paths = file.path(upload_dir, target_names)
+  copied = file.copy(value$datapath, target_paths, overwrite=TRUE)
+  if (!any(copied)) return(invisible(NULL))
+
+  session_dir = basename(upload_dir)
+  urls = paste("ullme-uploads", session_dir, target_names, sep="/")
+  records = Map(
+    f = ullme_upload_record,
+    id = upload_ids[copied],
+    name = clean_names[copied],
+    size = value$size[copied],
+    type = value$type[copied],
+    path = normalizePath(target_paths[copied], winslash="/", mustWork=FALSE),
+    url = urls[copied]
+  )
+
+  callJS(
+    .fun = "window.ullme.receiveStoredUploads",
+    .args = list(records),
+    .app = app
+  )
+  invisible(records)
+}
+
+
+ullme_upload_record = function(id, name, size, type, path, url) {
+  restore.point("ullme_upload_record")
+  list(
+    id = id,
+    name = name,
+    size = size,
+    type = type,
+    path = path,
+    url = url
+  )
+}
+
+
+ullme_session_upload_dir = function(session, app=getApp()) {
+  restore.point("ullme_session_upload_dir")
+  file.path(app$uploads_dir, ullme_session_dir_name(session=session))
+}
+
+
+ullme_session_dir_name = function(session) {
+  restore.point("ullme_session_dir_name")
+  token = session$token
+  if (is.null(token) || !nzchar(token)) token = "session"
+  ullme_clean_file_name(token)
+}
+
+
+ullme_clean_file_name = function(x) {
+  restore.point("ullme_clean_file_name")
+  x = basename(x)
+  x = gsub("[^A-Za-z0-9._-]+", "_", x)
+  x = gsub("^_+|_+$", "", x)
+  x[!nzchar(x)] = "upload"
+  x
+}
+
+
+ullme_uses_fake_ai = function(app=getApp()) {
+  restore.point("ullme_uses_fake_ai")
+  isTRUE(app$uses_fake_ai)
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\ullmeApp.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\ullme_dirs.R
+```
+
+ullme_teacher_dirs = function(teacherid=NULL, main_dir=ullme_main_dir()) {
+  dirs = list.dirs(file.path(main_dir, "teachers"),recursive = FALSE)
+  if (is.null(teacherid)) {
+    return(dirs)
+  }
+  keep = basename(dirs) %in% teacherid
+  dirs[keep]
+}
+
+ullme_semester_dirs = function(teacherid=NULL, semester=NULL, courseid=NULL, main_dir = ullme_main_dir()) {
+  restore.point("ullme_semester_dirs")
+  if (!is.null(courseid)) {
+    course_dirs = ullme_course_dirs(teacherid=teacherid, semester=semester, courseid=courseid, main_dir=maind_dir)
+    return(unique(dirname(course_dirs)))
+  }
+
+  teacher_dirs = ullme_teacher_dirs(teacherid, main_dir)
+  dirs = list.dirs(teacher_dirs,recursive = FALSE)
+  if (is.null(semester) & is.null(courseid)) {
+    return(dirs)
+  }
+  keep = basename(dirs) %in% semester
+  dirs[keep]
+
+
+}
+
+ullme_course_dirs = function(teacherid=NULL, semester=NULL,courseid=NULL, course_pattern = NULL,  main_dir=ullme_main_dir()) {
+  semester_dirs = ulme_semester_dirs(teacherid, semester, main_dir)
+  dirs = list.dirs(semester_dirs,recursive = FALSE)
+  if (!is.null(course_pattern)) {
+    keep = stri_detect_regex(basename(dirs), course_pattern)
+    dirs = dirs[keep]
+  } else if (!is.null(courseid)) {
+    keep = basename(dirs) %in% courseid
+    dirs = dirs[keep]
+  }
+  dirs
+}
+
+
+ullme_list_courses = function(teacherid=NULL, semester=NULL, courseid=NULL, course_pattern = NULL, main_dir=ullme_main_dir()) {
+  basename(ulme_course_dirs(teacherid, semester,courseid, course_pattern, main_dir))
+}
+
+ullme_list_teachers = function(teacherid=NULL, main_dir=ullme_main_dir()) {
+  basename(ulme_teacher_dirs(teacherid, main_dir))
+}
+
+ullme_list_semesters = function(teacherid=NULL, courseid=NULL, main_dir=ullme_main_dir()) {
+  basename(ulme_semester_dirs(teacherid=teacherid, courseid=courseid, main_dir))
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\ullme_dirs.R
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\R\user.R
+```
+ullme_clean_user_name = function(userid) {
+  restore.point("ullme_clean_user_name")
+  userid = paste0(userid)[1]
+  userid = gsub("[^A-Za-z0-9._-]+", "_", userid)
+  userid = gsub("^_+|_+$", "", userid)
+  if (!nzchar(userid)) userid = "user"
+  userid
+}
+
+
+ullme_normalize_role = function(role) {
+  restore.point("ullme_normalize_role")
+  role = tolower(paste0(role)[1])
+  if (!role %in% c("teacher", "student", "admin")) {
+    stop("role must be 'teacher', 'student', or 'admin'.")
+  }
+  role
+}
+
+
+ullme_normalize_roles = function(roles) {
+  restore.point("ullme_normalize_roles")
+  roles = unique(tolower(paste0(roles)))
+  roles = roles[nzchar(roles)]
+  if (length(roles) == 0) stop("allowed_roles must contain at least one role.")
+  vapply(roles, ullme_normalize_role, character(1), USE.NAMES=FALSE)
+}
+
+
+ullme_user_dir = function(main_dir, userid) {
+  restore.point("ullme_user_dir")
+  file.path(main_dir, "users", userid)
+}
+
+
+ullme_role_user_dir = function(main_dir, userid, role) {
+  restore.point("ullme_role_user_dir")
+  file.path(main_dir, paste0(role, "s"), userid)
+}
+
+
+ullme_cur_session_dir = function(user_dir) {
+  restore.point("ullme_cur_session_dir")
+  file.path(user_dir, "cur_session")
+}
+
+
+ullme_cur_session_images_dir = function(cur_session_dir) {
+  restore.point("ullme_cur_session_images_dir")
+  file.path(cur_session_dir, "images")
+}
+
+
+ullme_cur_session_audio_dir = function(cur_session_dir) {
+  restore.point("ullme_cur_session_audio_dir")
+  file.path(cur_session_dir, "audio")
+}
+
+
+ullme_init_user_dirs = function(app=getApp()) {
+  restore.point("ullme_init_user_dirs")
+  dirs = c(
+    app$user_dir,
+    ullme_role_user_dir(main_dir=app$glob$main_dir, userid=app$userid, role="teacher"),
+    ullme_role_user_dir(main_dir=app$glob$main_dir, userid=app$userid, role="student"),
+    app$cur_session_dir,
+    app$uploads_dir,
+    app$audio_dir
+  )
+  vapply(dirs, dir.create, logical(1), recursive=TRUE, showWarnings=FALSE)
+  invisible(dirs)
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\R\user.R
+
+-----------------------------------------------------------
+
+
+
+# FILE: C:\libraries\ullme\ullme\inst\activities\lecture_quiz_maker_de.yml
+```
+aid: lecture_quiz_maker
+lang: de
+type: quiz_maker
+for_each: lecture
+for_students: false
+notify_teacher: yes
+
+system_prompt: |
+  Erzeuge ein Quiz von der vorherigen Vorlesung basierend auf den Folien.
+
+  {{slides.lecture}}
+
+
+
+
+
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\activities\lecture_quiz_maker_de.yml
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\activities\ps_tutor_de.yml
+```
+aid: ps_tutor
+lang: de
+type: ai_tutor
+# Per default fuer jedes Übungsblatt
+for_each: ps
+
+for_students: true
+
+
+descr_teacher: |
+  Ein Tutor der Studierenden helfen soll ihre Übungsblätter zu bearbeiten.
+
+descr_student: |
+  Ein Tutor der euch helfen soll eure Übungsblätter zu bearbeiten.
+
+system_prompt: |
+  Du bist ein Tutor der Studierenden helfen soll ihr Übungsblatt für die Vorlesung zu berarbeiten.
+
+  {{ps}}
+
+  {{ps_sol}}
+
+
+
+
+
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\activities\ps_tutor_de.yml
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\activities\slides_quiz_maker_de.yml
+```
+aid: slides_quiz_maker
+lang: de
+type: quiz_maker
+
+descr_teacher: |
+  Erstellt Quizfragen aus Foliensätzen
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\activities\slides_quiz_maker_de.yml
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\objects\lecture.yml
+```
+oid: lecture
+name: lecture
+level: course
+type: event
+progresses: [slides, script]
+descr: |
+  A lecture is an actual event that takes place. We can use it to trigger activities, like creating quizzes etc.
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\objects\lecture.yml
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\objects\ps.yml
+```
+oid: ps
+name: problem set
+level: course
+type: doc
+doc_dir: ps
+descr: |
+  Lectures typically have multiple problem sets, which students should try to solve. There often are also exercise classes or tutorials in which problem sets shall be discussed. The German name is "Übungsblatt". Try to put the files into the ps folder.
+
+
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\objects\ps.yml
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\objects\ps_sol.yml
+```
+oid: ps_sol
+name: problem set solution
+type: doc
+level: course
+doc_dir: ps
+linked_to: ps
+descr: |
+  Solution file for a problem set. Will often be provided to students later than the problem set, sometimes not at all. Is helpful to ground an AI tutor that helps students solving a problem set.
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\objects\ps_sol.yml
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\objects\slides.yml
+```
+oid: slides
+name: slides
+level: course
+doc_dir: slides
+type: doc
+descr: |
+  Lecture slides will typically be shown in lectures but also be provided to students. Most courses have slides distributed across different files, but often one slide set spans multiple lectures. Some courses have single slide file for the whole course.
+
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\objects\slides.yml
+
+-----------------------------------------------------------
+
+
+
+# FILE: C:\libraries\ullme\ullme\inst\www\ullme-audio.js
+```
+(function () {
+  var state = {
+    mediaRecorder: null,
+    stream: null,
+    chunks: [],
+    startedAt: null,
+    timerId: null,
+    shouldSave: false,
+    audioContext: null,
+    audioSource: null,
+    analyser: null,
+    waveFrameId: null,
+    waveData: null,
+    waveLevels: [],
+    waveLevel: 0,
+    waveLastDraw: 0,
+    settings: {
+      format: "auto",
+      quality: "standard",
+      sensitivity: 3
+    }
+  };
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function init() {
+    var cancelButton = byId("ullme_recording_cancel");
+    var finishButton = byId("ullme_recording_finish");
+    var settingsInputs = [
+      byId("ullme_audio_format"),
+      byId("ullme_audio_quality"),
+      byId("ullme_mic_sensitivity")
+    ].filter(Boolean);
+
+    if (cancelButton) {
+      cancelButton.addEventListener("click", cancelRecording);
+    }
+    if (finishButton) {
+      finishButton.addEventListener("click", finishRecording);
+    }
+    settingsInputs.forEach(function (input) {
+      input.addEventListener("change", function () {
+        readSettingsFromUi();
+        saveSettingsToBrowser();
+      });
+    });
+    applySettings(loadSettingsFromBrowser());
+  }
+
+  async function startRecording() {
+    if (state.mediaRecorder && state.mediaRecorder.state === "recording") return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      showRecordingNotice("Recording is not supported in this browser.");
+      return;
+    }
+
+    try {
+      state.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      state.chunks = [];
+      state.shouldSave = false;
+      state.mediaRecorder = new MediaRecorder(state.stream, mediaRecorderOptions());
+      state.mediaRecorder.addEventListener("dataavailable", function (event) {
+        if (event.data && event.data.size > 0) {
+          state.chunks.push(event.data);
+        }
+      });
+      state.mediaRecorder.addEventListener("stop", handleRecordingStopped);
+      state.mediaRecorder.start();
+      showRecordingUi();
+      startWaveform();
+      startTimer();
+    } catch (error) {
+      showRecordingNotice("Microphone access was denied.");
+    }
+  }
+
+  function mediaRecorderOptions() {
+    var format = selectedValue("ullme_audio_format", "auto");
+    var types = candidateMimeTypes(format);
+    var match = types.find(function (type) {
+      return MediaRecorder.isTypeSupported(type);
+    });
+    var options = audioQualityOptions();
+    if (match) {
+      options.mimeType = match;
+      return options;
+    }
+    if (format !== "auto") {
+      setAudioStatus("Format unavailable, using browser default.");
+    }
+    return options;
+  }
+
+  function candidateMimeTypes(format) {
+    var byFormat = {
+      webm: ["audio/webm;codecs=opus", "audio/webm"],
+      ogg: ["audio/ogg;codecs=opus", "audio/ogg"],
+      mp4: ["audio/mp4;codecs=mp4a.40.2", "audio/mp4"]
+    };
+    if (format !== "auto" && byFormat[format]) return byFormat[format];
+    return byFormat.webm.concat(byFormat.ogg, byFormat.mp4);
+  }
+
+  function audioQualityOptions() {
+    var quality = state.settings.quality || selectedValue("ullme_audio_quality", "standard");
+    var bits = {
+      small: 32000,
+      standard: 64000,
+      high: 128000
+    };
+    return { audioBitsPerSecond: bits[quality] || bits.standard };
+  }
+
+  function selectedValue(id, fallback) {
+    var input = byId(id);
+    return input && input.value ? input.value : fallback;
+  }
+
+  function finishRecording() {
+    if (!state.mediaRecorder || state.mediaRecorder.state !== "recording") return;
+    state.shouldSave = true;
+    setAudioStatus("Saving...");
+    state.mediaRecorder.stop();
+  }
+
+  function cancelRecording() {
+    if (!state.mediaRecorder || state.mediaRecorder.state !== "recording") {
+      resetRecordingUi();
+      return;
+    }
+    state.shouldSave = false;
+    state.mediaRecorder.stop();
+  }
+
+  function handleRecordingStopped() {
+    stopTimer();
+    stopWaveform();
+    stopStream();
+
+    if (!state.shouldSave) {
+      state.chunks = [];
+      resetRecordingUi();
+      return;
+    }
+
+    var blob = new Blob(state.chunks, { type: recordingType() });
+    state.chunks = [];
+    uploadRecording(blob);
+  }
+
+  function uploadRecording(blob) {
+    var input = byId("ullme_audio_upload");
+    if (!input) {
+      setAudioStatus("Audio upload input is missing.");
+      resetRecordingUiSoon();
+      return;
+    }
+
+    var file = new File(
+      [blob],
+      "recording-" + timestampForFileName() + recordingExtension(blob.type),
+      { type: blob.type || "audio/webm" }
+    );
+
+    if (typeof DataTransfer === "undefined") {
+      setAudioStatus("Audio upload is not supported in this browser.");
+      resetRecordingUiSoon();
+      return;
+    }
+
+    var transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function recordingType() {
+    if (state.mediaRecorder && state.mediaRecorder.mimeType) {
+      return state.mediaRecorder.mimeType;
+    }
+    return "audio/webm";
+  }
+
+  function recordingExtension(type) {
+    if (/mp4/.test(type)) return ".m4a";
+    if (/ogg/.test(type)) return ".ogg";
+    return ".webm";
+  }
+
+  function timestampForFileName() {
+    return new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  }
+
+  function showRecordingUi() {
+    var composer = document.querySelector(".ullme-composer");
+    var voiceButton = byId("ullme_voice_btn");
+    var label = document.querySelector(".ullme-recording-label");
+    if (composer) composer.classList.add("ullme-composer-recording");
+    if (voiceButton) {
+      voiceButton.classList.add("ullme-voice-active");
+      voiceButton.setAttribute("aria-pressed", "true");
+    }
+    if (!label || label.textContent !== "Format unavailable, using browser default.") {
+      setAudioStatus("Recording");
+    }
+  }
+
+  function showRecordingNotice(text) {
+    showRecordingUi();
+    stopTimer();
+    setTimerText("0:00");
+    setAudioStatus(text);
+    resetRecordingUiSoon();
+  }
+
+  function resetRecordingUi() {
+    var composer = document.querySelector(".ullme-composer");
+    var voiceButton = byId("ullme_voice_btn");
+    if (composer) composer.classList.remove("ullme-composer-recording");
+    if (voiceButton) {
+      voiceButton.classList.remove("ullme-voice-active");
+      voiceButton.setAttribute("aria-pressed", "false");
+    }
+    state.mediaRecorder = null;
+    state.shouldSave = false;
+    setTimerText("0:00");
+    setAudioStatus("Recording");
+    clearWaveform();
+  }
+
+  function resetRecordingUiSoon() {
+    window.setTimeout(resetRecordingUi, 1400);
+  }
+
+  function startTimer() {
+    state.startedAt = Date.now();
+    setTimerText("0:00");
+    stopTimer();
+    state.timerId = window.setInterval(function () {
+      var elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+      var minutes = Math.floor(elapsed / 60);
+      var seconds = String(elapsed % 60).padStart(2, "0");
+      setTimerText(minutes + ":" + seconds);
+    }, 250);
+  }
+
+  function stopTimer() {
+    if (state.timerId) {
+      window.clearInterval(state.timerId);
+      state.timerId = null;
+    }
+  }
+
+  function setTimerText(text) {
+    var timer = byId("ullme_recording_timer");
+    if (timer) timer.textContent = text;
+  }
+
+  function setAudioStatus(text) {
+    var label = document.querySelector(".ullme-recording-label");
+    if (label) label.textContent = text;
+  }
+
+  function startWaveform() {
+    var canvas = byId("ullme_recording_wave");
+    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!canvas || !state.stream || !AudioContextClass) {
+      clearWaveform();
+      return;
+    }
+
+    state.audioContext = new AudioContextClass();
+    state.analyser = state.audioContext.createAnalyser();
+    state.analyser.fftSize = 1024;
+    state.analyser.smoothingTimeConstant = 0.82;
+    state.waveData = new Uint8Array(state.analyser.frequencyBinCount);
+    state.waveLevels = new Array(28).fill(0.08);
+    state.waveLevel = 0;
+    state.waveLastDraw = 0;
+    state.audioSource = state.audioContext.createMediaStreamSource(state.stream);
+    state.audioSource.connect(state.analyser);
+    drawWaveform();
+  }
+
+  function drawWaveform(timestamp) {
+    var canvas = byId("ullme_recording_wave");
+    if (!canvas || !state.analyser || !state.waveData) return;
+
+    if (timestamp - state.waveLastDraw < 80) {
+      state.waveFrameId = window.requestAnimationFrame(drawWaveform);
+      return;
+    }
+    state.waveLastDraw = timestamp;
+
+    var context = canvas.getContext("2d");
+    var width = canvas.width;
+    var height = canvas.height;
+    var bars = state.waveLevels.length;
+    var barGap = 3;
+    var barWidth = Math.max(2, Math.floor((width - (bars - 1) * barGap) / bars));
+    var level = currentAudioLevel();
+
+    state.waveLevel = state.waveLevel * 0.7 + level * 0.3;
+    state.waveLevels.shift();
+    state.waveLevels.push(Math.max(0.08, state.waveLevel));
+
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = "#bdbdbd";
+
+    for (var i = 0; i < bars; i += 1) {
+      var distanceFromCenter = Math.abs(i - (bars - 1) / 2) / ((bars - 1) / 2);
+      var centerWeight = 1 - distanceFromCenter * 0.22;
+      var barHeight = Math.max(4, Math.round(state.waveLevels[i] * centerWeight * height * 0.92));
+      var x = i * (barWidth + barGap);
+      var y = Math.round((height - barHeight) / 2);
+      roundedRect(context, x, y, barWidth, barHeight, Math.min(barWidth / 2, 3));
+    }
+
+    state.waveFrameId = window.requestAnimationFrame(drawWaveform);
+  }
+
+  function currentAudioLevel() {
+    state.analyser.getByteTimeDomainData(state.waveData);
+    var sumSquares = 0;
+    for (var i = 0; i < state.waveData.length; i += 1) {
+      var centered = (state.waveData[i] - 128) / 128;
+      sumSquares += centered * centered;
+    }
+    var rms = Math.sqrt(sumSquares / state.waveData.length);
+    var gated = Math.max(0, rms - 0.015);
+    return Math.min(1, Math.pow(gated * 3.2 * state.settings.sensitivity, 0.72));
+  }
+
+  function readSettingsFromUi() {
+    state.settings.format = selectedValue("ullme_audio_format", state.settings.format);
+    state.settings.quality = selectedValue("ullme_audio_quality", state.settings.quality);
+    state.settings.sensitivity = clampSensitivity(selectedValue("ullme_mic_sensitivity", state.settings.sensitivity));
+  }
+
+  function applySettings(settings) {
+    settings = settings || {};
+    state.settings.format = validFormat(settings.format || state.settings.format);
+    state.settings.quality = validQuality(settings.quality || state.settings.quality);
+    state.settings.sensitivity = clampSensitivity(settings.sensitivity || state.settings.sensitivity);
+    setSelectValue("ullme_audio_format", state.settings.format);
+    setSelectValue("ullme_audio_quality", state.settings.quality);
+    setSelectValue("ullme_mic_sensitivity", String(state.settings.sensitivity));
+  }
+
+  function loadSettingsFromBrowser() {
+    var storage = browserStorage();
+    if (!storage) return state.settings;
+    try {
+      var raw = storage.getItem(audioSettingsStorageKey());
+      if (!raw) return state.settings;
+      return JSON.parse(raw);
+    } catch (error) {
+      return state.settings;
+    }
+  }
+
+  function saveSettingsToBrowser() {
+    var storage = browserStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(audioSettingsStorageKey(), JSON.stringify(state.settings));
+    } catch (error) {
+      // A blocked or full browser store should not break recording.
+    }
+  }
+
+  function audioSettingsStorageKey() {
+    return "ullme.audioSettings.v1:" + window.location.pathname;
+  }
+
+  function browserStorage() {
+    try {
+      return window.localStorage || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function validFormat(format) {
+    return ["auto", "webm", "ogg", "mp4"].indexOf(format) >= 0 ? format : "auto";
+  }
+
+  function validQuality(quality) {
+    return ["small", "standard", "high"].indexOf(quality) >= 0 ? quality : "standard";
+  }
+
+  function clampSensitivity(sensitivity) {
+    sensitivity = Number(sensitivity);
+    if (!Number.isFinite(sensitivity)) sensitivity = 3;
+    return Math.min(8, Math.max(1, sensitivity));
+  }
+
+  function setSelectValue(id, value) {
+    var input = byId(id);
+    if (input) input.value = value;
+  }
+
+  function roundedRect(context, x, y, width, height, radius) {
+    context.beginPath();
+    context.moveTo(x + radius, y);
+    context.lineTo(x + width - radius, y);
+    context.quadraticCurveTo(x + width, y, x + width, y + radius);
+    context.lineTo(x + width, y + height - radius);
+    context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    context.lineTo(x + radius, y + height);
+    context.quadraticCurveTo(x, y + height, x, y + height - radius);
+    context.lineTo(x, y + radius);
+    context.quadraticCurveTo(x, y, x + radius, y);
+    context.fill();
+  }
+
+  function stopWaveform() {
+    if (state.waveFrameId) {
+      window.cancelAnimationFrame(state.waveFrameId);
+      state.waveFrameId = null;
+    }
+    if (state.audioContext) {
+      state.audioContext.close();
+      state.audioContext = null;
+    }
+    state.audioSource = null;
+    state.analyser = null;
+    state.waveData = null;
+    state.waveLevels = [];
+    state.waveLevel = 0;
+    state.waveLastDraw = 0;
+  }
+
+  function clearWaveform() {
+    var canvas = byId("ullme_recording_wave");
+    if (!canvas) return;
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function stopStream() {
+    if (!state.stream) return;
+    state.stream.getTracks().forEach(function (track) {
+      track.stop();
+    });
+    state.stream = null;
+  }
+
+  function receiveStoredAudio(records) {
+    var record = records && records.length ? records[records.length - 1] : null;
+    if (record) {
+      setAudioStatus("Saved");
+      window.ullme = window.ullme || {};
+      window.ullme.lastAudioRecording = record;
+    }
+    resetRecordingUiSoon();
+  }
+
+  window.ullmeAudio = window.ullmeAudio || {};
+  window.ullmeAudio.startRecording = startRecording;
+  window.ullmeAudio.cancelRecording = cancelRecording;
+  window.ullmeAudio.finishRecording = finishRecording;
+  window.ullmeAudio.receiveStoredAudio = receiveStoredAudio;
+  window.ullmeAudio.applySettings = applySettings;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\www\ullme-audio.js
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\www\ullme-chat.css
+```
+html,
+body,
+.ullme-fluid {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #ffffff;
+  color: #111111;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ullme-fluid {
+  padding: 0;
+}
+
+.ullme-app {
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.ullme-appbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border-bottom: 1px solid #e4e4e4;
+  background: #ffffff;
+  padding: 0 16px;
+  z-index: 20;
+}
+
+.ullme-appbar-brand {
+  flex: 0 0 auto;
+  color: #111111;
+  font-size: 21px;
+  font-weight: 720;
+  line-height: 1.1;
+}
+
+.ullme-appbar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.ullme-context-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ullme-sidebar-context {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.ullme-user-settings-button {
+  flex: 0 0 auto;
+}
+
+.ullme-user-settings {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  display: none;
+  width: min(280px, calc(100vw - 24px));
+  border: 1px solid #dedede;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  padding: 14px;
+}
+
+.ullme-user-settings-open {
+  display: grid;
+  gap: 12px;
+}
+
+.ullme-user-settings-title {
+  color: #111111;
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.ullme-user-settings-field {
+  display: grid;
+  gap: 5px;
+  color: #666666;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ullme-user-settings-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  border: 1px solid #dedede;
+  border-radius: 6px;
+  background: #f7f7f7;
+  color: #222222;
+  font: inherit;
+  font-size: 13px;
+  padding: 0 9px;
+}
+
+.ullme-sidebar-label {
+  color: #6f6f6f;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.ullme-sidebar-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #333333;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  padding: 3px 5px;
+}
+
+.ullme-sidebar-value:hover,
+.ullme-sidebar-value:focus,
+.ullme-sidebar-value-open {
+  background: #ececec;
+  color: #111111;
+}
+
+.ullme-sidebar-value-arrow {
+  color: #777777;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.ullme-sidebar-value:hover .ullme-sidebar-value-arrow,
+.ullme-sidebar-value:focus .ullme-sidebar-value-arrow,
+.ullme-sidebar-value-open .ullme-sidebar-value-arrow {
+  opacity: 1;
+}
+
+.ullme-course-select {
+  max-width: 112px;
+  border: 1px solid #d7e4df;
+  background: #edf5f2;
+  color: #214e42;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ullme-course-select:hover,
+.ullme-course-select:focus,
+.ullme-course-select.ullme-sidebar-value-open {
+  border-color: #b8d1c8;
+  background: #e3efeb;
+  color: #173c33;
+}
+
+.ullme-course-select-hidden {
+  display: none;
+}
+
+.ullme-sidebar-menu {
+  position: absolute;
+  z-index: 10;
+  display: grid;
+  min-width: 112px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #dedede;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+}
+
+.ullme-sidebar-menu-item {
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #222222;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  padding: 5px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ullme-sidebar-menu-item:hover,
+.ullme-sidebar-menu-item:focus {
+  background: #eeeeee;
+}
+
+.ullme-sidebar-menu-item-active {
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-sidebar-menu-item-active:hover,
+.ullme-sidebar-menu-item-active:focus {
+  background: #252525;
+}
+
+.ullme-course-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.ullme-course-panel-hidden {
+  display: none;
+}
+
+.ullme-sidebar-course-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: #555555;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ullme-add-course-button {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  background: #f1f1f1;
+  color: #333333;
+}
+
+.ullme-add-course-button:hover {
+  background: #e7e7e7;
+}
+
+.ullme-add-course-button-hidden {
+  display: none;
+}
+
+.ullme-main {
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.ullme-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ullme-role-teacher .ullme-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ullme-course-workspace {
+  display: none;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #fbfcfb;
+}
+
+.ullme-role-teacher .ullme-course-workspace {
+  display: grid;
+}
+
+.ullme-chat-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.ullme-role-teacher .ullme-chat-pane {
+  border-left: 1px solid #e3e6e5;
+}
+
+.ullme-course-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 20px 8px;
+}
+
+.ullme-course-tabs-hidden {
+  display: none;
+}
+
+.ullme-course-tab {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #666666;
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 10px;
+}
+
+.ullme-course-tab:hover {
+  background: #f0f0f0;
+  color: #111111;
+}
+
+.ullme-course-tab-active {
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-course-tab-active:hover {
+  background: #252525;
+  color: #ffffff;
+}
+
+.ullme-course-tabs .ullme-material-tab-upload {
+  display: none;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-course-tabs .ullme-material-tab-upload:hover {
+  background: #252525;
+}
+
+.ullme-course-tabs .ullme-material-tab-upload-visible {
+  display: grid;
+}
+
+.ullme-course-content-panel {
+  display: none;
+  min-height: 0;
+}
+
+.ullme-course-content-panel-active {
+  display: block;
+}
+
+.ullme-course-workspace-empty .ullme-course-content-panel {
+  display: none;
+}
+
+.ullme-chat-messages {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px clamp(18px, 4vw, 48px) 24px;
+  scroll-behavior: smooth;
+}
+
+.ullme-course-settings,
+.ullme-material {
+  overflow-y: auto;
+  padding: 20px 24px 36px;
+}
+
+.ullme-material {
+  padding-top: 6px;
+}
+
+.ullme-panel-inner {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.ullme-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ullme-panel-title {
+  color: #111111;
+  font-size: 20px;
+  font-weight: 680;
+  line-height: 1.2;
+  margin-bottom: 18px;
+}
+
+.ullme-panel-head .ullme-panel-title {
+  margin-bottom: 0;
+}
+
+.ullme-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ullme-field,
+.ullme-field-label {
+  display: grid;
+  gap: 6px;
+  color: #666666;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ullme-field input,
+.ullme-time-slot input,
+.ullme-time-slot select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  border: 1px solid #dcdcdc;
+  border-radius: 6px;
+  outline: 0;
+  background: #ffffff;
+  color: #111111;
+  font: inherit;
+  font-size: 14px;
+  padding: 0 9px;
+}
+
+.ullme-field input:focus,
+.ullme-time-slot input:focus,
+.ullme-time-slot select:focus {
+  border-color: #999999;
+}
+
+.ullme-times-grid {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 18px;
+}
+
+.ullme-time-slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.ullme-primary-action,
+.ullme-secondary-action,
+.ullme-danger-action {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 11px;
+}
+
+.ullme-primary-action {
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-primary-action:hover {
+  background: #252525;
+}
+
+.ullme-secondary-action {
+  background: #eeeeee;
+  color: #111111;
+}
+
+.ullme-secondary-action:hover {
+  background: #e0e0e0;
+}
+
+.ullme-danger-action {
+  background: #f4e7e7;
+  color: #9b1c1c;
+}
+
+.ullme-danger-action:hover {
+  background: #ecd4d4;
+}
+
+.ullme-material-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.ullme-material-category {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: #eeeeee;
+  color: #444444;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+.ullme-material-category-active {
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-material-dropzone {
+  display: grid;
+  place-items: center;
+  min-height: 112px;
+  border: 1px dashed #b8c8c2;
+  border-radius: 7px;
+  outline: 0;
+  background: #f6faf8;
+  color: #315c50;
+  padding: 16px;
+  text-align: center;
+}
+
+.ullme-material-dropzone:hover,
+.ullme-material-dropzone:focus,
+.ullme-material-dropzone-active {
+  border-color: #5f8f81;
+  background: #edf6f2;
+}
+
+.ullme-material-dropzone-title {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.ullme-material-dropzone-meta {
+  color: #6a7e77;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.ullme-material-files {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ullme-material-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-bottom: 1px solid #eeeeee;
+  padding: 5px 0;
+}
+
+.ullme-material-file-name {
+  min-width: 0;
+  color: #222222;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ullme-material-empty {
+  color: #888888;
+  font-size: 14px;
+  padding: 12px 0;
+}
+
+.ullme-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 24px;
+}
+
+.ullme-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+  padding: 18px;
+}
+
+.ullme-dialog-title {
+  color: #111111;
+  font-size: 18px;
+  font-weight: 680;
+}
+
+.ullme-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ullme-message {
+  width: min(760px, 100%);
+  margin: 0 auto 18px;
+}
+
+.ullme-message-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ullme-user-stack {
+  display: grid;
+  justify-items: end;
+  max-width: min(610px, 86%);
+}
+
+.ullme-user-stack .ullme-bubble {
+  max-width: 100%;
+}
+
+.ullme-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 24px;
+  margin-top: 3px;
+  color: #6f6f6f;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.ullme-message-user:hover .ullme-user-actions,
+.ullme-message-user:focus-within .ullme-user-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ullme-message-assistant {
+  color: #101010;
+}
+
+.ullme-bubble {
+  max-width: min(610px, 86%);
+  border-radius: 26px;
+  padding: 9px 14px;
+  background: #f4f4f4;
+  color: #151515;
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ullme-message-assistant .ullme-bubble {
+  max-width: 100%;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.ullme-message-meta {
+  margin-bottom: 8px;
+  color: #8a8f94;
+  font-size: 15px;
+}
+
+.ullme-message-text {
+  font-size: 16px;
+  line-height: 1.48;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ullme-thinking .ullme-message-text {
+  color: #777777;
+}
+
+.ullme-message-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  color: #6f6f6f;
+}
+
+.ullme-mini-action {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: currentColor;
+  padding: 0;
+}
+
+.ullme-mini-action:hover {
+  background: #f2f2f2;
+}
+
+.ullme-mini-action:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.ullme-mini-action:disabled:hover {
+  background: transparent;
+}
+
+.ullme-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.ullme-attachment-thumb {
+  width: 86px;
+  height: 64px;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.ullme-composer-wrap {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 10px 18px 14px;
+  background: #ffffff;
+}
+
+.ullme-composer {
+  display: grid;
+  grid-template-areas: "upload input model voice submit";
+  grid-template-columns: 34px minmax(0, 1fr) auto 34px 38px;
+  align-items: center;
+  column-gap: 4px;
+  width: min(760px, 100%);
+  min-height: 46px;
+  border: 1px solid #e3e3e3;
+  border-radius: 23px;
+  background: #ffffff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.08);
+  padding: 3px 5px 3px 8px;
+}
+
+.ullme-composer.ullme-composer-has-uploads {
+  grid-template-areas:
+    "preview preview preview preview preview"
+    "upload input model voice submit";
+  row-gap: 8px;
+  border-radius: 28px;
+  padding-top: 10px;
+}
+
+.ullme-recording-panel {
+  display: none;
+  grid-area: input;
+}
+
+.ullme-composer.ullme-composer-recording {
+  grid-template-areas: "recording recording recording recording recording";
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 58px;
+  border-radius: 29px;
+  padding: 7px 10px;
+}
+
+.ullme-composer.ullme-composer-recording .ullme-recording-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  grid-area: recording;
+}
+
+.ullme-composer.ullme-composer-recording #ullme_upload_btn,
+.ullme-composer.ullme-composer-recording #ullme_upload_preview,
+.ullme-composer.ullme-composer-recording .ullme-chat-input,
+.ullme-composer.ullme-composer-recording .ullme-model-select,
+.ullme-composer.ullme-composer-recording #ullme_voice_btn,
+.ullme-composer.ullme-composer-recording #ullme_submit_btn {
+  display: none;
+}
+
+.ullme-recording-cancel,
+.ullme-recording-finish {
+  min-width: 74px;
+  height: 40px;
+  border: 0;
+  border-radius: 20px;
+  font: inherit;
+  font-size: 14px;
+  padding: 0 16px;
+}
+
+.ullme-recording-cancel {
+  background: #f2f2f2;
+  color: #151515;
+}
+
+.ullme-recording-cancel:hover {
+  background: #e8e8e8;
+}
+
+.ullme-recording-finish {
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-recording-finish:hover {
+  background: #2a2a2a;
+}
+
+.ullme-recording-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: 8px;
+  color: #222222;
+  font-size: 15px;
+}
+
+.ullme-recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d93025;
+  box-shadow: 0 0 0 4px rgba(217, 48, 37, 0.12);
+}
+
+.ullme-recording-timer {
+  min-width: 42px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ullme-recording-label {
+  color: #666666;
+}
+
+.ullme-recording-wave {
+  width: 128px;
+  height: 28px;
+}
+
+.ullme-recording-options {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.ullme-audio-select {
+  max-width: 108px;
+  height: 34px;
+  border: 0;
+  border-radius: 17px;
+  outline: 0;
+  background: #f4f4f4;
+  color: #444444;
+  font: inherit;
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.ullme-audio-select:hover,
+.ullme-audio-select:focus {
+  background: #ebebeb;
+  color: #111111;
+}
+
+.ullme-composer.ullme-composer-multiline {
+  grid-template-areas:
+    "input input input input input"
+    "upload spacer model voice submit";
+  grid-template-columns: 38px minmax(0, 1fr) auto 38px 42px;
+  row-gap: 4px;
+  border-radius: 24px;
+  padding: 9px 7px 7px 10px;
+}
+
+.ullme-composer.ullme-composer-multiline.ullme-composer-has-uploads {
+  grid-template-areas:
+    "preview preview preview preview preview"
+    "input input input input input"
+    "upload spacer model voice submit";
+}
+
+.ullme-composer.ullme-composer-multiline .ullme-chat-input {
+  align-self: start;
+  padding: 5px 10px 4px;
+}
+
+.ullme-chat-input {
+  grid-area: input;
+  align-self: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 170px;
+  height: 34px;
+  min-height: 34px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #161616;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  padding: 6px 9px 5px;
+  overflow-y: hidden;
+}
+
+.ullme-chat-input::placeholder {
+  color: #9a9a9a;
+}
+
+.ullme-icon-button,
+.ullme-submit-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #171717;
+  padding: 0;
+}
+
+.ullme-icon-button:hover {
+  background: #f1f1f1;
+}
+
+.ullme-submit-button {
+  width: 36px;
+  height: 36px;
+  background: #111111;
+  color: #ffffff;
+}
+
+.ullme-submit-button:disabled {
+  background: #d8d8d8;
+  color: #858585;
+}
+
+.ullme-icon {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.ullme-model-select {
+  grid-area: model;
+  align-self: center;
+  max-width: 102px;
+  border: 0;
+  border-radius: 18px;
+  outline: 0;
+  background: transparent;
+  color: #767676;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 6px;
+}
+
+#ullme_upload_btn {
+  grid-area: upload;
+}
+
+#ullme_voice_btn {
+  grid-area: voice;
+}
+
+#ullme_submit_btn {
+  grid-area: submit;
+}
+
+.ullme-model-select:hover,
+.ullme-model-select:focus {
+  background: #f4f4f4;
+  color: #222222;
+}
+
+.ullme-upload-preview {
+  grid-area: preview;
+  display: none;
+  width: 100%;
+  min-height: 0;
+  gap: 8px;
+  justify-content: flex-start;
+  padding: 0 8px;
+}
+
+.ullme-upload-preview.has-items {
+  display: flex;
+}
+
+.ullme-preview-item {
+  position: relative;
+  width: 76px;
+  height: 76px;
+}
+
+.ullme-preview-item img {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.ullme-preview-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #111111;
+  color: #ffffff;
+  padding: 0;
+}
+
+.ullme-preview-remove .ullme-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+}
+
+.ullme-file-input {
+  display: none;
+}
+
+.ullme-voice-active {
+  background: #111111;
+  color: #ffffff;
+}
+
+@media (max-width: 820px) {
+  .ullme-appbar {
+    gap: 6px;
+    padding: 0 7px;
+  }
+
+  .ullme-appbar-brand {
+    font-size: 18px;
+  }
+
+  .ullme-context-controls,
+  .ullme-sidebar-context {
+    gap: 2px;
+  }
+
+  .ullme-sidebar-value {
+    min-height: 25px;
+    font-size: 12px;
+    padding: 3px 4px;
+  }
+
+  .ullme-course-select {
+    max-width: 76px;
+  }
+
+  .ullme-add-course-button,
+  .ullme-user-settings-button {
+    width: 30px;
+    height: 30px;
+  }
+
+  .ullme-role-teacher .ullme-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(270px, 42vh) minmax(320px, 1fr);
+    overflow-y: auto;
+  }
+
+  .ullme-role-teacher .ullme-chat-pane {
+    border-top: 1px solid #e3e6e5;
+    border-left: 0;
+  }
+
+  .ullme-chat-messages {
+    padding: 20px 16px;
+  }
+
+  .ullme-course-settings,
+  .ullme-material {
+    padding: 24px 16px 48px;
+  }
+
+  .ullme-settings-grid,
+  .ullme-time-slot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ullme-message-text {
+    font-size: 16px;
+  }
+
+  .ullme-composer-wrap {
+    padding: 10px 12px 12px;
+  }
+
+  .ullme-composer.ullme-composer-recording {
+    min-height: 126px;
+  }
+
+  .ullme-composer.ullme-composer-recording .ullme-recording-panel {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "cancel status finish"
+      "options options options";
+    row-gap: 8px;
+  }
+
+  .ullme-recording-cancel {
+    grid-area: cancel;
+  }
+
+  .ullme-recording-status {
+    grid-area: status;
+  }
+
+  .ullme-recording-options {
+    grid-area: options;
+    justify-content: center;
+  }
+
+  .ullme-recording-finish {
+    grid-area: finish;
+  }
+
+  .ullme-recording-wave {
+    width: 84px;
+  }
+
+  .ullme-composer {
+    grid-template-columns: 40px minmax(0, 1fr) auto 40px 44px;
+  }
+
+  .ullme-composer.ullme-composer-multiline,
+  .ullme-composer {
+    grid-template-areas:
+      "input input input input input"
+      "upload spacer model voice submit";
+    row-gap: 4px;
+    min-height: 84px;
+    border-radius: 24px;
+    padding: 8px 8px 7px 10px;
+  }
+
+  .ullme-composer.ullme-composer-has-uploads,
+  .ullme-composer.ullme-composer-multiline.ullme-composer-has-uploads {
+    grid-template-areas:
+      "preview preview preview preview preview"
+      "input input input input input"
+      "upload spacer model voice submit";
+    row-gap: 7px;
+  }
+
+  .ullme-chat-input,
+  .ullme-composer.ullme-composer-multiline .ullme-chat-input {
+    height: 34px;
+    min-height: 34px;
+    padding: 5px 10px 4px;
+  }
+
+  .ullme-model-select {
+    max-width: 84px;
+    font-size: 14px;
+  }
+}
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\www\ullme-chat.css
+
+-----------------------------------------------------------
+
+
+# FILE: C:\libraries\ullme\ullme\inst\www\ullme-chat.js
+```
+(function () {
+  var state = {
+    uploads: [],
+    messageIndex: 0,
+    isRecording: false,
+    assistantRequests: {},
+    pendingMaterialInputId: ""
+  };
+
+  var materialLabels = {
+    general: "General",
+    slides: "Slides",
+    ps: "Problem Sets",
+    quiz: "Quiz",
+    background: "Background"
+  };
+
+  var icons = {
+    copy: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M5 15V5h10"></path></svg>',
+    check: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
+    retry: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.65"></path><path d="M20 4v6h-6"></path></svg>',
+    more: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h.01"></path><path d="M12 12h.01"></path><path d="M18 12h.01"></path></svg>',
+    close: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>'
+  };
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function nextId(prefix) {
+    state.messageIndex = state.messageIndex + 1;
+    return prefix + "_" + Date.now() + "_" + state.messageIndex;
+  }
+
+  function init() {
+    var messages = byId("ullme_chat_messages");
+    var input = byId("ullme_chat_input");
+    var submitButton = byId("ullme_submit_btn");
+    var uploadButton = byId("ullme_upload_btn");
+    var fileInput = byId("ullme_image_upload");
+    var voiceButton = byId("ullme_voice_btn");
+    var roleSelect = byId("ullme_role_select");
+    var semesterSelect = byId("ullme_semester_select");
+    var courseSelect = byId("ullme_course_select");
+    var addCourseButton = byId("ullme_add_course_btn");
+    var courseTabs = byId("ullme_course_tabs");
+    var settingsSave = byId("ullme_course_settings_save");
+    var materialCategories = byId("ullme_material_categories");
+    var materialUploadButton = byId("ullme_material_upload_btn");
+    var materialDropzone = byId("ullme_material_dropzone");
+    var userSettingsButton = byId("ullme_user_settings_btn");
+    var userSettings = byId("ullme_user_settings");
+
+    if (!messages || !input || !submitButton) return;
+
+    mountIntro(messages);
+    resizeInput(input);
+    updateSubmitState();
+
+    input.addEventListener("input", function () {
+      resizeInput(input);
+      updateSubmitState();
+    });
+
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        submitChat();
+      }
+    });
+
+    submitButton.addEventListener("click", submitChat);
+
+    if (uploadButton && fileInput) {
+      uploadButton.addEventListener("click", function () {
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", function () {
+        addLocalUploads(Array.prototype.slice.call(fileInput.files || []));
+        updateSubmitState();
+      });
+    }
+
+    document.addEventListener("paste", handlePaste);
+
+    if (voiceButton) {
+      voiceButton.addEventListener("click", function () {
+        if (window.ullmeAudio && window.ullmeAudio.startRecording) {
+          window.ullmeAudio.startRecording();
+        }
+      });
+    }
+
+    if (roleSelect) {
+      roleSelect.addEventListener("click", function (event) {
+        event.stopPropagation();
+        closeUserSettings();
+        toggleSidebarMenu(roleSelect, function (role) {
+          setRoleLayout(role);
+          sendSidebarEvent("ullme_role_select_event", { role: role });
+        });
+      });
+    }
+
+    if (semesterSelect) {
+      semesterSelect.addEventListener("click", function (event) {
+        event.stopPropagation();
+        closeUserSettings();
+        toggleSidebarMenu(semesterSelect, function (semester) {
+          sendSidebarEvent("ullme_semester_select_event", { semester: semester });
+        });
+      });
+    }
+
+    if (courseSelect) {
+      courseSelect.addEventListener("click", function (event) {
+        event.stopPropagation();
+        closeUserSettings();
+        toggleSidebarMenu(courseSelect, function (courseid) {
+          sendSidebarEvent("ullme_course_select_event", { courseid: courseid });
+        });
+      });
+    }
+
+    if (userSettingsButton && userSettings) {
+      userSettingsButton.addEventListener("click", function (event) {
+        event.stopPropagation();
+        closeSidebarMenus();
+        userSettings.classList.toggle("ullme-user-settings-open");
+      });
+      userSettings.addEventListener("click", function (event) {
+        event.stopPropagation();
+      });
+    }
+
+    document.addEventListener("click", function () {
+      closeSidebarMenus();
+      closeUserSettings();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      closeSidebarMenus();
+      closeUserSettings();
+    });
+
+    if (addCourseButton) {
+      addCourseButton.addEventListener("click", function () {
+        openAddCourseDialog();
+      });
+    }
+
+    if (courseTabs) {
+      courseTabs.addEventListener("click", function (event) {
+        var tab = event.target.closest(".ullme-course-tab");
+        if (!tab || !courseTabs.contains(tab)) return;
+        showCoursePanel(tab.getAttribute("data-course-panel") || "activities");
+      });
+    }
+
+    if (settingsSave) {
+      settingsSave.addEventListener("click", function () {
+        sendSidebarEvent("ullme_course_settings_save_event", gatherCourseSettings());
+      });
+    }
+
+    if (materialCategories) {
+      materialCategories.addEventListener("click", function (event) {
+        var item = event.target.closest(".ullme-material-category");
+        if (!item || !materialCategories.contains(item)) return;
+        selectMaterialCategory(item.getAttribute("data-category") || "general");
+      });
+    }
+
+    if (materialUploadButton) {
+      materialUploadButton.addEventListener("click", function () {
+        var materialInput = materialInputForCategory(currentMaterialCategory());
+        if (materialInput) materialInput.click();
+      });
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-material-file-input"), function (inputElement) {
+      inputElement.addEventListener("click", function () {
+        inputElement.value = "";
+      });
+      inputElement.addEventListener("change", function () {
+        if (inputElement.files && inputElement.files.length) {
+          state.pendingMaterialInputId = inputElement.id;
+        }
+      });
+    });
+    bindMaterialDropzone(materialDropzone);
+  }
+
+  function mountIntro(messages) {
+    var text = messages.getAttribute("data-intro-text") || "";
+    var meta = messages.getAttribute("data-intro-meta") || "";
+    if (!text) return;
+    appendAssistantMessage({
+      id: "ullme_intro_message",
+      text: text,
+      meta: meta
+    });
+  }
+
+  function resizeInput(input) {
+    var composer = input.closest(".ullme-composer");
+    var minHeight = parseFloat(window.getComputedStyle(input).minHeight) || 38;
+    if (composer) composer.classList.remove("ullme-composer-multiline");
+
+    input.style.height = "auto";
+    var multiline = input.value.indexOf("\n") !== -1 || input.scrollHeight > minHeight + 2;
+    if (composer) composer.classList.toggle("ullme-composer-multiline", multiline);
+
+    input.style.height = "auto";
+    var nextHeight = Math.max(minHeight, Math.min(input.scrollHeight, 170));
+    input.style.height = nextHeight + "px";
+  }
+
+  function updateSubmitState() {
+    var input = byId("ullme_chat_input");
+    var submitButton = byId("ullme_submit_btn");
+    if (!input || !submitButton) return;
+    submitButton.disabled = input.value.trim().length === 0 && state.uploads.length === 0;
+  }
+
+  function submitChat() {
+    var input = byId("ullme_chat_input");
+    var modelSelect = byId("ullme_model_select");
+    if (!input) return;
+
+    var text = input.value.trim();
+    var uploads = state.uploads.slice();
+    if (!text && uploads.length === 0) return;
+
+    var clientMessageId = nextId("user");
+    var assistantMessageId = nextId("assistant");
+    var payload = {
+      id: "ullme_submit_chat",
+      clientMessageId: clientMessageId,
+      assistantMessageId: assistantMessageId,
+      text: text,
+      model: modelSelect ? modelSelect.value : null,
+      uploads: uploads.map(function (upload) {
+        return {
+          id: upload.serverId || upload.localId,
+          name: upload.name,
+          size: upload.size,
+          type: upload.type
+        };
+      }),
+      nonce: Math.random()
+    };
+
+    appendUserMessage({
+      id: clientMessageId,
+      text: text,
+      uploads: uploads
+    });
+    appendAssistantMessage({
+      id: assistantMessageId,
+      text: "Thinking...",
+      meta: "Thinking",
+      thinking: true
+    });
+
+    input.value = "";
+    resizeInput(input);
+    clearUploads();
+    updateSubmitState();
+    scrollMessagesToBottom();
+
+    state.assistantRequests[assistantMessageId] = payload;
+    sendChatEvent(payload);
+  }
+
+  function sendChatEvent(payload) {
+    if (window.Shiny && Shiny.setInputValue) {
+      Shiny.setInputValue("ullme_submit_chat_event", payload, { priority: "event" });
+      return;
+    }
+    if (window.Shiny && Shiny.onInputChange) {
+      Shiny.onInputChange("ullme_submit_chat_event", payload);
+      return;
+    }
+    window.setTimeout(function () {
+      receiveAssistantMessage(payload.assistantMessageId, "Fake AI answer to:\n" + payload.text);
+    }, 450);
+  }
+
+  function sendSidebarEvent(inputId, payload) {
+    payload = payload || {};
+    payload.nonce = Math.random();
+    if (window.Shiny && Shiny.setInputValue) {
+      Shiny.setInputValue(inputId, payload, { priority: "event" });
+      return;
+    }
+    if (window.Shiny && Shiny.onInputChange) {
+      Shiny.onInputChange(inputId, payload);
+    }
+  }
+
+  function showCoursePanel(panelName) {
+    var tabs = byId("ullme_course_tabs");
+    var uploadButton = byId("ullme_material_upload_btn");
+    if (tabs) {
+      Array.prototype.forEach.call(tabs.querySelectorAll(".ullme-course-tab"), function (tab) {
+        tab.classList.toggle(
+          "ullme-course-tab-active",
+          tab.getAttribute("data-course-panel") === panelName
+        );
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-course-content-panel"), function (panel) {
+      panel.classList.toggle(
+        "ullme-course-content-panel-active",
+        panel.getAttribute("data-course-panel") === panelName
+      );
+    });
+    if (uploadButton) {
+      uploadButton.classList.toggle("ullme-material-tab-upload-visible", panelName === "materials");
+    }
+  }
+
+  function openAddCourseDialog() {
+    closeAddCourseDialog();
+    var overlay = document.createElement("div");
+    var dialog = document.createElement("div");
+    var title = document.createElement("div");
+    var idField = courseDialogField("Course ID", "ullme_new_courseid");
+    var nameField = courseDialogField("Course name", "ullme_new_coursename");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var create = document.createElement("button");
+
+    overlay.id = "ullme_add_course_overlay";
+    overlay.className = "ullme-dialog-overlay";
+    dialog.className = "ullme-dialog";
+    title.className = "ullme-dialog-title";
+    title.textContent = "Add Course";
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Cancel";
+    create.type = "button";
+    create.className = "ullme-primary-action";
+    create.textContent = "Create";
+
+    cancel.addEventListener("click", closeAddCourseDialog);
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeAddCourseDialog();
+    });
+    create.addEventListener("click", function () {
+      var courseid = idField.input.value.trim();
+      if (!courseid) {
+        idField.input.focus();
+        return;
+      }
+      sendSidebarEvent("ullme_add_course_event", {
+        courseid: courseid,
+        coursename: nameField.input.value.trim(),
+        times: []
+      });
+      closeAddCourseDialog();
+      showCoursePanel("settings");
+    });
+
+    actions.appendChild(cancel);
+    actions.appendChild(create);
+    dialog.appendChild(title);
+    dialog.appendChild(idField.label);
+    dialog.appendChild(nameField.label);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    idField.input.focus();
+  }
+
+  function closeAddCourseDialog() {
+    var overlay = byId("ullme_add_course_overlay");
+    if (overlay) overlay.remove();
+  }
+
+  function courseDialogField(labelText, id) {
+    var label = document.createElement("label");
+    var span = document.createElement("span");
+    var input = document.createElement("input");
+    label.className = "ullme-field";
+    span.textContent = labelText;
+    input.id = id;
+    input.type = "text";
+    label.appendChild(span);
+    label.appendChild(input);
+    return { label: label, input: input };
+  }
+
+  function gatherCourseSettings() {
+    var name = byId("ullme_settings_coursename");
+    return {
+      coursename: name ? name.value.trim() : "",
+      times: gatherCourseTimes()
+    };
+  }
+
+  function gatherCourseTimes() {
+    var rows = document.querySelectorAll(".ullme-time-slot");
+    return Array.prototype.map.call(rows, function (row) {
+      return {
+        weekday: valueOf(row.querySelector(".ullme-time-weekday")),
+        start: valueOf(row.querySelector(".ullme-time-start")),
+        end: valueOf(row.querySelector(".ullme-time-end"))
+      };
+    }).filter(function (time) {
+      return time.weekday || time.start || time.end;
+    }).slice(0, 3);
+  }
+
+  function valueOf(input) {
+    return input ? input.value : "";
+  }
+
+  function fillCourseSettings(course) {
+    course = course || {};
+    setInputValue("ullme_settings_courseid", course.courseid || "");
+    setInputValue("ullme_settings_coursename", course.coursename || "");
+    fillCourseTimes(course.times || []);
+  }
+
+  function setInputValue(id, value) {
+    var input = byId(id);
+    if (input) input.value = value || "";
+  }
+
+  function fillCourseTimes(times) {
+    var rows = document.querySelectorAll(".ullme-time-slot");
+    Array.prototype.forEach.call(rows, function (row, index) {
+      var time = times[index] || {};
+      setElementValue(row.querySelector(".ullme-time-weekday"), time.weekday || "");
+      setElementValue(row.querySelector(".ullme-time-start"), time.start || "");
+      setElementValue(row.querySelector(".ullme-time-end"), time.end || "");
+    });
+  }
+
+  function setElementValue(element, value) {
+    if (element) element.value = value || "";
+  }
+
+  function selectMaterialCategory(category) {
+    var categories = byId("ullme_material_categories");
+    if (!categories) return;
+    Array.prototype.forEach.call(categories.querySelectorAll(".ullme-material-category"), function (item) {
+      item.classList.toggle("ullme-material-category-active", item.getAttribute("data-category") === category);
+    });
+    var dropLabel = byId("ullme_material_drop_label");
+    if (dropLabel) dropLabel.textContent = materialLabels[category] || category;
+    sendSidebarEvent("ullme_material_category_event", { category: category });
+    renderMaterialFiles(state.courseMaterial || {}, category);
+  }
+
+  function currentMaterialCategory() {
+    var active = document.querySelector(".ullme-material-category-active");
+    return active ? active.getAttribute("data-category") || "general" : "general";
+  }
+
+  function materialInputForCategory(category) {
+    return byId("ullme_material_upload_" + category);
+  }
+
+  function bindMaterialDropzone(dropzone) {
+    if (!dropzone) return;
+
+    ["dragenter", "dragover"].forEach(function (eventName) {
+      dropzone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        dropzone.classList.add("ullme-material-dropzone-active");
+      });
+    });
+
+    ["dragleave", "dragend"].forEach(function (eventName) {
+      dropzone.addEventListener(eventName, function () {
+        dropzone.classList.remove("ullme-material-dropzone-active");
+      });
+    });
+
+    dropzone.addEventListener("drop", function (event) {
+      event.preventDefault();
+      dropzone.classList.remove("ullme-material-dropzone-active");
+      queueMaterialFiles(Array.prototype.slice.call(event.dataTransfer.files || []));
+    });
+
+    dropzone.addEventListener("click", function () {
+      var input = materialInputForCategory(currentMaterialCategory());
+      if (input) input.click();
+    });
+
+    dropzone.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      dropzone.click();
+    });
+  }
+
+  function queueMaterialFiles(files) {
+    var input = materialInputForCategory(currentMaterialCategory());
+    if (!input || !files.length || typeof DataTransfer === "undefined") return;
+    var transfer = new DataTransfer();
+    files.forEach(function (file) {
+      transfer.items.add(file);
+    });
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function renderMaterialFiles(material, category) {
+    var list = byId("ullme_material_files");
+    if (!list) return;
+    category = category || currentMaterialCategory();
+    var files = material && material[category] ? material[category] : [];
+    list.innerHTML = "";
+
+    if (!files.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-material-empty";
+      empty.textContent = "No files";
+      list.appendChild(empty);
+      return;
+    }
+
+    files.forEach(function (path) {
+      var row = document.createElement("div");
+      var name = document.createElement("div");
+      var remove = document.createElement("button");
+      row.className = "ullme-material-file";
+      name.className = "ullme-material-file-name";
+      name.textContent = path;
+      remove.type = "button";
+      remove.className = "ullme-danger-action";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", function () {
+        sendSidebarEvent("ullme_material_delete_event", {
+          category: category,
+          path: path
+        });
+      });
+      row.appendChild(name);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+  }
+
+  function toggleSidebarMenu(button, onSelect) {
+    var existing = button.parentNode.querySelector(".ullme-sidebar-menu");
+    var wasOpen = Boolean(existing);
+    closeSidebarMenus();
+    if (wasOpen) return;
+
+    var options = sidebarOptions(button);
+    var current = button.getAttribute("data-value") || "";
+    if (!options.length) return;
+
+    var menu = document.createElement("div");
+    menu.className = "ullme-sidebar-menu";
+    menu.setAttribute("role", "menu");
+    menu.style.left = button.offsetLeft + "px";
+    menu.style.top = (button.offsetTop + button.offsetHeight + 3) + "px";
+    menu.addEventListener("click", function (event) {
+      event.stopPropagation();
+    });
+
+    options.forEach(function (value) {
+      var item = document.createElement("button");
+      item.className = "ullme-sidebar-menu-item";
+      if (value === current) item.classList.add("ullme-sidebar-menu-item-active");
+      item.type = "button";
+      item.setAttribute("role", "menuitem");
+      item.textContent = sidebarLabel(value, button.getAttribute("data-kind"));
+      item.addEventListener("click", function () {
+        setSidebarValue(button, value);
+        closeSidebarMenus();
+        onSelect(value);
+      });
+      menu.appendChild(item);
+    });
+
+    button.parentNode.appendChild(menu);
+    button.classList.add("ullme-sidebar-value-open");
+  }
+
+  function sidebarOptions(button) {
+    return (button.getAttribute("data-options") || "")
+      .split("|")
+      .map(function (value) { return value.trim(); })
+      .filter(Boolean);
+  }
+
+  function setSidebarValue(button, value) {
+    if (!button) return;
+    var arrow = button.querySelector(".ullme-sidebar-value-arrow");
+    button.setAttribute("data-value", value);
+    button.textContent = sidebarLabel(value, button.getAttribute("data-kind"));
+    if (arrow) button.appendChild(arrow);
+  }
+
+  function closeSidebarMenus() {
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-sidebar-menu"), function (menu) {
+      menu.remove();
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".ullme-sidebar-value-open"), function (button) {
+      button.classList.remove("ullme-sidebar-value-open");
+    });
+  }
+
+  function closeUserSettings() {
+    var settings = byId("ullme_user_settings");
+    if (settings) settings.classList.remove("ullme-user-settings-open");
+  }
+
+  function sidebarLabel(value, kind) {
+    if (kind === "role") {
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+    if (kind === "course") return value || "Course";
+    return value;
+  }
+
+  function appendUserMessage(message) {
+    var messages = byId("ullme_chat_messages");
+    var article = document.createElement("article");
+    var stack = document.createElement("div");
+    var bubble = document.createElement("div");
+
+    article.id = message.id;
+    article.className = "ullme-message ullme-message-user";
+    stack.className = "ullme-user-stack";
+    bubble.className = "ullme-bubble";
+
+    if (message.uploads && message.uploads.length) {
+      bubble.appendChild(renderAttachments(message.uploads));
+    }
+    if (message.text) {
+      bubble.appendChild(textBlock(message.text));
+    }
+
+    stack.appendChild(bubble);
+    if (message.text) {
+      stack.appendChild(renderUserActions(message.text));
+    }
+    article.appendChild(stack);
+    messages.appendChild(article);
+    scrollMessagesToBottom();
+  }
+
+  function appendAssistantMessage(message) {
+    var messages = byId("ullme_chat_messages");
+    var article = document.createElement("article");
+    var bubble = document.createElement("div");
+    var text = document.createElement("div");
+
+    article.id = message.id;
+    article.className = "ullme-message ullme-message-assistant";
+    if (message.thinking) article.classList.add("ullme-thinking");
+
+    bubble.className = "ullme-bubble";
+
+    if (message.meta) {
+      var meta = document.createElement("div");
+      meta.className = "ullme-message-meta";
+      meta.textContent = message.meta;
+      bubble.appendChild(meta);
+    }
+
+    text.className = "ullme-message-text";
+    text.textContent = message.text || "";
+    bubble.appendChild(text);
+
+    if (!message.thinking) {
+      bubble.appendChild(renderAssistantActions(message.id, message.text || ""));
+    }
+
+    article.appendChild(bubble);
+    messages.appendChild(article);
+    scrollMessagesToBottom();
+  }
+
+  function renderAssistantActions(messageId, text) {
+    var actions = document.createElement("div");
+    var canRetry = Boolean(state.assistantRequests[messageId]);
+    actions.className = "ullme-message-actions";
+    actions.appendChild(miniAction("Copy", icons.copy, function () {
+      copyText(text, this);
+    }));
+    actions.appendChild(miniAction("Redo", icons.retry, function () {
+      retryAssistantMessage(messageId);
+    }, !canRetry));
+    actions.appendChild(miniAction("More", icons.more, function () {}));
+    return actions;
+  }
+
+  function miniAction(label, icon, onClick, disabled) {
+    var button = document.createElement("button");
+    button.className = "ullme-mini-action";
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.innerHTML = icon;
+    button.disabled = Boolean(disabled);
+    if (!disabled) button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function renderUserActions(text) {
+    var actions = document.createElement("div");
+    actions.className = "ullme-user-actions";
+    actions.appendChild(miniAction("Copy prompt", icons.copy, function () {
+      copyText(text, this);
+    }));
+    return actions;
+  }
+
+  function copyText(text, button) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      showCopied(button);
+      return;
+    }
+
+    var textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+    showCopied(button);
+  }
+
+  function showCopied(button) {
+    if (!button) return;
+    var oldLabel = button.getAttribute("aria-label") || "Copy";
+    var oldTitle = button.title || oldLabel;
+    var oldIcon = button.innerHTML;
+
+    if (button.copyResetTimer) {
+      window.clearTimeout(button.copyResetTimer);
+    }
+
+    button.setAttribute("aria-label", "Copied");
+    button.title = "Copied";
+    button.innerHTML = icons.check;
+
+    button.copyResetTimer = window.setTimeout(function () {
+      button.setAttribute("aria-label", oldLabel);
+      button.title = oldTitle;
+      button.innerHTML = oldIcon;
+      button.copyResetTimer = null;
+    }, 1200);
+  }
+
+  function retryAssistantMessage(messageId) {
+    var payload = state.assistantRequests[messageId];
+    var article = byId(messageId);
+    if (!payload || !article) return;
+
+    var messageText = article.querySelector(".ullme-message-text");
+    var actions = article.querySelector(".ullme-message-actions");
+    var meta = article.querySelector(".ullme-message-meta");
+
+    article.classList.add("ullme-thinking");
+    if (meta) meta.remove();
+    if (actions) actions.remove();
+    if (messageText) messageText.textContent = "Thinking...";
+
+    payload.nonce = Math.random();
+    sendChatEvent(payload);
+  }
+
+  function textBlock(text) {
+    var block = document.createElement("div");
+    block.textContent = text;
+    return block;
+  }
+
+  function renderAttachments(uploads) {
+    var wrap = document.createElement("div");
+    wrap.className = "ullme-attachments";
+    uploads.forEach(function (upload) {
+      if (!upload.previewUrl) return;
+      var image = document.createElement("img");
+      image.className = "ullme-attachment-thumb";
+      image.alt = upload.name || "Uploaded image";
+      image.src = upload.previewUrl;
+      wrap.appendChild(image);
+    });
+    return wrap;
+  }
+
+  function addLocalUploads(files) {
+    files
+      .filter(function (file) {
+        return /^image\//.test(file.type || "");
+      })
+      .forEach(function (file) {
+        var localId = nextId("upload");
+        var reader = new FileReader();
+        var upload = {
+          localId: localId,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          previewUrl: ""
+        };
+        state.uploads.push(upload);
+        updateComposerUploadClass();
+        reader.onload = function (event) {
+          upload.previewUrl = event.target.result;
+          renderUploadPreview();
+        };
+        reader.readAsDataURL(file);
+      });
+    renderUploadPreview();
+  }
+
+  function handlePaste(event) {
+    var files = clipboardImageFiles(event);
+    if (!files.length) return;
+
+    event.preventDefault();
+    queueImageFiles(files);
+  }
+
+  function clipboardImageFiles(event) {
+    var items = event.clipboardData && event.clipboardData.items;
+    if (!items) return [];
+
+    return Array.prototype.slice.call(items)
+      .filter(function (item) {
+        return item.kind === "file" && /^image\//.test(item.type || "");
+      })
+      .map(function (item, index) {
+        return clipboardImageFile(item.getAsFile(), index);
+      })
+      .filter(Boolean);
+  }
+
+  function clipboardImageFile(file, index) {
+    if (!file) return null;
+    var type = file.type || "image/png";
+    var name = "pasted-image-" + timestampForFileName() + "-" + (index + 1) + imageExtension(type);
+    if (typeof File === "undefined") return file;
+    return new File([file], name, { type: type });
+  }
+
+  function queueImageFiles(files) {
+    files = files.filter(function (file) {
+      return /^image\//.test(file.type || "");
+    });
+    if (!files.length) return;
+
+    var fileInput = byId("ullme_image_upload");
+    if (!fileInput || typeof DataTransfer === "undefined") {
+      addLocalUploads(files);
+      updateSubmitState();
+      return;
+    }
+
+    var transfer = new DataTransfer();
+    files.forEach(function (file) {
+      transfer.items.add(file);
+    });
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function timestampForFileName() {
+    return new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  }
+
+  function imageExtension(type) {
+    if (/jpe?g/.test(type)) return ".jpg";
+    if (/webp/.test(type)) return ".webp";
+    if (/gif/.test(type)) return ".gif";
+    return ".png";
+  }
+
+  function renderUploadPreview() {
+    var preview = byId("ullme_upload_preview");
+    if (!preview) return;
+
+    preview.innerHTML = "";
+    preview.classList.toggle("has-items", state.uploads.length > 0);
+    updateComposerUploadClass();
+
+    state.uploads.forEach(function (upload) {
+      var item = document.createElement("div");
+      var image = document.createElement("img");
+      var remove = document.createElement("button");
+
+      item.className = "ullme-preview-item";
+      image.alt = upload.name || "Upload preview";
+      image.src = upload.previewUrl || "";
+      remove.className = "ullme-preview-remove";
+      remove.type = "button";
+      remove.setAttribute("aria-label", "Remove upload");
+      remove.title = "Remove image";
+      remove.innerHTML = icons.close;
+      remove.addEventListener("click", function () {
+        state.uploads = state.uploads.filter(function (candidate) {
+          return candidate.localId !== upload.localId;
+        });
+        renderUploadPreview();
+        updateSubmitState();
+      });
+
+      item.appendChild(image);
+      item.appendChild(remove);
+      preview.appendChild(item);
+    });
+  }
+
+  function clearUploads() {
+    var fileInput = byId("ullme_image_upload");
+    state.uploads = [];
+    if (fileInput) fileInput.value = "";
+    renderUploadPreview();
+  }
+
+  function updateComposerUploadClass() {
+    var preview = byId("ullme_upload_preview");
+    var composer = preview ? preview.closest(".ullme-composer") : null;
+    if (composer) composer.classList.toggle("ullme-composer-has-uploads", state.uploads.length > 0);
+  }
+
+  function receiveStoredUploads(records) {
+    if (!records || !records.length) return;
+    records.forEach(function (record) {
+      var match = state.uploads.find(function (upload) {
+        return !upload.serverId && upload.size === record.size;
+      });
+      if (match) {
+        match.serverId = record.id;
+        match.storedUrl = record.url;
+      }
+    });
+  }
+
+  function receiveAssistantMessage(messageId, text) {
+    var article = byId(messageId);
+    if (!article) {
+      appendAssistantMessage({
+        id: messageId || nextId("assistant"),
+        text: text || "",
+        meta: ""
+      });
+      return;
+    }
+
+    article.classList.remove("ullme-thinking");
+    var meta = article.querySelector(".ullme-message-meta");
+    var messageText = article.querySelector(".ullme-message-text");
+    var bubble = article.querySelector(".ullme-bubble");
+
+    if (meta) meta.remove();
+    if (messageText) messageText.textContent = text || "";
+    if (bubble && !bubble.querySelector(".ullme-message-actions")) {
+      bubble.appendChild(renderAssistantActions(messageId, text || ""));
+    }
+    scrollMessagesToBottom();
+  }
+
+  function updateCourseList(courseids, selectedCourseid, showCourses, summary, role, semester) {
+    var courseSelect = byId("ullme_course_select");
+    var courseTabs = byId("ullme_course_tabs");
+    var addCourseButton = byId("ullme_add_course_btn");
+
+    courseids = Array.isArray(courseids) ? courseids : [];
+    selectedCourseid = selectedCourseid || "";
+    if (role) {
+      setRoleLayout(role);
+      setSidebarValue(byId("ullme_role_select"), role);
+    }
+    if (semester) setSidebarValue(byId("ullme_semester_select"), semester);
+    if (courseSelect) {
+      courseSelect.classList.toggle("ullme-course-select-hidden", !showCourses);
+      courseSelect.setAttribute("data-options", courseids.join("|"));
+      setSidebarValue(courseSelect, selectedCourseid);
+    }
+    if (addCourseButton) {
+      addCourseButton.classList.toggle("ullme-add-course-button-hidden", !showCourses);
+    }
+    if (courseTabs) courseTabs.classList.toggle("ullme-course-tabs-hidden", !selectedCourseid);
+    updateActiveCourse(summary, selectedCourseid);
+  }
+
+  function updateActiveCourse(summary, selectedCourseid) {
+    var course = summary && summary.course ? summary.course : { courseid: selectedCourseid || "" };
+    var material = summary && summary.material ? summary.material : {};
+    var courseWorkspace = byId("ullme_course_workspace");
+    state.courseMaterial = material;
+    if (courseWorkspace) {
+      courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
+    }
+    fillCourseSettings(course);
+    renderMaterialFiles(material, currentMaterialCategory());
+    if (!selectedCourseid) showCoursePanel("activities");
+  }
+
+  function setRoleLayout(role) {
+    var app = byId("ullme_app");
+    if (!app) return;
+    ["teacher", "student", "admin"].forEach(function (candidate) {
+      app.classList.toggle("ullme-role-" + candidate, role === candidate);
+    });
+  }
+
+  function completePendingMaterialUpload(inputId) {
+    inputId = inputId || state.pendingMaterialInputId;
+    if (!inputId) return;
+    if (state.pendingMaterialInputId && inputId !== state.pendingMaterialInputId) return;
+    var input = byId(inputId);
+    if (input) input.value = "";
+    state.pendingMaterialInputId = "";
+
+    if (window.Shiny && Shiny.setInputValue) {
+      Shiny.setInputValue(inputId, null, { priority: "event" });
+    } else if (window.Shiny && Shiny.onInputChange) {
+      Shiny.onInputChange(inputId, null);
+    }
+  }
+
+  function scrollMessagesToBottom() {
+    var messages = byId("ullme_chat_messages");
+    if (!messages) return;
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  window.ullme = window.ullme || {};
+  window.ullme.receiveAssistantMessage = receiveAssistantMessage;
+  window.ullme.receiveStoredUploads = receiveStoredUploads;
+  window.ullme.materialUploadComplete = completePendingMaterialUpload;
+  window.ullme.updateCourseList = updateCourseList;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+```
+# END OF FILE: C:\libraries\ullme\ullme\inst\www\ullme-chat.js
+
+-----------------------------------------------------------
+
+
+## Format of proposed changes to code or text files
+
+When you suggest changes to code or text files or completely new files, you MUST use the following format for each modification. Each change must be enclosed in a `!MODIFICATION` block.
+
+### Overall Structure
+
+Each modification block has three parts:
+1.  Start and end markers: `!MODIFICATION {{what}}` and `!END_MODIFICATION {{what}}`, where {{what}} is just a short reference to what is modified, file name or function name with with file. It will not be parsed but makes it easier for a human to understand blocks.
+2.  A metadata block in **TOML format**. This block ends with a `---` separator line.
+3.  A code payload block, which is a standard markdown code fence.
+
+```
+!MODIFICATION {{what}}
+# TOML metadata goes here
+# ...
+---
+```language
+# New code payload goes here
+```
+!END_MODIFICATION {{what}}
+```
+
+### Modification Scope
+
+Each modification is of one of the following two scopes:
+
+* `file` (re-)writes a complete file
+
+* `function` (re-)writes a complete function (including comments above).
+
+
+
+If more than two functions or more than two line edits will be performed in the same file, better rewrite the whole file using a `file` scope. For extremely long files also more smaller edits are ok.
+
+Function scope only works for R code files, but in R files it is preferred if one or two functions in a larger file are changed.
+
+The metadata block **MUST** contain a `scope` field, which can be `"file"`, `"function"`, or `"lines"`.
+
+---
+
+### **Scope 1: `file`**
+
+Use this to create a new file or to completely rewrite an existing one.
+
+**Required Fields:**
+*   `scope = "file"`
+*   `file` (string): The path to the file. Very important: state the path of the file as shown in the files header above. If there is a complete absolute path, also show the complete absolute path here.
+*   `description` (string): A brief explanation of the change in quotes ""
+
+#### **Example 1.1: Creating or modifying a file**
+!MODIFICATION new_helpers.R
+scope = "file"
+file = "/home/rstudio/myproject/R/new_helpers.R"
+description = "Create a new file for helper functions."
+---
+```r
+# A new helper function
+say_hello = function(name) {
+  paste0("Hello, ", name)
+}
+```
+!END_MODIFICATION new_helpers.R
+
+
+### **Scope 2: `function`**
+
+Use this to replace an existing function or to insert a new function. The new code payload should contain the complete function, including any preceding comments.
+
+#### **Fields for replacing an existing function:**
+*   `scope = "function"`
+*   `file` (string): The path to the file. Very important: state the path of the file as shown in the files header above. If there is a complete absolute path, also show the complete absolute path here.
+*   `function_name` (string): The name of the function to be replaced.
+*   `description` (string): A brief explanation of the change in quotes.
+
+#### **Fields for inserting a new function:**
+*   `scope = "function"`
+*   `file` (string): The path to the file. Very important: state the path of the file as shown in the files header above. If there is a complete absolute path, also show the complete absolute path here.
+*   `description` (string): A brief explanation of the change, enclose in quotes.
+*   **One of** the following fields to specify the insertion point. They are mutually exclusive.
+    *   `insert_top = true`: Insert at the top of the file.
+    *   `insert_bottom = true`: Insert at the bottom of the file.
+    *   `insert_before_fun = "function_name"`: Insert before the specified function.
+    *   `insert_after_fun = "function_name"`: Insert after the specified function.
+
+
+#### **Example 2.1: Replacing an existing function**
+!MODIFICATION calculate_sum utils.R
+scope = "function"
+file = "R/utils.R"
+function_name = "calculate_sum"
+description = "Update `calculate_sum` to handle NA values correctly.""
+---
+```r
+#' Calculate the sum of a vector, ignoring NAs
+calculate_sum = function(vec) {
+  sum(vec, na.rm = TRUE)
+}
+```
+!END_MODIFICATION calculate_sum utils.R
+
+#### **Example 2.2: Inserting a new function at the bottom of a file (here was an absolute file path given)**
+!MODIFICATION is_positive in R/utils.R
+scope = "function"
+file = "/home/myuser/mypkg/R/utils.R"
+insert_bottom = true
+description = "Add a new helper function to check for positivity."
+---
+```r
+
+#' Check if a number is positive
+is_positive = function(n) {
+  n > 0
+}
+```
+!END_MODIFICATION is_positive in R/utils.R
+
+#### **Example 2.3: Inserting a new function after a specific function**
+!MODIFICATION is_negative in R/utils.R
+scope = "function"
+file = "R/utils.R"
+insert_after_fun = "is_positive"
+description = "Add a new helper function `is_negative` after `is_positive`."
+---
+```r
+
+#' Check if a number is negative
+is_negative = function(n) {
+  n < 0
+}
+```
+!END_MODIFICATION is_negative in R/utils.R
+
+
+# General coding instructions
+
+- For string operations try to use `stringi` functions.
+
+- Try to avoid loops, vectorize if possible.
+
+- Use `=` instead of `<-` as assignment operator.
+
+- Very Important: Do not warp code into `try` statements to generally catch errors.
+  I want that the code fails if there are errors we have not yet understood dealt with.
+  General try catch wrappers will dillude this goal. Existing wrappers are probably
+  ok, but don't add new ones, unless there is really a strong reason to believe that
+  this cleanly solves the underlying problem and does not hide other possible problems.
+
+
+
+
+##################################
+# Your Task
+##################################
+
+
+
+

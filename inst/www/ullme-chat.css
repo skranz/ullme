@@ -380,13 +380,18 @@ body {
 }
 
 .ullme-course-settings,
-.ullme-material {
+.ullme-material,
+.ullme-ai-tutors {
   overflow-y: auto;
   padding: 20px 24px 36px;
 }
 
 .ullme-material {
   padding-top: 6px;
+}
+
+.ullme-ai-tutors {
+  padding-top: 12px;
 }
 
 .ullme-panel-inner {
@@ -411,6 +416,164 @@ body {
 
 .ullme-panel-head .ullme-panel-title {
   margin-bottom: 0;
+}
+
+.ullme-panel-subtitle {
+  max-width: 520px;
+  color: #777777;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.ullme-ai-tutors .ullme-panel-head {
+  margin-bottom: 18px;
+}
+
+.ullme-ai-tutors .ullme-primary-action {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.ullme-ai-tutors .ullme-primary-action .ullme-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.ullme-ai-tutor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ullme-feature-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e2e5e3;
+  border-radius: 9px;
+  background: #ffffff;
+  padding: 15px;
+}
+
+.ullme-feature-card-head,
+.ullme-feature-card-footer,
+.ullme-feature-card-title-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.ullme-feature-card-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ullme-feature-card-title-wrap {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ullme-feature-card-title {
+  color: #171717;
+  font-size: 15px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.ullme-source-badge {
+  border-radius: 10px;
+  background: #edf2f0;
+  color: #52635d;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.ullme-feature-card-description {
+  color: #666666;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ullme-feature-card-footer {
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.ullme-feature-card-meta {
+  color: #858585;
+  font-size: 12px;
+}
+
+.ullme-feature-empty {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border: 1px dashed #d6ddda;
+  border-radius: 9px;
+  background: #f7faf8;
+  color: #777777;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 30px 20px;
+  text-align: center;
+}
+
+.ullme-feature-empty strong {
+  color: #333333;
+  font-size: 15px;
+}
+
+.ullme-toggle {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 22px;
+}
+
+.ullme-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.ullme-toggle-track {
+  box-sizing: border-box;
+  width: 36px;
+  height: 22px;
+  border-radius: 11px;
+  background: #cfd4d2;
+  transition: background 120ms ease;
+}
+
+.ullme-toggle-track::after {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  content: "";
+  margin: 2px;
+  transition: transform 120ms ease;
+}
+
+.ullme-toggle input:checked + .ullme-toggle-track {
+  background: #1d6e55;
+}
+
+.ullme-toggle input:checked + .ullme-toggle-track::after {
+  transform: translateX(14px);
+}
+
+.ullme-toggle input:focus-visible + .ullme-toggle-track {
+  outline: 2px solid #111111;
+  outline-offset: 2px;
 }
 
 .ullme-settings-grid {
@@ -490,6 +653,12 @@ body {
 
 .ullme-secondary-action:hover {
   background: #e0e0e0;
+}
+
+.ullme-primary-action:disabled,
+.ullme-secondary-action:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .ullme-danger-action {
@@ -602,6 +771,75 @@ body {
   background: #ffffff;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
   padding: 18px;
+}
+
+.ullme-catalog-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(680px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.ullme-catalog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #eeeeee;
+  padding: 18px 20px 15px;
+}
+
+.ullme-catalog-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.ullme-catalog-title {
+  color: #111111;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.ullme-catalog-subtitle,
+.ullme-catalog-note {
+  color: #777777;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ullme-catalog-list {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.ullme-catalog-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #e3e3e3;
+  border-radius: 9px;
+  padding: 13px 14px;
+}
+
+.ullme-catalog-card-body {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.ullme-catalog-note {
+  border-top: 1px solid #eeeeee;
+  background: #fafafa;
+  padding: 11px 20px;
 }
 
 .ullme-dialog-title {
@@ -749,10 +987,99 @@ body {
   background: #ffffff;
 }
 
+.ullme-active-skill {
+  display: none;
+  box-sizing: border-box;
+  width: min(760px, 100%);
+  border: 1px solid #d8e8e1;
+  border-radius: 10px;
+  background: #f4faf7;
+  padding: 10px 12px;
+}
+
+.ullme-active-skill-visible {
+  display: grid;
+  gap: 8px;
+}
+
+.ullme-active-skill-head,
+.ullme-active-skill-identity {
+  display: flex;
+  align-items: center;
+}
+
+.ullme-active-skill-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ullme-active-skill-identity {
+  min-width: 0;
+  gap: 7px;
+  color: #214f41;
+  font-size: 13px;
+}
+
+.ullme-active-skill-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: #dcefe7;
+  color: #24644f;
+}
+
+.ullme-active-skill-icon .ullme-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.ullme-active-skill-clear {
+  border: 0;
+  background: transparent;
+  color: #55736a;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 5px;
+}
+
+.ullme-active-skill-clear:hover {
+  color: #173f33;
+  text-decoration: underline;
+}
+
+.ullme-active-skill-intro {
+  color: #50665f;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ullme-skill-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ullme-skill-starters button {
+  border: 1px solid #cfe0d9;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #315f50;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 9px;
+}
+
+.ullme-skill-starters button:hover {
+  border-color: #9dbdaf;
+  background: #edf7f3;
+}
+
 .ullme-composer {
   display: grid;
-  grid-template-areas: "upload input model voice submit";
-  grid-template-columns: 34px minmax(0, 1fr) auto 34px 38px;
+  grid-template-areas: "skills upload input model voice submit";
+  grid-template-columns: 34px 34px minmax(0, 1fr) auto 34px 38px;
   align-items: center;
   column-gap: 4px;
   width: min(760px, 100%);
@@ -766,8 +1093,8 @@ body {
 
 .ullme-composer.ullme-composer-has-uploads {
   grid-template-areas:
-    "preview preview preview preview preview"
-    "upload input model voice submit";
+    "preview preview preview preview preview preview"
+    "skills upload input model voice submit";
   row-gap: 8px;
   border-radius: 28px;
   padding-top: 10px;
@@ -779,7 +1106,7 @@ body {
 }
 
 .ullme-composer.ullme-composer-recording {
-  grid-template-areas: "recording recording recording recording recording";
+  grid-template-areas: "recording recording recording recording recording recording";
   grid-template-columns: minmax(0, 1fr);
   min-height: 58px;
   border-radius: 29px;
@@ -795,6 +1122,7 @@ body {
 }
 
 .ullme-composer.ullme-composer-recording #ullme_upload_btn,
+.ullme-composer.ullme-composer-recording #ullme_skills_btn,
 .ullme-composer.ullme-composer-recording #ullme_upload_preview,
 .ullme-composer.ullme-composer-recording .ullme-chat-input,
 .ullme-composer.ullme-composer-recording .ullme-model-select,
@@ -891,9 +1219,9 @@ body {
 
 .ullme-composer.ullme-composer-multiline {
   grid-template-areas:
-    "input input input input input"
-    "upload spacer model voice submit";
-  grid-template-columns: 38px minmax(0, 1fr) auto 38px 42px;
+    "input input input input input input"
+    "skills upload spacer model voice submit";
+  grid-template-columns: 34px 38px minmax(0, 1fr) auto 38px 42px;
   row-gap: 4px;
   border-radius: 24px;
   padding: 9px 7px 7px 10px;
@@ -901,9 +1229,9 @@ body {
 
 .ullme-composer.ullme-composer-multiline.ullme-composer-has-uploads {
   grid-template-areas:
-    "preview preview preview preview preview"
-    "input input input input input"
-    "upload spacer model voice submit";
+    "preview preview preview preview preview preview"
+    "input input input input input input"
+    "skills upload spacer model voice submit";
 }
 
 .ullme-composer.ullme-composer-multiline .ullme-chat-input {
@@ -990,6 +1318,15 @@ body {
 
 #ullme_upload_btn {
   grid-area: upload;
+}
+
+#ullme_skills_btn {
+  grid-area: skills;
+  display: none;
+}
+
+.ullme-role-teacher #ullme_skills_btn {
+  display: grid;
 }
 
 #ullme_voice_btn {
@@ -1111,8 +1448,27 @@ body {
   }
 
   .ullme-course-settings,
-  .ullme-material {
+  .ullme-material,
+  .ullme-ai-tutors {
     padding: 24px 16px 48px;
+  }
+
+  .ullme-ai-tutors .ullme-panel-head,
+  .ullme-catalog-card {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ullme-ai-tutors .ullme-panel-head {
+    display: grid;
+  }
+
+  .ullme-ai-tutors .ullme-primary-action {
+    justify-self: start;
+  }
+
+  .ullme-dialog-overlay {
+    padding: 10px;
   }
 
   .ullme-settings-grid,

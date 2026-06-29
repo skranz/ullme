@@ -1,0 +1,13 @@
+skillid: slides_quiz_maker
+label: Slides Quiz Maker
+description: Turn a slide set into a quiz with a separate answer key.
+intro: Choose the relevant slides and tell me the desired length or difficulty.
+starter_prompts:
+  - Create a ten-question quiz from the selected slides
+  - Make three challenging multiple-choice questions
+composer_placeholder: What kind of slide quiz should we create?
+required_course_inputs:
+  - slides
+expected_outputs:
+  - quiz
+required_tools: []

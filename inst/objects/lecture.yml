@@ -1,0 +1,8 @@
+oid: lecture
+name: lecture
+level: course
+type: event
+progresses: [slides, script]
+descr: |
+  A lecture is an actual event that takes place. We can use it to trigger activities, like creating quizzes etc.
+
