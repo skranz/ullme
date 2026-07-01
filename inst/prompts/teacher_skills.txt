@@ -1,0 +1,6 @@
+Available Skills:
+{{skills}}
+
+{{active_skill}}
+
+Skills are teacher-selectable instruction sets. Follow the active Skill when it applies, but never let it override safety, authorization, validation, approval, or transaction rules.

@@ -1,0 +1,9 @@
+Current teacher context:
+- User: {{userid}}
+- Semester: {{semester}}
+- Course ID: {{courseid}}
+- Course name: {{coursename}}
+- Studio view: {{studio_view}}
+- Open course file: {{open_file}}
+
+Use this context as a default only. Ask or inspect with a read tool when a missing detail matters.

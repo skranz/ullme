@@ -47,3 +47,6 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Local UI render fixture
+.tmp-studio-fixture/

@@ -50,9 +50,64 @@ ullme_fake_definition_rewrite = function(file, content, instruction) {
 }
 
 
+ullme_definition_rewrite_type = function() {
+  ellmer::type_object(
+    content=ellmer::type_string(
+      "Complete replacement content for the selected file."
+    ),
+    explanation=ellmer::type_string(
+      "Short explanation of the changes.",
+      required=FALSE
+    ),
+    warnings=ellmer::type_array(
+      ellmer::type_string(),
+      "Potential issues the teacher should review.",
+      required=FALSE
+    )
+  )
+}
+
+
+ullme_definition_ai_rewrite = function(kind, definitionid, source, file,
+                                        content, instruction, context,
+                                        model=NULL, app=getApp()) {
+  values = list(
+    kind=kind,
+    definitionid=definitionid,
+    source=source,
+    file=file
+  )
+  system_prompt = paste(
+    ullme_prompt("teacher_base", values=values),
+    ullme_prompt("teacher_language", values=values),
+    ullme_prompt("rewrite_definition", values=values),
+    sep="\n\n"
+  )
+  chat = ullme_task_chat(system_prompt=system_prompt, model=model, app=app)
+  request = paste0(
+    "Teacher instruction:\n", instruction,
+    "\n\nCurrent selected file:\nFILE: ", file, "\n", content,
+    "\n\nOther definition files and context:\n", context
+  )
+  result = chat$chat_structured(
+    request,
+    type=ullme_definition_rewrite_type(),
+    echo="none"
+  )
+  draft = paste0(result$content %||% "")[1]
+  if (!nzchar(draft)) stop("The model returned an empty draft.")
+  ullme_validate_definition_content(kind, definitionid, file, draft)
+  list(
+    content=draft,
+    explanation=paste0(result$explanation %||% "Draft created.")[1],
+    warnings=as.list(unlist(result$warnings %||% list(), use.names=FALSE))
+  )
+}
+
+
 ullme_handle_definition_chat = function(kind="tutor", definitionid=NULL,
                                          source=NULL, file=NULL, content=NULL,
-                                         message=NULL, requestid=NULL,
+                                         message=NULL, requestid=NULL, model=NULL,
                                          app=getApp(), ...) {
   restore.point("ullme_handle_definition_chat")
   requestid = paste0(requestid %||% "")[1]
@@ -87,34 +142,58 @@ ullme_handle_definition_chat = function(kind="tutor", definitionid=NULL,
       current_content=content,
       app=app
     )
-    if (!ullme_uses_fake_ai(app=app)) {
-      stop("Structured Definition Assistant responses are not connected to a model yet.")
+    if (ullme_uses_fake_ai(app=app)) {
+      draft = ullme_fake_definition_rewrite(
+        file=file,
+        content=content,
+        instruction=message
+      )
+      assistant_message = paste0(
+        "I applied a fake-AI draft to ",
+        file,
+        ". Review it in the editor and save only if you want to keep it."
+      )
+      warnings = list()
+    } else {
+      rewrite = ullme_definition_ai_rewrite(
+        kind=kind,
+        definitionid=definitionid,
+        source=source,
+        file=file,
+        content=content,
+        instruction=message,
+        context=context,
+        model=model,
+        app=app
+      )
+      draft = rewrite$content
+      assistant_message = paste(
+        c(
+          rewrite$explanation,
+          if (length(rewrite$warnings) > 0) {
+            paste0("Review: ", paste(unlist(rewrite$warnings), collapse=" "))
+          } else NULL
+        ),
+        collapse="\n"
+      )
+      warnings = rewrite$warnings
     }
-
-    draft = ullme_fake_definition_rewrite(
-      file=file,
-      content=content,
-      instruction=message
-    )
     list(
       ok=TRUE,
       requestid=requestid,
       kind=kind,
       definitionid=definitionid,
       source=source,
-      message=paste0(
-        "I applied a fake-AI draft to ",
-        file,
-        ". Review it in the editor and save only if you want to keep it."
-      ),
+      message=assistant_message,
       draft=list(file=file, content=draft),
+      warnings=warnings,
       context_chars=nchar(context)
     )
   }, error=function(e) {
     list(
       ok=FALSE,
       requestid=requestid,
-      message=conditionMessage(e),
+      message=ullme_safe_ai_error(e, app$api_config),
       draft=NULL
     )
   })

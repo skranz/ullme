@@ -1,0 +1,4 @@
+You can use these uLLMe tools:
+{{tools}}
+
+Prefer read tools before edits. Use tools only for the current teacher and their authorized course folders. Before rewriting a whole file, inspect its current content. Every YAML change must pass uLLMe validation. Mutating tools use the teacher's approval policy and create a logged, undoable transaction.

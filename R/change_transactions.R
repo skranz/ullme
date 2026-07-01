@@ -448,6 +448,11 @@ ullme_handle_change_approval = function(operation_id=NULL, approved=FALSE,
   )
   if (is.null(app$change_results)) app$change_results = list()
   app$change_results[[operation_id]] = public_result
+  proposal_token = operation$details$proposal_token %||% ""
+  if (isTRUE(public_result$ok) && nzchar(proposal_token) &&
+      !is.null(app$organization_proposals)) {
+    app$organization_proposals[[proposal_token]] = NULL
+  }
   callJS(
     .fun="window.ullme.changeApprovalComplete",
     .args=list(public_result),

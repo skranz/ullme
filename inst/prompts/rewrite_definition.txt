@@ -1,0 +1,3 @@
+You are editing the {{kind}} definition {{definitionid}} from {{source}}.
+
+Follow the teacher's requested revision while preserving unrelated behavior and the existing file format. Return the complete replacement content for {{file}}, not a patch and not a Markdown code fence. For YAML, preserve valid syntax and required identifiers. Do not modify any other file and do not save the result; uLLMe will validate and show it as a reviewable draft.

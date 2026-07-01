@@ -2,7 +2,7 @@ example = function() {
   library(ullme)
   restore.point.options(display.restore.point = TRUE)
   main_dir = "C:/libraries/ullme/ullme_main"
-  app = ullmeApp(main_dir)
+  app = ullmeApp(main_dir, api_key_file = "C:/libraries/ullme/nvidia_api_key.txt", api_provider="nvidia")
   viewApp(app,launch.browser = TRUE)
 }
 
@@ -35,10 +35,30 @@ ullme_teacherid = function(app=getApp()) {
 }
 
 
-ullmeApp = function(main_dir, userid="skranz", role="teacher", allowed_roles = c("teacher","student", "admin"), uses_fake_ai=TRUE, max_upload_mb=100) {
+ullmeApp = function(main_dir, userid="skranz", role="teacher",
+                     allowed_roles=c("teacher", "student", "admin"),
+                     uses_fake_ai=NULL, max_upload_mb=100,
+                     api_key_file=NULL,
+                     api_provider=c("fake", "nvidia", "local"),
+                     api_model=NULL, api_base_url=NULL) {
   restore.point("ullmeApp")
   app = eventsApp()
   glob = app$glob
+
+  api_provider = match.arg(api_provider)
+  if (!is.null(uses_fake_ai)) {
+    if (isTRUE(uses_fake_ai)) {
+      api_provider = "fake"
+    } else if (identical(api_provider, "fake")) {
+      api_provider = "local"
+    }
+  }
+  app$api_config = ullme_api_config(
+    api_provider=api_provider,
+    api_key_file=api_key_file,
+    api_model=api_model,
+    api_base_url=api_base_url
+  )
 
   max_upload_mb = as.numeric(max_upload_mb)[1]
   if (is.na(max_upload_mb) || max_upload_mb <= 0) {
@@ -62,7 +82,10 @@ ullmeApp = function(main_dir, userid="skranz", role="teacher", allowed_roles = c
     stop("role must be one of allowed_roles.")
   }
   app$semester = ullme_semester()
-  app$uses_fake_ai = uses_fake_ai
+  app$uses_fake_ai = identical(app$api_config$provider, "fake")
+  app$teacher_chats = list()
+  app$api_models = app$api_config$model
+  app$api_models_error = NULL
   app$user_dir = ullme_user_dir(main_dir=main_dir, userid=app$userid)
   app$role_user_dir = ullme_role_user_dir(main_dir=main_dir, userid=app$userid, role=app$role)
   app$cur_session_dir = ullme_cur_session_dir(user_dir=app$user_dir)
@@ -72,6 +95,7 @@ ullmeApp = function(main_dir, userid="skranz", role="teacher", allowed_roles = c
   app$definition_imports = list()
   app$pending_changes = list()
   app$change_results = list()
+  app$organization_proposals = list()
   app$courseids = ullme_user_courseids(
     main_dir=main_dir,
     userid=app$userid,
@@ -130,6 +154,7 @@ ullme_init_storage = function(main_dir, app=getApp()) {
   dir.create(app$cur_session_dir, recursive=TRUE, showWarnings=FALSE)
   dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
   dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
+  ullme_init_teacher_info(main_dir=main_dir)
   ullme_init_user_dirs(app=app)
   invisible(TRUE)
 }
@@ -264,6 +289,30 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_change_undo,
     app = app
   )
+  eventHandler(
+    eventId = "ullme_course_file_open_event",
+    id = NULL,
+    fun = ullme_handle_course_file_open,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_file_save_event",
+    id = NULL,
+    fun = ullme_handle_course_file_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_organization_propose_event",
+    id = NULL,
+    fun = ullme_handle_organization_propose,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_organization_apply_event",
+    id = NULL,
+    fun = ullme_handle_organization_apply,
+    app = app
+  )
   ullme_register_audio_handlers(app=app)
   invisible(TRUE)
 }
@@ -289,9 +338,66 @@ ullme_app_ui = function(app=getApp()) {
           class = "ullme-main",
           tags$div(
             class = "ullme-workspace",
-            ullme_course_workspace_ui(app=app),
+            ullme_studio_navigation_ui(app=app),
+            tags$button(
+              class="ullme-pane-resizer ullme-pane-resizer-nav",
+              type="button",
+              `data-pane-resizer`="nav",
+              `aria-label`="Resize teacher navigation",
+              title="Drag to resize navigation"
+            ),
+            tags$section(
+              class="ullme-studio-main",
+              tags$header(
+                class="ullme-studio-header",
+                tags$div(
+                  class="ullme-studio-heading",
+                  tags$div(id="ullme_studio_title", class="ullme-studio-title", "Materials"),
+                  tags$div(
+                    id="ullme_studio_context",
+                    class="ullme-studio-context",
+                    if (nzchar(app$courseid)) app$courseid else "Select a course"
+                  )
+                ),
+                tags$div(
+                  class="ullme-studio-actions",
+                  tags$button(
+                    id="ullme_studio_upload_btn",
+                    class="ullme-secondary-action",
+                    type="button",
+                    HTML(ullme_icon_svg("upload")),
+                    tags$span("Upload")
+                  )
+                )
+              ),
+              ullme_course_workspace_ui(app=app),
+              tags$div(id="ullme_definition_mount", class="ullme-definition-mount")
+            ),
+            tags$button(
+              class="ullme-pane-resizer ullme-pane-resizer-ai",
+              type="button",
+              `data-pane-resizer`="ai",
+              `aria-label`="Resize AI assistant",
+              title="Drag to resize AI assistant"
+            ),
             tags$section(
               class = "ullme-chat-pane",
+              tags$header(
+                class="ullme-ai-pane-header",
+                tags$div(
+                  class="ullme-ai-pane-heading",
+                  tags$span(class="ullme-ai-pane-title", "AI assistant"),
+                  tags$span(id="ullme_ai_context", class="ullme-ai-pane-context", "Course context")
+                ),
+                tags$button(
+                  id="ullme_ai_pane_toggle",
+                  class="ullme-icon-button",
+                  type="button",
+                  `aria-label`="Collapse AI pane",
+                  title="Collapse AI pane",
+                  HTML(ullme_icon_svg("panel"))
+                )
+              ),
               tags$section(
                 id = "ullme_chat_messages",
                 class = "ullme-chat-messages",
@@ -475,6 +581,8 @@ ullme_course_workspace_ui = function(app=getApp()) {
     ullme_course_tabs_ui(app=app),
     ullme_ai_tutors_ui(app=app),
     ullme_material_ui(app=app),
+    ullme_organization_ui(app=app),
+    ullme_course_file_ui(app=app),
     ullme_course_settings_ui(app=app)
   )
 }
@@ -501,11 +609,42 @@ ullme_course_tabs_ui = function(app=getApp()) {
 }
 
 
+ullme_studio_navigation_ui = function(app=getApp()) {
+  items = list(
+    list(view="materials", label="Materials", icon="folder"),
+    list(view="organization", label="Organize", icon="organize"),
+    list(view="ai-tutors", label="Tutors", icon="tutor"),
+    list(view="definitions", label="Definitions", icon="definitions"),
+    list(view="settings", label="Settings", icon="settings"),
+    list(view="history", label="History", icon="history")
+  )
+  tags$nav(
+    id="ullme_studio_nav",
+    class="ullme-studio-nav",
+    `aria-label`="Teacher workspace",
+    lapply(seq_along(items), function(i) {
+      item = items[[i]]
+      tags$button(
+        class=paste(
+          "ullme-studio-nav-item",
+          if (i == 1) "ullme-studio-nav-item-active" else ""
+        ),
+        type="button",
+        `data-studio-view`=item$view,
+        title=item$label,
+        HTML(ullme_icon_svg(item$icon)),
+        tags$span(item$label)
+      )
+    })
+  )
+}
+
+
 ullme_ai_tutors_ui = function(app=getApp()) {
   restore.point("ullme_ai_tutors_ui")
   tags$section(
     id = "ullme_ai_tutors_panel",
-    class = "ullme-ai-tutors ullme-course-content-panel ullme-course-content-panel-active",
+    class = "ullme-ai-tutors ullme-course-content-panel",
     `data-course-panel` = "ai-tutors",
     tags$div(
       class = "ullme-panel-inner",
@@ -596,10 +735,28 @@ ullme_material_ui = function(app=getApp()) {
   categories = ullme_course_material_categories()
   tags$section(
     id = "ullme_material_panel",
-    class = "ullme-material ullme-course-content-panel",
+    class = "ullme-material ullme-course-content-panel ullme-course-content-panel-active",
     `data-course-panel` = "materials",
     tags$div(
       class = "ullme-panel-inner",
+      tags$div(
+        class="ullme-material-view-toggle",
+        tags$button(
+          class="ullme-material-view-button ullme-material-view-button-active",
+          type="button",
+          `data-material-view`="materials",
+          "Material folders"
+        ),
+        tags$button(
+          class="ullme-material-view-button",
+          type="button",
+          `data-material-view`="files",
+          "All course files"
+        )
+      ),
+      tags$div(
+        id="ullme_material_folder_view",
+        class="ullme-material-folder-view",
       tags$div(
         id = "ullme_material_categories",
         class = "ullme-material-categories",
@@ -625,6 +782,97 @@ ullme_material_ui = function(app=getApp()) {
         )
       ),
       tags$div(id="ullme_material_files", class="ullme-material-files")
+      ),
+      tags$div(
+        id="ullme_course_file_tree",
+        class="ullme-course-file-tree",
+        `aria-label`="Course files"
+      )
+    )
+  )
+}
+
+
+ullme_organization_ui = function(app=getApp()) {
+  tags$section(
+    id="ullme_organization_panel",
+    class="ullme-organization ullme-course-content-panel",
+    `data-course-panel`="organization",
+    tags$div(
+      class="ullme-panel-inner ullme-organization-inner",
+      tags$div(
+        class="ullme-panel-head",
+        tags$div(
+          tags$div(class="ullme-panel-title", "Course organization"),
+          tags$div(
+            class="ullme-panel-subtitle",
+            "Arrange materials as problem sets, solutions, scripts, slides, and events."
+          )
+        ),
+        tags$button(
+          id="ullme_organization_propose_btn",
+          class="ullme-primary-action",
+          type="button",
+          HTML(ullme_icon_svg("sparkles")),
+          tags$span("Organize with AI")
+        )
+      ),
+      tags$div(
+        class="ullme-organization-view-toggle",
+        tags$button(
+          class="ullme-organization-view-button ullme-organization-view-button-active",
+          type="button",
+          `data-organization-view`="visual",
+          "Visual"
+        ),
+        tags$button(
+          class="ullme-organization-view-button",
+          type="button",
+          `data-organization-view`="yaml",
+          "YAML files"
+        )
+      ),
+      tags$div(id="ullme_organization_content", class="ullme-organization-content")
+    )
+  )
+}
+
+
+ullme_course_file_ui = function(app=getApp()) {
+  tags$section(
+    id="ullme_course_file_panel",
+    class="ullme-course-file-panel ullme-course-content-panel",
+    `data-course-panel`="file",
+    tags$header(
+      class="ullme-course-file-head",
+      tags$button(
+        id="ullme_course_file_back",
+        class="ullme-secondary-action",
+        type="button",
+        "Back"
+      ),
+      tags$div(
+        class="ullme-course-file-identity",
+        tags$strong(id="ullme_course_file_name", "File"),
+        tags$code(id="ullme_course_file_path", "")
+      ),
+      tags$button(
+        id="ullme_course_file_save",
+        class="ullme-primary-action",
+        type="button",
+        "Save"
+      )
+    ),
+    tags$textarea(
+      id="ullme_course_file_editor",
+      class="ullme-course-file-editor",
+      spellcheck="false",
+      `aria-label`="Course file editor"
+    ),
+    tags$footer(
+      class="ullme-course-file-footer",
+      tags$span(id="ullme_course_file_status", "Open a text file to edit it."),
+      tags$span("Ctrl+S to save")
     )
   )
 }
@@ -642,8 +890,12 @@ ullme_intro_msg = function() {
   restore.point("ullme_intro_msg")
   list(
     role = "assistant",
-    meta = "Thought for a couple of seconds",
-    text = "Hi! I am ullme. What would you like to try today?"
+    meta = "",
+    text = paste(
+      "Hi! I am uLLMe.",
+      "Shall I explain what you can do with uLLMe,",
+      "or do you have something specific in mind?"
+    )
   )
 }
 
@@ -693,9 +945,7 @@ ullme_composer_ui = function() {
         class = "ullme-model-select",
         `aria-label` = "Model",
         title = "Choose model",
-        tags$option(value="high", selected="selected", "High"),
-        tags$option(value="fast", "Fast"),
-        tags$option(value="local", "Local")
+        tags$option(value="loading", selected="selected", "Loading…")
       ),
       tags$button(
         id = "ullme_voice_btn",
@@ -799,7 +1049,13 @@ ullme_icon_svg = function(name) {
     plus = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
     user = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>',
     upload = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M5 20h14"></path></svg>',
-    sparkles = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>'
+    sparkles = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>',
+    folder = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"></path><path d="M3 7V5h7l2 2"></path></svg>',
+    organize = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v4H5z"></path><path d="M5 15h6v4H5z"></path><path d="M15 15h4v4h-4z"></path><path d="M12 9v3M8 12h9M8 12v3M17 12v3"></path></svg>',
+    tutor = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>',
+    definitions = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5z"></path><path d="M15 3v5h5M8 12h8M8 16h8"></path></svg>',
+    settings = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>',
+    history = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2-5.3"></path><path d="M4 4v6h6M12 7v5l3 2"></path></svg>'
   )
   icons[[name]]
 }
@@ -982,11 +1238,21 @@ ullme_course_summary_for_js = function(app=getApp()) {
     summary$ai_tutor_catalog = ullme_ai_tutor_catalog(app=app)
     summary$skills = ullme_skill_catalog_for_js(app=app)
     summary$active_skill = ullme_skill_for_js(ullme_active_skill(app=app))
+    course_dir = ullme_active_course_dir(app=app)
+    summary$course_files = if (is.null(course_dir)) list() else
+      ullme_course_file_records(course_dir)
+    summary$organization = if (is.null(course_dir)) {
+      list(types=list(), indexes=list(), unassigned=list(), referenced=list())
+    } else {
+      ullme_course_organization_payload(course_dir)
+    }
   } else {
     summary$ai_tutors = list()
     summary$ai_tutor_catalog = list()
     summary$skills = list()
     summary$active_skill = NULL
+    summary$course_files = list()
+    summary$organization = list(types=list(), indexes=list(), unassigned=list(), referenced=list())
   }
   summary
 }
@@ -996,10 +1262,12 @@ ullme_init_app = function(app=getApp()) {
   restore.point("ullme_init_app")
   ullme_init_storage(main_dir=app$glob$main_dir, app=app)
   ullme_send_course_state(app=app)
+  ullme_refresh_model_catalog(app=app)
 }
 
 
-ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL, uploads=NULL,
+ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
+                                  context=NULL, uploads=NULL,
                                   clientMessageId=NULL, assistantMessageId=NULL,
                                   session=NULL, app=getApp(), ...) {
   restore.point("ullme_handle_chat_submit")
@@ -1013,10 +1281,33 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL, 
   if (!is.null(skill) && nzchar(requested_skillid) && !identical(requested_skillid, skill$skillid)) {
     skill = NULL
   }
-  answer = ullme_ask_ai(
-    input=ai_input,
-    uses_fake_ai=ullme_uses_fake_ai(app=app),
-    system_instructions=if (is.null(skill)) NULL else skill$instructions
+  context_instruction = NULL
+  if (identical(app$role, "teacher") && is.list(context)) {
+    open_file = paste0(context$course_file %||% "")[1]
+    context_instruction = paste0(
+      "The teacher is currently working in course '", app$courseid %||% "",
+      "', studio view '", paste0(context$studio_view %||% "")[1], "'",
+      if (nzchar(open_file)) paste0(", with course file '", open_file, "' open") else "",
+      "."
+    )
+  }
+  system_instructions = paste(
+    c(if (is.null(skill)) NULL else skill$instructions, context_instruction),
+    collapse="\n\n"
+  )
+  if (!nzchar(system_instructions)) system_instructions = NULL
+  answer = tryCatch(
+    ullme_ask_ai(
+      input=ai_input,
+      model=model,
+      context=context %||% list(),
+      system_instructions=system_instructions,
+      app=app
+    ),
+    error=function(e) paste0(
+      "I could not reach the configured model: ",
+      ullme_safe_ai_error(e, app$api_config)
+    )
   )
   if (is.null(assistantMessageId) || !nzchar(assistantMessageId)) {
     assistantMessageId = paste0("assistant_", as.integer(runif(1, 1, 1e9)))
@@ -1109,5 +1400,9 @@ ullme_clean_file_name = function(x) {
 
 ullme_uses_fake_ai = function(app=getApp()) {
   restore.point("ullme_uses_fake_ai")
+  if (!is.null(app$api_config$provider)) {
+    return(identical(app$api_config$provider, "fake"))
+  }
+  if (is.null(app$uses_fake_ai)) return(TRUE)
   isTRUE(app$uses_fake_ai)
 }

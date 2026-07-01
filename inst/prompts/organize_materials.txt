@@ -1,0 +1,5 @@
+Analyze the teaching-material manifest for course {{courseid}} ({{coursename}}).
+
+Propose object-index YAML files only for object types supported by uLLMe. Use only paths that appear in the manifest; never invent, rename, copy, or delete material files. Preserve a pedagogically sensible order, infer formats from file extensions, and map each ps_sol object to an existing ps object through linked_to. If evidence is ambiguous, leave a file unclassified and explain why.
+
+Return complete YAML content for every proposed index. Do not apply any change. uLLMe will parse and validate the proposal before showing it to the teacher.

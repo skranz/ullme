@@ -84,6 +84,61 @@ utool_read_definition_yaml = function(kind, definitionid, source,
 }
 
 
+utool_list_ai_tutors = function(app=getApp()) {
+  lapply(ullme_ai_tutor_catalog(app=app), function(tutor) {
+    list(
+      tutorid=tutor$tutorid,
+      label=tutor$label,
+      source=tutor$source,
+      description=tutor$description,
+      required_material_roles=tutor$required_material_roles
+    )
+  })
+}
+
+
+utool_list_skills = function(app=getApp()) {
+  lapply(ullme_skill_catalog(app=app), function(skill) {
+    list(
+      skillid=skill$skillid,
+      label=skill$label,
+      source=skill$source,
+      description=skill$description
+    )
+  })
+}
+
+
+ullme_tool_course_file_path = function(course_dir, path, must_exist=TRUE) {
+  path = ullme_tool_relative_path(path, "path")
+  target = normalizePath(file.path(course_dir, path), winslash="/", mustWork=FALSE)
+  root = normalizePath(course_dir, winslash="/", mustWork=TRUE)
+  if (!ullme_path_is_within(target, root, allow_root=FALSE)) {
+    stop("The requested file is outside the course.")
+  }
+  if (isTRUE(must_exist) && (!file.exists(target) || dir.exists(target))) {
+    stop("The requested course file does not exist.")
+  }
+  target
+}
+
+
+utool_read_course_file = function(courseid, path, semester="sel",
+                                   app=getApp()) {
+  course_dir = ullme_tool_course_dir(semester, courseid, app=app)
+  target = ullme_tool_course_file_path(course_dir, path, must_exist=TRUE)
+  if (!ullme_file_is_text(target)) stop("The requested course file is binary.")
+  if (file.info(target)$size > 2 * 1024^2) stop("The requested text file is larger than 2 MB.")
+  list(
+    courseid=courseid,
+    semester=ullme_tool_semester(semester, app=app),
+    path=gsub("\\\\", "/", path),
+    content=paste(readLines(target, warn=FALSE, encoding="UTF-8"), collapse="\n"),
+    hash=ullme_path_hash(target)
+  )
+}
+
+
 utool_list_object_types = function(app=getApp()) {
   lapply(ullme_object_type_ids(), function(oid) {
     value = ullme_read_object_type(oid)
@@ -212,6 +267,36 @@ utool_rewrite_definition_yaml = function(kind, definitionid, source,
     origin="agent",
     details=list(kind=kind, definitionid=definitionid, source=source),
     changes=list(ullme_change_write(target, yaml_content)),
+    app=app
+  )
+  ullme_tool_change_result(ullme_submit_change(operation, app=app))
+}
+
+
+utool_rewrite_course_text_file = function(courseid, path, content,
+                                           semester="sel", app=getApp()) {
+  course_dir = ullme_tool_course_dir(semester, courseid, app=app)
+  path = ullme_tool_relative_path(path, "path")
+  target = ullme_tool_course_file_path(course_dir, path, must_exist=TRUE)
+  if (!ullme_file_is_text(target)) stop("Binary files cannot be rewritten as text.")
+  if (nchar(content, type="bytes") > 2 * 1024^2) {
+    stop("Text files must be no larger than 2 MB.")
+  }
+  validation = ullme_validate_course_file_content(
+    path=path,
+    content=content,
+    app=app,
+    course_dir=course_dir
+  )
+  ullme_validation_stop(validation)
+  change = ullme_change_write(target, content)
+  change$warnings = validation$warnings
+  operation = ullme_new_change(
+    action="rewrite_course_files",
+    summary=paste0("Rewrite course file ", courseid, "/", path),
+    origin="agent",
+    details=list(courseid=courseid, path=path),
+    changes=list(change),
     app=app
   )
   ullme_tool_change_result(ullme_submit_change(operation, app=app))

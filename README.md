@@ -22,6 +22,10 @@
 
 - Try to make it look similar to known, widely used AI chat interfaces. 
 
+- Teacher mode uses the [Teacher Studio](TEACHER_STUDIO.md): a course
+  workspace for materials, object organization, editable text files, AI Tutor
+  and Skill definitions, and a collapsible context-aware AI pane.
+
 
 # Code Design
 

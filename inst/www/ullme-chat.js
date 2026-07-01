@@ -13,7 +13,17 @@
     definitionOriginalContent: "",
     definitionAssistantOpen: false,
     definitionAssistantMessages: {},
-    definitionAssistantRequestIndex: 0
+    definitionAssistantRequestIndex: 0,
+    courseFiles: [],
+    organization: { types: [], indexes: [], unassigned: [] },
+    organizationView: "visual",
+    materialView: "materials",
+    studioView: "materials",
+    previousStudioView: "materials",
+    courseFile: null,
+    courseFileOriginalContent: "",
+    organizationProposal: null,
+    selectedCourseid: ""
   };
 
   var materialLabels = {
@@ -34,6 +44,107 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.max(minimum, Math.min(maximum, value));
+  }
+
+  function initPaneResizers() {
+    var app = byId("ullme_app");
+    var workspace = app && app.querySelector(".ullme-workspace");
+    var handles = workspace
+      ? workspace.querySelectorAll(".ullme-pane-resizer")
+      : [];
+    if (!workspace || !handles.length) return;
+
+    var saved = null;
+    try {
+      saved = JSON.parse(window.localStorage.getItem("ullme-teacher-pane-widths") || "null");
+    } catch (error) {
+      saved = null;
+    }
+    if (saved && Number.isFinite(saved.nav)) {
+      workspace.style.setProperty("--ullme-nav-width", clamp(saved.nav, 52, 112) + "px");
+    }
+    if (saved && Number.isFinite(saved.ai)) {
+      workspace.style.setProperty("--ullme-ai-width", clamp(saved.ai, 260, 560) + "px");
+    }
+
+    function currentWidth(name) {
+      var styles = window.getComputedStyle(workspace);
+      var property = name === "nav" ? "--ullme-nav-width" : "--ullme-ai-width";
+      var fallback = name === "nav" ? 62 : 340;
+      return parseFloat(styles.getPropertyValue(property)) || fallback;
+    }
+
+    function setWidth(name, value) {
+      var minimum = name === "nav" ? 52 : 260;
+      var maximum = name === "nav" ? 112 : 560;
+      var property = name === "nav" ? "--ullme-nav-width" : "--ullme-ai-width";
+      workspace.style.setProperty(property, clamp(value, minimum, maximum) + "px");
+    }
+
+    function saveWidths() {
+      try {
+        window.localStorage.setItem("ullme-teacher-pane-widths", JSON.stringify({
+          nav: currentWidth("nav"),
+          ai: currentWidth("ai")
+        }));
+      } catch (error) {
+        return;
+      }
+    }
+
+    Array.prototype.forEach.call(handles, function (handle) {
+      var name = handle.getAttribute("data-pane-resizer");
+      handle.addEventListener("pointerdown", function (event) {
+        if (window.innerWidth <= 820) return;
+        event.preventDefault();
+        var bounds = workspace.getBoundingClientRect();
+        document.body.classList.add("ullme-pane-resizing");
+
+        function move(moveEvent) {
+          var value = name === "nav"
+            ? moveEvent.clientX - bounds.left
+            : bounds.right - moveEvent.clientX;
+          setWidth(name, value);
+        }
+
+        function finish() {
+          document.body.classList.remove("ullme-pane-resizing");
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", finish);
+          window.removeEventListener("pointercancel", finish);
+          saveWidths();
+        }
+
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", finish);
+        window.addEventListener("pointercancel", finish);
+      });
+      handle.addEventListener("keydown", function (event) {
+        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        var movement = event.key === "ArrowRight" ? 1 : -1;
+        var delta = movement * (event.shiftKey ? 16 : 6);
+        setWidth(name, currentWidth(name) + (name === "nav" ? delta : -delta));
+        saveWidths();
+      });
+      handle.addEventListener("dblclick", function () {
+        setWidth(name, name === "nav" ? 62 : 340);
+        saveWidths();
+      });
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   function nextId(prefix) {
@@ -64,10 +175,20 @@
     var manageTutorsButton = byId("ullme_manage_tutors_btn");
     var manageSkillsButton = byId("ullme_manage_skills_btn");
     var agentSettingsButton = byId("ullme_agent_settings_btn");
+    var studioNav = byId("ullme_studio_nav");
+    var studioUploadButton = byId("ullme_studio_upload_btn");
+    var aiPaneToggle = byId("ullme_ai_pane_toggle");
+    var organizationButton = byId("ullme_organization_propose_btn");
+    var organizationPanel = byId("ullme_organization_panel");
+    var materialPanel = byId("ullme_material_panel");
+    var courseFileBack = byId("ullme_course_file_back");
+    var courseFileSave = byId("ullme_course_file_save");
+    var courseFileEditor = byId("ullme_course_file_editor");
 
     if (!messages || !input || !submitButton) return;
 
     mountIntro(messages);
+    initPaneResizers();
     resizeInput(input);
     updateSubmitState();
 
@@ -109,7 +230,12 @@
       roleSelect.addEventListener("click", function (event) {
         event.stopPropagation();
         closeUserSettings();
+        var previousRole = roleSelect.getAttribute("data-value") || "";
         toggleSidebarMenu(roleSelect, function (role) {
+          if (teacherWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) {
+            setSidebarValue(roleSelect, previousRole);
+            return;
+          }
           setRoleLayout(role);
           sendSidebarEvent("ullme_role_select_event", { role: role });
         });
@@ -120,7 +246,12 @@
       semesterSelect.addEventListener("click", function (event) {
         event.stopPropagation();
         closeUserSettings();
+        var previousSemester = semesterSelect.getAttribute("data-value") || "";
         toggleSidebarMenu(semesterSelect, function (semester) {
+          if (teacherWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) {
+            setSidebarValue(semesterSelect, previousSemester);
+            return;
+          }
           sendSidebarEvent("ullme_semester_select_event", { semester: semester });
         });
       });
@@ -130,7 +261,12 @@
       courseSelect.addEventListener("click", function (event) {
         event.stopPropagation();
         closeUserSettings();
+        var previousCourse = courseSelect.getAttribute("data-value") || "";
         toggleSidebarMenu(courseSelect, function (courseid) {
+          if (teacherWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) {
+            setSidebarValue(courseSelect, previousCourse);
+            return;
+          }
           sendSidebarEvent("ullme_course_select_event", { courseid: courseid });
         });
       });
@@ -188,6 +324,101 @@
         var tab = event.target.closest(".ullme-course-tab");
         if (!tab || !courseTabs.contains(tab)) return;
         showCoursePanel(tab.getAttribute("data-course-panel") || "ai-tutors");
+      });
+    }
+
+    if (studioNav) {
+      studioNav.addEventListener("click", function (event) {
+        var item = event.target.closest(".ullme-studio-nav-item");
+        if (!item || !studioNav.contains(item)) return;
+        activateStudioView(item.getAttribute("data-studio-view") || "materials");
+      });
+    }
+
+    if (studioUploadButton) {
+      studioUploadButton.addEventListener("click", function () {
+        var inputElement = materialInputForCategory(currentMaterialCategory());
+        if (inputElement) inputElement.click();
+      });
+    }
+
+    if (aiPaneToggle) {
+      aiPaneToggle.addEventListener("click", function () {
+        var appElement = byId("ullme_app");
+        if (!appElement) return;
+        var collapsed = appElement.classList.toggle("ullme-ai-pane-collapsed");
+        aiPaneToggle.setAttribute(
+          "aria-label",
+          collapsed ? "Expand AI pane" : "Collapse AI pane"
+        );
+        aiPaneToggle.title = collapsed ? "Expand AI pane" : "Collapse AI pane";
+      });
+    }
+
+    if (organizationButton) {
+      organizationButton.addEventListener("click", function () {
+        organizationButton.disabled = true;
+        organizationButton.querySelector("span").textContent = "Organizing…";
+        sendSidebarEvent("ullme_organization_propose_event", {
+          model: (byId("ullme_model_select") || {}).value || null
+        });
+      });
+    }
+
+    if (organizationPanel) {
+      organizationPanel.addEventListener("click", function (event) {
+        var toggle = event.target.closest(".ullme-organization-view-button");
+        if (!toggle) return;
+        state.organizationView = toggle.getAttribute("data-organization-view") || "visual";
+        Array.prototype.forEach.call(
+          organizationPanel.querySelectorAll(".ullme-organization-view-button"),
+          function (button) {
+            button.classList.toggle(
+              "ullme-organization-view-button-active",
+              button === toggle
+            );
+          }
+        );
+        renderCourseOrganization(state.organization);
+      });
+    }
+
+    if (materialPanel) {
+      materialPanel.addEventListener("click", function (event) {
+        var toggle = event.target.closest(".ullme-material-view-button");
+        if (!toggle) return;
+        state.materialView = toggle.getAttribute("data-material-view") || "materials";
+        materialPanel.classList.toggle("ullme-material-show-files", state.materialView === "files");
+        Array.prototype.forEach.call(
+          materialPanel.querySelectorAll(".ullme-material-view-button"),
+          function (button) {
+            button.classList.toggle("ullme-material-view-button-active", button === toggle);
+          }
+        );
+      });
+    }
+
+    if (courseFileBack) {
+      courseFileBack.addEventListener("click", function () {
+        if (courseFileDirty() && !window.confirm("Discard your unsaved changes?")) return;
+        activateStudioView(state.previousStudioView || "materials");
+      });
+    }
+    if (courseFileSave) courseFileSave.addEventListener("click", saveCourseFile);
+    if (courseFileEditor) {
+      courseFileEditor.addEventListener("input", updateCourseFileDirtyState);
+      courseFileEditor.addEventListener("keydown", function (event) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          saveCourseFile();
+        }
+        if (event.key === "Tab") {
+          event.preventDefault();
+          var start = courseFileEditor.selectionStart;
+          var end = courseFileEditor.selectionEnd;
+          courseFileEditor.setRangeText("  ", start, end, "end");
+          courseFileEditor.dispatchEvent(new Event("input", { bubbles: true }));
+        }
       });
     }
 
@@ -258,6 +489,10 @@
     bindMaterialDropzone(materialDropzone);
   }
 
+  function teacherWorkspaceDirty() {
+    return courseFileDirty() || definitionWorkspaceDirty();
+  }
+
   function mountIntro(messages) {
     var text = messages.getAttribute("data-intro-text") || "";
     var meta = messages.getAttribute("data-intro-meta") || "";
@@ -308,6 +543,15 @@
       text: text,
       model: modelSelect ? modelSelect.value : null,
       skillid: state.activeSkill ? state.activeSkill.skillid : null,
+      context: {
+        studio_view: state.studioView,
+        course_file: state.courseFile && state.studioView === "file"
+          ? state.courseFile.path
+          : "",
+        courseid: (byId("ullme_course_select") || {}).getAttribute
+          ? byId("ullme_course_select").getAttribute("data-value")
+          : ""
+      },
       uploads: uploads.map(function (upload) {
         return {
           id: upload.serverId || upload.localId,
@@ -387,6 +631,64 @@
     if (uploadButton) {
       uploadButton.classList.toggle("ullme-material-tab-upload-visible", panelName === "materials");
     }
+  }
+
+  function activateStudioView(view) {
+    if (view === "definitions") {
+      setStudioNavigation(view, "Definitions");
+      requestDefinitionWorkspace("tutor");
+      return;
+    }
+    var definitionOverlay = byId("ullme_definition_overlay");
+    if (definitionOverlay && definitionOverlay.classList.contains("ullme-definition-embedded")) {
+      if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
+      removeDefinitionWorkspace(true);
+    }
+    if (view === "history") {
+      setStudioNavigation(view, "Change history");
+      sendSidebarEvent("ullme_agent_settings_open_event", {});
+      return;
+    }
+    state.studioView = view;
+    var titles = {
+      materials: "Materials",
+      organization: "Course organization",
+      "ai-tutors": "AI Tutors",
+      settings: "Course settings",
+      file: "File editor"
+    };
+    setStudioNavigation(view, titles[view] || "Course studio");
+    showCoursePanel(view);
+    var upload = byId("ullme_studio_upload_btn");
+    if (upload) upload.style.display = view === "materials" ? "" : "none";
+    updateAIContext();
+  }
+
+  function setStudioNavigation(view, title) {
+    var nav = byId("ullme_studio_nav");
+    if (nav) {
+      Array.prototype.forEach.call(nav.querySelectorAll(".ullme-studio-nav-item"), function (item) {
+        item.classList.toggle(
+          "ullme-studio-nav-item-active",
+          item.getAttribute("data-studio-view") === view
+        );
+      });
+    }
+    var titleElement = byId("ullme_studio_title");
+    if (titleElement) titleElement.textContent = title || "Course studio";
+  }
+
+  function updateAIContext() {
+    var context = byId("ullme_ai_context");
+    var studioContext = byId("ullme_studio_context");
+    var courseSelect = byId("ullme_course_select");
+    var courseid = courseSelect ? courseSelect.getAttribute("data-value") : "";
+    var detail = state.courseFile && state.studioView === "file"
+      ? state.courseFile.path
+      : state.studioView.replace(/-/g, " ");
+    var label = [courseid, detail].filter(Boolean).join(" / ") || "Course context";
+    if (context) context.textContent = label;
+    if (studioContext) studioContext.textContent = courseid || "Select a course";
   }
 
   function renderAITutors(tutors) {
@@ -645,9 +947,6 @@
     var overlay = document.createElement("div");
     var workspace = document.createElement("section");
     var header = document.createElement("header");
-    var identity = document.createElement("div");
-    var title = document.createElement("div");
-    var subtitle = document.createElement("div");
     var navigation = document.createElement("div");
     var kindTabs = document.createElement("div");
     var picker = document.createElement("select");
@@ -657,26 +956,27 @@
     var assistantToggle = document.createElement("button");
     var close = document.createElement("button");
     var body = document.createElement("div");
-    var sidebar = document.createElement("aside");
     var editor = document.createElement("main");
     var assistant = document.createElement("aside");
+    var appElement = byId("ullme_app");
+    var mount = byId("ullme_definition_mount");
+    var embedded = Boolean(
+      mount && appElement && appElement.classList.contains("ullme-role-teacher")
+    );
 
     overlay.id = "ullme_definition_overlay";
-    overlay.className = "ullme-definition-overlay";
+    overlay.className = embedded
+      ? "ullme-definition-overlay ullme-definition-embedded"
+      : "ullme-definition-overlay";
     workspace.className = "ullme-definition-workspace";
     workspace.classList.toggle(
       "ullme-definition-assistant-open",
       state.definitionAssistantOpen
     );
-    workspace.setAttribute("role", "dialog");
-    workspace.setAttribute("aria-modal", "true");
+    workspace.setAttribute("role", embedded ? "region" : "dialog");
+    workspace.setAttribute("aria-modal", embedded ? "false" : "true");
     workspace.setAttribute("aria-label", "Definition Workspace");
     header.className = "ullme-definition-header";
-    identity.className = "ullme-definition-identity";
-    title.className = "ullme-definition-title";
-    title.textContent = "Definition Workspace";
-    subtitle.className = "ullme-definition-subtitle";
-    subtitle.textContent = "View and edit the Markdown and YAML behind uLLMe.";
     navigation.className = "ullme-definition-navigation";
     kindTabs.className = "ullme-definition-kind-tabs";
     picker.className = "ullme-definition-picker";
@@ -725,14 +1025,14 @@
     });
     create.type = "button";
     create.className = "ullme-primary-action";
-    create.textContent = payload.kind === "skill" ? "New Skill" : "New AI Tutor";
+    create.textContent = payload.kind === "skill" ? "New Skill" : "New Tutor";
     create.disabled = !payload.can_create;
     create.addEventListener("click", function () {
       openCreateDefinitionDialog(payload.kind || "tutor");
     });
     assistantToggle.type = "button";
     assistantToggle.className = "ullme-secondary-action ullme-definition-assistant-toggle";
-    assistantToggle.textContent = state.definitionAssistantOpen ? "Close AI" : "AI assistant";
+    assistantToggle.textContent = state.definitionAssistantOpen ? "Close AI" : "AI draft";
     assistantToggle.disabled = !payload.selected;
     assistantToggle.addEventListener("click", function () {
       state.definitionAssistantOpen = !state.definitionAssistantOpen;
@@ -740,7 +1040,7 @@
         "ullme-definition-assistant-open",
         state.definitionAssistantOpen
       );
-      assistantToggle.textContent = state.definitionAssistantOpen ? "Close AI" : "AI assistant";
+      assistantToggle.textContent = state.definitionAssistantOpen ? "Close AI" : "AI draft";
       if (state.definitionAssistantOpen) {
         var composer = byId("ullme_definition_assistant_input");
         if (composer) composer.focus();
@@ -752,33 +1052,37 @@
     close.innerHTML = icons.close;
     close.addEventListener("click", closeDefinitionWorkspace);
 
-    identity.appendChild(title);
-    identity.appendChild(subtitle);
     navigation.appendChild(kindTabs);
     navigation.appendChild(picker);
     headerActions.appendChild(importButton);
     headerActions.appendChild(create);
     headerActions.appendChild(assistantToggle);
     headerActions.appendChild(close);
-    header.appendChild(identity);
     header.appendChild(navigation);
     header.appendChild(headerActions);
 
     body.className = "ullme-definition-body";
-    sidebar.className = "ullme-definition-sidebar";
     editor.className = "ullme-definition-editor";
     assistant.className = "ullme-definition-assistant";
-    renderDefinitionSidebar(sidebar, payload);
     renderDefinitionEditor(editor, payload);
     renderDefinitionAssistant(assistant, payload);
-    body.appendChild(sidebar);
     body.appendChild(editor);
     body.appendChild(assistant);
     workspace.appendChild(header);
     workspace.appendChild(body);
     overlay.appendChild(workspace);
-    document.body.appendChild(overlay);
-    close.focus();
+    if (embedded) {
+      if (state.studioView !== "definitions") state.previousStudioView = state.studioView || "materials";
+      state.studioView = "definitions";
+      setStudioNavigation("definitions", "Definitions");
+      updateAIContext();
+      var studioMain = mount.closest(".ullme-studio-main");
+      if (studioMain) studioMain.classList.add("ullme-studio-definition-open");
+      mount.appendChild(overlay);
+    } else {
+      document.body.appendChild(overlay);
+      close.focus();
+    }
   }
 
   function renderDefinitionSidebar(sidebar, payload) {
@@ -878,14 +1182,14 @@
 
     if (selected.can_make_personal) {
       definitionActions.appendChild(definitionCopyButton(
-        selected.personal_exists ? "Open personal copy" : "Make personal copy",
+        selected.personal_exists ? "Personal copy" : "Make personal copy",
         "copy-personal",
         selected
       ));
     }
     if (selected.can_customize_course) {
       definitionActions.appendChild(definitionCopyButton(
-        selected.course_exists ? "Open course copy" : "Customize for course",
+        selected.course_exists ? "Course copy" : "Customize course",
         "copy-course",
         selected
       ));
@@ -893,7 +1197,8 @@
     var download = document.createElement("button");
     download.type = "button";
     download.className = "ullme-secondary-action";
-    download.textContent = selected.kind === "skill" ? "Download ZIP" : "Download YAML";
+    download.textContent = "Download";
+    download.title = selected.kind === "skill" ? "Download Skill ZIP" : "Download AI Tutor YAML";
     download.addEventListener("click", function () {
       sendSidebarEvent("ullme_definition_action_event", {
         action: "download",
@@ -907,7 +1212,8 @@
       var remove = document.createElement("button");
       remove.type = "button";
       remove.className = "ullme-danger-action";
-      remove.textContent = "Delete copy";
+      remove.textContent = "Delete";
+      remove.title = "Delete this copy";
       remove.addEventListener("click", function () {
         var detail = selected.source === "course"
           ? "This removes only the course-local definition copy; the Tutor remains installed and falls back to the next available definition."
@@ -1081,12 +1387,28 @@
 
   function removeDefinitionWorkspace(preserveAssistantState) {
     var overlay = byId("ullme_definition_overlay");
+    var embedded = Boolean(overlay && overlay.classList.contains("ullme-definition-embedded"));
     if (overlay) overlay.remove();
+    var studioMain = byId("ullme_definition_mount");
+    studioMain = studioMain ? studioMain.closest(".ullme-studio-main") : null;
+    if (studioMain) studioMain.classList.remove("ullme-studio-definition-open");
     closeCreateDefinitionDialog();
     closeDefinitionImportPreview();
     state.definitionWorkspace = null;
     state.definitionOriginalContent = "";
     if (!preserveAssistantState) state.definitionAssistantOpen = false;
+    if (embedded && !preserveAssistantState) {
+      state.studioView = state.previousStudioView || "materials";
+      var titles = {
+        materials: "Materials",
+        organization: "Course organization",
+        "ai-tutors": "AI Tutors",
+        settings: "Course settings"
+      };
+      setStudioNavigation(state.studioView, titles[state.studioView] || "Course studio");
+      showCoursePanel(state.studioView);
+      updateAIContext();
+    }
   }
 
   function openCreateDefinitionDialog(kind) {
@@ -1298,7 +1620,8 @@
         source: selected.source,
         file: current.path,
         content: current.content,
-        message: instruction
+        message: instruction,
+        model: (byId("ullme_model_select") || {}).value || null
       });
     }
 
@@ -1621,9 +1944,19 @@
     if (overlay) overlay.remove();
   }
 
-  function closeAgentSettings() {
+  function closeAgentSettings(preserveNavigation) {
     var overlay = byId("ullme_agent_settings_overlay");
     if (overlay) overlay.remove();
+    if (preserveNavigation === true) return;
+    var titles = {
+      materials: "Materials",
+      organization: "Course organization",
+      "ai-tutors": "AI Tutors",
+      settings: "Course settings",
+      file: "File editor",
+      definitions: "Definitions"
+    };
+    setStudioNavigation(state.studioView, titles[state.studioView] || "Course studio");
   }
 
   function approvalSelect(labelText, name, value) {
@@ -1646,7 +1979,7 @@
   }
 
   function openAgentSettings(payload) {
-    closeAgentSettings();
+    closeAgentSettings(true);
     payload = payload || {};
     var approval = payload.approval || {};
     var history = Array.isArray(payload.history) ? payload.history : [];
@@ -1683,6 +2016,7 @@
     settings.appendChild(approvalSelect("Default", "default", approval.default));
     settings.appendChild(approvalSelect("Copy materials", "copy_materials", approval.copy_materials));
     settings.appendChild(approvalSelect("Rewrite definitions", "rewrite_definitions", approval.rewrite_definitions));
+    settings.appendChild(approvalSelect("Rewrite course files", "rewrite_course_files", approval.rewrite_course_files));
     settings.appendChild(approvalSelect("Write object indexes", "write_object_indexes", approval.write_object_indexes));
     settings.appendChild(approvalSelect("Agent undo", "undo", approval.undo));
 
@@ -1864,6 +2198,9 @@
     if (result && result.status === "error") {
       window.alert(result.message || "The change could not be completed.");
     }
+    if (state.organizationProposal && result && !result.ok) {
+      renderOrganizationProposal(state.organizationProposal);
+    }
   }
 
   function changeUndoComplete(result, payload) {
@@ -2003,6 +2340,406 @@
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function courseFileRecord(path) {
+    return (Array.isArray(state.courseFiles) ? state.courseFiles : []).find(function (record) {
+      return record.path === path;
+    });
+  }
+
+  function requestCourseFile(path) {
+    var record = courseFileRecord(path);
+    if (record && !record.text) return;
+    sendSidebarEvent("ullme_course_file_open_event", { path: path });
+  }
+
+  function renderCourseFileTree(files) {
+    var tree = byId("ullme_course_file_tree");
+    if (!tree) return;
+    tree.innerHTML = "";
+    files = Array.isArray(files) ? files : [];
+    if (!files.length) {
+      tree.textContent = "No course files";
+      return;
+    }
+    var groups = {};
+    files.forEach(function (record) {
+      var directory = record.directory && record.directory !== "." ? record.directory : "Course root";
+      if (!groups[directory]) groups[directory] = [];
+      groups[directory].push(record);
+    });
+    Object.keys(groups).sort().forEach(function (directory) {
+      var group = document.createElement("section");
+      var title = document.createElement("div");
+      title.className = "ullme-file-directory-title";
+      title.textContent = directory;
+      group.className = "ullme-file-directory";
+      group.appendChild(title);
+      groups[directory].forEach(function (record) {
+        var row = document.createElement("div");
+        var open = document.createElement("button");
+        var meta = document.createElement("span");
+        row.className = "ullme-file-tree-row";
+        open.type = "button";
+        open.className = "ullme-file-tree-open";
+        open.textContent = record.name || record.path;
+        open.disabled = !record.text;
+        open.title = record.text ? "Open " + record.path : "Binary file";
+        open.addEventListener("click", function () { requestCourseFile(record.path); });
+        meta.className = "ullme-file-tree-meta";
+        meta.textContent = record.text
+          ? (record.editable ? "Text" : "View only")
+          : (record.extension || "Binary").toUpperCase();
+        row.appendChild(open);
+        row.appendChild(meta);
+        group.appendChild(row);
+      });
+      tree.appendChild(group);
+    });
+  }
+
+  function courseFileDirty() {
+    var editor = byId("ullme_course_file_editor");
+    return Boolean(
+      state.courseFile &&
+      editor &&
+      editor.value !== state.courseFileOriginalContent
+    );
+  }
+
+  function updateCourseFileDirtyState() {
+    var status = byId("ullme_course_file_status");
+    var save = byId("ullme_course_file_save");
+    var dirty = courseFileDirty();
+    if (save) save.disabled = !dirty || !state.courseFile || !state.courseFile.editable;
+    if (status && state.courseFile) {
+      status.className = "";
+      status.textContent = dirty ? "Unsaved changes" : (state.courseFile.notice || "Saved");
+    }
+  }
+
+  function openCourseFile(payload) {
+    payload = payload || {};
+    if (courseFileDirty() && state.courseFile && state.courseFile.path !== payload.path &&
+        !window.confirm("Discard your unsaved changes?")) return;
+    if (state.studioView !== "file") state.previousStudioView = state.studioView || "materials";
+    state.courseFile = payload;
+    state.courseFileOriginalContent = payload.content || "";
+    var name = byId("ullme_course_file_name");
+    var path = byId("ullme_course_file_path");
+    var editor = byId("ullme_course_file_editor");
+    var status = byId("ullme_course_file_status");
+    if (name) name.textContent = payload.name || "File";
+    if (path) path.textContent = payload.path || "";
+    if (editor) {
+      editor.value = payload.content || "";
+      editor.readOnly = !payload.editable;
+    }
+    if (status) {
+      status.className = payload.error
+        ? "ullme-course-file-status-error"
+        : (payload.notice ? "ullme-course-file-status-success" : "");
+      status.textContent = payload.error || payload.notice ||
+        (payload.editable ? "Ready to edit" : "View only");
+    }
+    activateStudioView("file");
+    updateCourseFileDirtyState();
+    if (editor) editor.focus();
+  }
+
+  function saveCourseFile() {
+    var editor = byId("ullme_course_file_editor");
+    var save = byId("ullme_course_file_save");
+    var status = byId("ullme_course_file_status");
+    if (!state.courseFile || !state.courseFile.editable || !editor || !courseFileDirty()) return;
+    if (save) save.disabled = true;
+    if (status) {
+      status.className = "";
+      status.textContent = "Validating and saving…";
+    }
+    sendSidebarEvent("ullme_course_file_save_event", {
+      path: state.courseFile.path,
+      content: editor.value,
+      base_hash: state.courseFile.base_hash
+    });
+  }
+
+  function courseFileSaveComplete(result) {
+    result = result || {};
+    var status = byId("ullme_course_file_status");
+    var save = byId("ullme_course_file_save");
+    if (status) {
+      status.className = "ullme-course-file-status-error";
+      status.textContent = result.message || "The file could not be saved.";
+    }
+    if (save) save.disabled = false;
+  }
+
+  function courseFileError(message) {
+    window.alert(message || "The file could not be opened.");
+  }
+
+  function objectFiles(object) {
+    var files = Array.isArray(object && object.files) ? object.files : [];
+    return files.map(function (file) {
+      return typeof file === "string" ? file : (file.path || "");
+    }).filter(Boolean);
+  }
+
+  function renderCourseOrganization(organization) {
+    var container = byId("ullme_organization_content");
+    if (!container) return;
+    organization = organization || { types: [], indexes: [], unassigned: [] };
+    if (state.organizationProposal) {
+      renderOrganizationProposal(state.organizationProposal);
+      return;
+    }
+    container.innerHTML = "";
+    var types = Array.isArray(organization.types) ? organization.types : [];
+    var indexes = Array.isArray(organization.indexes) ? organization.indexes : [];
+    if (state.organizationView === "yaml") {
+      if (!indexes.length) {
+        var noYaml = document.createElement("div");
+        noYaml.className = "ullme-object-empty";
+        noYaml.textContent = "No object index YAML files yet. Use Organize with AI or create one in objects/.";
+        container.appendChild(noYaml);
+      }
+      indexes.forEach(function (index) {
+        var card = document.createElement("section");
+        var head = document.createElement("div");
+        var title = document.createElement("div");
+        var edit = document.createElement("button");
+        card.className = "ullme-object-group";
+        head.className = "ullme-object-group-head";
+        title.className = "ullme-object-group-title";
+        title.innerHTML = "<strong>" + escapeHtml(index.oid || "Object") +
+          "</strong><span>" + escapeHtml(index.path || "") + "</span>";
+        edit.type = "button";
+        edit.className = "ullme-secondary-action";
+        edit.textContent = "Edit YAML";
+        edit.addEventListener("click", function () { requestCourseFile(index.path); });
+        head.appendChild(title);
+        head.appendChild(edit);
+        card.appendChild(head);
+        container.appendChild(card);
+      });
+      return;
+    }
+
+    types.forEach(function (type) {
+      var index = indexes.find(function (candidate) { return candidate.oid === type.oid; });
+      if (!index && type.type === "event") return;
+      var card = document.createElement("section");
+      var head = document.createElement("div");
+      var heading = document.createElement("div");
+      var edit = document.createElement("button");
+      var list = document.createElement("div");
+      var objects = index && Array.isArray(index.objects) ? index.objects : [];
+      card.className = "ullme-object-group";
+      head.className = "ullme-object-group-head";
+      heading.className = "ullme-object-group-title";
+      var strong = document.createElement("strong");
+      var sub = document.createElement("span");
+      strong.textContent = type.name || type.oid;
+      sub.textContent = type.oid + (type.linked_to ? " · linked to " + type.linked_to : "");
+      heading.appendChild(strong);
+      heading.appendChild(sub);
+      edit.type = "button";
+      edit.className = "ullme-secondary-action";
+      edit.textContent = index ? "Edit YAML" : "Create YAML";
+      edit.addEventListener("click", function () {
+        if (index) {
+          requestCourseFile(index.path);
+        } else {
+          openCourseFile({
+            path: "objects/" + type.oid + ".yaml",
+            name: type.oid + ".yaml",
+            content: "oid: " + type.oid + "\nobjects: []\n",
+            text: true,
+            editable: true,
+            exists: false,
+            draft: true,
+            base_hash: null
+          });
+        }
+      });
+      head.appendChild(heading);
+      head.appendChild(edit);
+      list.className = "ullme-object-list";
+      if (!objects.length) {
+        var empty = document.createElement("div");
+        empty.className = "ullme-object-empty";
+        empty.textContent = "No organized objects";
+        list.appendChild(empty);
+      } else {
+        objects.forEach(function (object, indexNumber) {
+          var row = document.createElement("div");
+          var order = document.createElement("span");
+          var id = document.createElement("span");
+          var files = document.createElement("span");
+          row.className = "ullme-object-row";
+          order.className = "ullme-object-order";
+          order.textContent = object.order || (indexNumber + 1);
+          id.className = "ullme-object-id";
+          id.textContent = object.id || object.docid || object.eventid || "object";
+          files.className = "ullme-object-files";
+          files.textContent = objectFiles(object).join(", ") || (object.date || "");
+          row.appendChild(order);
+          row.appendChild(id);
+          row.appendChild(files);
+          if (object.linked_to) {
+            var link = document.createElement("span");
+            link.className = "ullme-object-link";
+            link.textContent = "→ " + object.linked_to;
+            row.appendChild(link);
+          } else {
+            row.appendChild(document.createElement("span"));
+          }
+          list.appendChild(row);
+        });
+      }
+      card.appendChild(head);
+      card.appendChild(list);
+      container.appendChild(card);
+    });
+
+    var unassigned = Array.isArray(organization.unassigned) ? organization.unassigned : [];
+    var unassignedCard = document.createElement("section");
+    var unassignedHead = document.createElement("div");
+    var unassignedTitle = document.createElement("div");
+    var unassignedFiles = document.createElement("div");
+    unassignedCard.className = "ullme-unassigned-group";
+    unassignedHead.className = "ullme-object-group-head";
+    unassignedTitle.className = "ullme-object-group-title";
+    unassignedTitle.innerHTML = "<strong>Unassigned materials</strong><span>" +
+      unassigned.length + " file" + (unassigned.length === 1 ? "" : "s") + "</span>";
+    unassignedHead.appendChild(unassignedTitle);
+    unassignedFiles.className = "ullme-unassigned-files";
+    unassigned.forEach(function (path) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "ullme-unassigned-file";
+      button.textContent = path;
+      var materialRecord = courseFileRecord("materials/" + path);
+      button.disabled = !materialRecord || !materialRecord.text;
+      button.title = button.disabled ? "Binary material" : "Open " + path;
+      button.addEventListener("click", function () { requestCourseFile("materials/" + path); });
+      unassignedFiles.appendChild(button);
+    });
+    unassignedCard.appendChild(unassignedHead);
+    unassignedCard.appendChild(unassignedFiles);
+    container.appendChild(unassignedCard);
+  }
+
+  function openOrganizationProposal(proposal) {
+    var button = byId("ullme_organization_propose_btn");
+    if (button) {
+      button.disabled = false;
+      var text = button.querySelector("span");
+      if (text) text.textContent = "Organize with AI";
+    }
+    if (proposal && proposal.error) {
+      window.alert(proposal.error);
+      return;
+    }
+    state.organizationProposal = proposal || null;
+    activateStudioView("organization");
+    renderOrganizationProposal(proposal);
+  }
+
+  function renderOrganizationProposal(proposal) {
+    var container = byId("ullme_organization_content");
+    if (!container) return;
+    container.innerHTML = "";
+    proposal = proposal || {};
+    var banner = document.createElement("section");
+    var head = document.createElement("div");
+    var heading = document.createElement("div");
+    var proposalActions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var apply = document.createElement("button");
+    banner.className = "ullme-organization-proposal";
+    head.className = "ullme-object-group-head";
+    heading.className = "ullme-object-group-title";
+    heading.innerHTML = "<strong>Proposed organization</strong><span>" +
+      (proposal.classified_count || 0) + " files classified · review before applying</span>";
+    proposalActions.className = "ullme-organization-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Discard";
+    cancel.addEventListener("click", function () {
+      state.organizationProposal = null;
+      renderCourseOrganization(state.organization);
+    });
+    apply.type = "button";
+    apply.className = "ullme-primary-action";
+    apply.textContent = "Apply proposal";
+    apply.disabled = !(Array.isArray(proposal.indexes) && proposal.indexes.length);
+    apply.addEventListener("click", function () {
+      apply.disabled = true;
+      apply.textContent = "Preparing…";
+      sendSidebarEvent("ullme_organization_apply_event", { token: proposal.token });
+    });
+    head.appendChild(heading);
+    proposalActions.appendChild(cancel);
+    proposalActions.appendChild(apply);
+    head.appendChild(proposalActions);
+    banner.appendChild(head);
+    if (proposal.notes) {
+      var notes = document.createElement("p");
+      notes.className = "ullme-agent-settings-note";
+      notes.textContent = proposal.notes;
+      banner.appendChild(notes);
+    }
+    if (Array.isArray(proposal.unclassified) && proposal.unclassified.length) {
+      var unresolved = document.createElement("p");
+      unresolved.className = "ullme-agent-settings-note";
+      unresolved.textContent = "Unclassified: " + proposal.unclassified.join(", ");
+      banner.appendChild(unresolved);
+    }
+    container.appendChild(banner);
+    (Array.isArray(proposal.indexes) ? proposal.indexes : []).forEach(function (index) {
+      var card = document.createElement("section");
+      var cardHead = document.createElement("div");
+      var title = document.createElement("div");
+      var review = document.createElement("button");
+      card.className = "ullme-object-group";
+      cardHead.className = "ullme-object-group-head";
+      title.className = "ullme-object-group-title";
+      title.innerHTML = "<strong>" + escapeHtml(index.oid) + "</strong><span>" +
+        ((index.value && Array.isArray(index.value.objects)) ? index.value.objects.length : 0) +
+        " objects</span>";
+      review.type = "button";
+      review.className = "ullme-secondary-action";
+      review.textContent = "Review YAML";
+      review.addEventListener("click", function () {
+        openCourseFile({
+          path: index.path,
+          name: index.oid + ".yaml",
+          content: index.content || "",
+          text: true,
+          editable: true,
+          exists: Boolean(index.exists),
+          draft: true,
+          base_hash: index.base_hash == null ? null : index.base_hash
+        });
+      });
+      cardHead.appendChild(title);
+      cardHead.appendChild(review);
+      card.appendChild(cardHead);
+      container.appendChild(card);
+    });
+  }
+
+  function organizationApplyComplete(result) {
+    result = result || {};
+    if (result.status === "pending_approval") return;
+    if (!result.ok) {
+      window.alert(result.message || "The organization proposal could not be applied.");
+      return;
+    }
+    state.organizationProposal = null;
+  }
+
   function renderMaterialFiles(material, category) {
     var list = byId("ullme_material_files");
     if (!list) return;
@@ -2020,11 +2757,17 @@
 
     files.forEach(function (path) {
       var row = document.createElement("div");
-      var name = document.createElement("div");
+      var name = document.createElement("button");
       var remove = document.createElement("button");
       row.className = "ullme-material-file";
-      name.className = "ullme-material-file-name";
+      name.type = "button";
+      name.className = "ullme-material-file-name ullme-material-file-open";
       name.textContent = path;
+      var fullPath = "materials/" + category + "/" + path;
+      var record = courseFileRecord(fullPath);
+      name.disabled = !record || !record.text;
+      name.title = record && record.text ? "Open " + path : "Binary material";
+      name.addEventListener("click", function () { requestCourseFile(fullPath); });
       remove.type = "button";
       remove.className = "ullme-danger-action";
       remove.textContent = "Delete";
@@ -2486,25 +3229,42 @@
   }
 
   function updateActiveCourse(summary, selectedCourseid) {
+    if (state.selectedCourseid && state.selectedCourseid !== selectedCourseid) {
+      state.courseFile = null;
+      state.courseFileOriginalContent = "";
+      if (state.studioView === "file") activateStudioView("materials");
+      if (byId("ullme_definition_overlay")) removeDefinitionWorkspace(true);
+    }
+    state.selectedCourseid = selectedCourseid || "";
     var course = summary && summary.course ? summary.course : { courseid: selectedCourseid || "" };
     var material = summary && summary.material ? summary.material : {};
     var aiTutors = summary && Array.isArray(summary.ai_tutors) ? summary.ai_tutors : [];
     var aiTutorCatalog = summary && Array.isArray(summary.ai_tutor_catalog) ? summary.ai_tutor_catalog : [];
     var skills = summary && Array.isArray(summary.skills) ? summary.skills : [];
     var activeSkill = summary ? summary.active_skill : null;
+    var courseFiles = summary && Array.isArray(summary.course_files) ? summary.course_files : [];
+    var organization = summary && summary.organization
+      ? summary.organization
+      : { types: [], indexes: [], unassigned: [] };
     var courseWorkspace = byId("ullme_course_workspace");
     state.courseMaterial = material;
     state.aiTutors = aiTutors;
     state.aiTutorCatalog = aiTutorCatalog;
     state.skills = skills;
+    state.courseFiles = courseFiles;
+    state.organization = organization;
+    state.organizationProposal = null;
     if (courseWorkspace) {
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
     fillCourseSettings(course);
     renderMaterialFiles(material, currentMaterialCategory());
+    renderCourseFileTree(courseFiles);
+    renderCourseOrganization(organization);
     renderAITutors(aiTutors);
     renderActiveSkill(activeSkill);
-    if (!selectedCourseid) showCoursePanel("ai-tutors");
+    updateAIContext();
+    if (!selectedCourseid) activateStudioView("materials");
   }
 
   function setRoleLayout(role) {
@@ -2513,6 +3273,12 @@
     ["teacher", "student", "admin"].forEach(function (candidate) {
       app.classList.toggle("ullme-role-" + candidate, role === candidate);
     });
+    if (role !== "teacher") {
+      var overlay = byId("ullme_definition_overlay");
+      if (overlay && overlay.classList.contains("ullme-definition-embedded")) {
+        removeDefinitionWorkspace(true);
+      }
+    }
   }
 
   function completePendingMaterialUpload(inputId) {
@@ -2536,6 +3302,30 @@
     messages.scrollTop = messages.scrollHeight;
   }
 
+  function updateModelCatalog(payload) {
+    var select = byId("ullme_model_select");
+    if (!select || !payload) return;
+    var previous = select.value;
+    var models = Array.isArray(payload.models) ? payload.models : [];
+    select.innerHTML = "";
+    models.forEach(function (model) {
+      var option = document.createElement("option");
+      option.value = String(model.id || "");
+      option.textContent = String(model.label || model.id || "");
+      option.title = String(model.id || "");
+      select.appendChild(option);
+    });
+    var wanted = models.some(function (model) { return model.id === previous; })
+      ? previous
+      : payload.default;
+    if (wanted) select.value = wanted;
+    select.disabled = models.length === 0;
+    var provider = String(payload.provider || "model");
+    select.title = payload.error
+      ? provider + ": " + payload.error
+      : "Model provider: " + provider;
+  }
+
   window.ullme = window.ullme || {};
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
@@ -2550,6 +3340,12 @@
   window.ullme.openChangeApproval = openChangeApproval;
   window.ullme.changeApprovalComplete = changeApprovalComplete;
   window.ullme.changeUndoComplete = changeUndoComplete;
+  window.ullme.openCourseFile = openCourseFile;
+  window.ullme.courseFileSaveComplete = courseFileSaveComplete;
+  window.ullme.courseFileError = courseFileError;
+  window.ullme.openOrganizationProposal = openOrganizationProposal;
+  window.ullme.organizationApplyComplete = organizationApplyComplete;
+  window.ullme.updateModelCatalog = updateModelCatalog;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

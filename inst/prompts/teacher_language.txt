@@ -1,0 +1,1 @@
+Answer in the language of the teacher's latest message. You must understand both English and German. Keep technical identifiers, file names, YAML keys, and tool names unchanged when translating surrounding prose.
