@@ -65,7 +65,9 @@ ullme_init_user_dirs = function(app=getApp()) {
     ullme_role_user_dir(main_dir=app$glob$main_dir, userid=app$userid, role="student"),
     app$cur_session_dir,
     app$uploads_dir,
-    app$audio_dir
+    app$audio_dir,
+    ullme_change_history_dir(app=app),
+    ullme_change_backup_root(app=app)
   )
   vapply(dirs, dir.create, logical(1), recursive=TRUE, showWarnings=FALSE)
   invisible(dirs)

@@ -70,6 +70,8 @@ ullmeApp = function(main_dir, userid="skranz", role="teacher", allowed_roles = c
   app$audio_dir = ullme_cur_session_audio_dir(cur_session_dir=app$cur_session_dir)
   app$definition_downloads_dir = file.path(app$cur_session_dir, "definition_downloads")
   app$definition_imports = list()
+  app$pending_changes = list()
+  app$change_results = list()
   app$courseids = ullme_user_courseids(
     main_dir=main_dir,
     userid=app$userid,
@@ -238,6 +240,30 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_definition_chat,
     app = app
   )
+  eventHandler(
+    eventId = "ullme_agent_settings_open_event",
+    id = NULL,
+    fun = ullme_handle_agent_settings_open,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_agent_settings_save_event",
+    id = NULL,
+    fun = ullme_handle_agent_settings_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_change_approval_event",
+    id = NULL,
+    fun = ullme_handle_change_approval,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_change_undo_event",
+    id = NULL,
+    fun = ullme_handle_change_undo,
+    app = app
+  )
   ullme_register_audio_handlers(app=app)
   invisible(TRUE)
 }
@@ -360,6 +386,12 @@ ullme_appbar_ui = function(app=getApp()) {
           class = "ullme-settings-link",
           type = "button",
           "Skill Library"
+        ),
+        tags$button(
+          id = "ullme_agent_settings_btn",
+          class = "ullme-settings-link",
+          type = "button",
+          "Agent tools & change history"
         )
       )
     )
@@ -825,17 +857,28 @@ ullme_handle_add_course = function(courseid=NULL, coursename="", times=NULL, app
   courseid = tryCatch(ullme_clean_courseid(courseid), error=function(e) "")
   if (!nzchar(courseid)) return(invisible(NULL))
 
-  ullme_make_course(
-    main_dir=app$glob$main_dir,
-    userid=app$userid,
-    role=app$role,
-    semester=app$semester,
-    courseid=courseid,
-    coursename=coursename
-  )
+  if (identical(app$role, "teacher")) {
+    result = tryCatch(
+      ullme_create_teacher_course(
+        courseid=courseid,
+        coursename=coursename,
+        times=times,
+        app=app
+      ),
+      error=function(e) NULL
+    )
+    if (is.null(result) || !isTRUE(result$ok)) return(invisible(NULL))
+  } else {
+    ullme_make_course(
+      main_dir=app$glob$main_dir,
+      userid=app$userid,
+      role=app$role,
+      semester=app$semester,
+      courseid=courseid,
+      coursename=coursename
+    )
+  }
   app$courseid = courseid
-  course = list(courseid=courseid, coursename=paste0(coursename)[1], times=times)
-  ullme_save_course_settings(app=app, course=course)
   ullme_refresh_course_state(app=app)
   app$courseid = courseid
   ullme_send_course_state(app=app)

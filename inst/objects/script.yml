@@ -1,0 +1,8 @@
+oid: script
+name: Lecture script
+level: course
+type: doc
+doc_dir: background
+descr: >
+  A written lecture script, set of notes, or other text that accompanies the
+  course and can be mapped to lecture events.

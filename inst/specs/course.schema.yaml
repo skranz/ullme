@@ -20,7 +20,6 @@ properties:
   coursename:
     type: string
     description: "Human-readable course name."
-    minLength: 1
     examples:
       - Microeconomics
   times:
@@ -37,17 +36,17 @@ properties:
       properties:
         weekday:
           type: string
-          description: "Weekday 2 letters"
+          description: "Full lowercase weekday name."
           enum:
-            - mo
-            - tu
-            - we
-            - th
-            - fr
-            - sa
-            - su
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday
           examples:
-            - mo
+            - monday
         start:
           type: string
           description: "Start time in 24-hour HH:MM format."

@@ -174,12 +174,21 @@ ullme_add_course_ai_tutor = function(tutorid, app=getApp()) {
   if (is.null(definition) || is.null(course_dir)) return(FALSE)
 
   tutor_dir = ullme_course_ai_tutor_dir(course_dir, tutorid)
-  dir.create(file.path(tutor_dir, "instances"), recursive=TRUE, showWarnings=FALSE)
-  path = ullme_course_ai_tutor_path(course_dir, tutorid)
-  if (!file.exists(path)) {
-    yaml::write_yaml(list(tutorid=tutorid, enabled=TRUE), path)
-  }
-  TRUE
+  if (dir.exists(tutor_dir)) return(TRUE)
+  stage = tempfile(pattern=".ullme-course-tutor-")
+  dir.create(file.path(stage, "instances"), recursive=TRUE, showWarnings=FALSE)
+  on.exit(if (dir.exists(stage)) unlink(stage, recursive=TRUE), add=TRUE)
+  yaml::write_yaml(list(tutorid=tutorid, enabled=TRUE), file.path(stage, "tutor.yaml"))
+  operation = ullme_new_change(
+    action="course_tutor_add",
+    summary=paste0("Add AI Tutor ", tutorid, " to course ", app$courseid),
+    origin="ui",
+    details=list(courseid=app$courseid, tutorid=tutorid),
+    changes=list(ullme_change_copy(stage, tutor_dir, overwrite=FALSE)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  isTRUE(result$ok)
 }
 
 
@@ -196,8 +205,18 @@ ullme_set_course_ai_tutor_enabled = function(tutorid, enabled, app=getApp()) {
   if (is.null(course_tutor)) course_tutor = list()
   course_tutor$tutorid = tutorid
   course_tutor$enabled = isTRUE(enabled)
-  yaml::write_yaml(course_tutor, path)
-  TRUE
+  content = trimws(yaml::as.yaml(course_tutor))
+  operation = ullme_new_change(
+    action="course_tutor_toggle",
+    summary=paste0(if (isTRUE(enabled)) "Enable" else "Disable",
+                   " AI Tutor ", tutorid, " for course ", app$courseid),
+    origin="ui",
+    details=list(courseid=app$courseid, tutorid=tutorid, enabled=isTRUE(enabled)),
+    changes=list(ullme_change_write(path, content)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  isTRUE(result$ok)
 }
 
 

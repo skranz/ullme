@@ -235,30 +235,21 @@ ullme_apply_definition_import = function(token, target_source="personal",
     stop("A complete definition already exists at this destination.")
   }
 
-  backup = NULL
-  if (conflict) {
-    backup = tempfile(pattern=".ullme-import-backup-", tmpdir=dirname(target_dir))
-    if (!file.rename(target_dir, backup)) stop("Could not prepare the existing definition for replacement.")
-  }
-  success = FALSE
-  on.exit({
-    if (!success && !is.null(backup) && dir.exists(backup) && !dir.exists(target_dir)) {
-      file.rename(backup, target_dir)
-    }
-  }, add=TRUE)
-
-  tryCatch(
-    ullme_copy_definition_dir(
-      source_dir=record$definition_dir,
-      target_dir=target_dir
-    ),
-    error=function(e) {
-      if (!is.null(backup) && dir.exists(backup) && !dir.exists(target_dir)) {
-        file.rename(backup, target_dir)
-      }
-      stop(conditionMessage(e))
-    }
+  operation = ullme_new_change(
+    action="definition_import",
+    summary=paste0(if (conflict) "Replace " else "Import ", target_source, " ",
+                   kind, " definition ", definitionid),
+    origin="ui",
+    details=list(kind=kind, definitionid=definitionid, source=target_source),
+    changes=list(ullme_change_copy(
+      source=record$definition_dir,
+      target=target_dir,
+      overwrite=conflict && isTRUE(replace)
+    )),
+    app=app
   )
+  result = ullme_submit_change(operation, app=app)
+  if (!isTRUE(result$ok)) stop(result$message %||% "Could not import the definition.")
   imported = ullme_definition_metadata_at(
     kind=kind,
     definitionid=definitionid,
@@ -266,13 +257,9 @@ ullme_apply_definition_import = function(token, target_source="personal",
     app=app
   )
   if (is.null(imported)) {
-    unlink(target_dir, recursive=TRUE)
-    if (!is.null(backup) && dir.exists(backup)) file.rename(backup, target_dir)
     stop("The imported definition failed validation after copying.")
   }
 
-  success = TRUE
-  if (!is.null(backup) && dir.exists(backup)) unlink(backup, recursive=TRUE)
   if (dir.exists(record$import_root)) unlink(record$import_root, recursive=TRUE)
   app$definition_imports[[token]] = NULL
   list(

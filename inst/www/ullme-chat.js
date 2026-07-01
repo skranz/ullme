@@ -63,6 +63,7 @@
     var skillsButton = byId("ullme_skills_btn");
     var manageTutorsButton = byId("ullme_manage_tutors_btn");
     var manageSkillsButton = byId("ullme_manage_skills_btn");
+    var agentSettingsButton = byId("ullme_agent_settings_btn");
 
     if (!messages || !input || !submitButton) return;
 
@@ -158,6 +159,13 @@
         closeDefinitionImportPreview();
         return;
       }
+      if (byId("ullme_change_approval_overlay")) {
+        return;
+      }
+      if (byId("ullme_agent_settings_overlay")) {
+        closeAgentSettings();
+        return;
+      }
       if (byId("ullme_definition_create_dialog")) {
         closeCreateDefinitionDialog();
         return;
@@ -206,6 +214,13 @@
       manageSkillsButton.addEventListener("click", function () {
         closeUserSettings();
         requestDefinitionWorkspace("skill");
+      });
+    }
+
+    if (agentSettingsButton) {
+      agentSettingsButton.addEventListener("click", function () {
+        closeUserSettings();
+        sendSidebarEvent("ullme_agent_settings_open_event", {});
       });
     }
 
@@ -1606,6 +1621,258 @@
     if (overlay) overlay.remove();
   }
 
+  function closeAgentSettings() {
+    var overlay = byId("ullme_agent_settings_overlay");
+    if (overlay) overlay.remove();
+  }
+
+  function approvalSelect(labelText, name, value) {
+    var label = document.createElement("label");
+    var span = document.createElement("span");
+    var select = document.createElement("select");
+    label.className = "ullme-agent-setting-field";
+    span.textContent = labelText;
+    select.name = name;
+    ["allow", "ask", "deny"].forEach(function (policy) {
+      var option = document.createElement("option");
+      option.value = policy;
+      option.textContent = policy.charAt(0).toUpperCase() + policy.slice(1);
+      option.selected = policy === (value || "ask");
+      select.appendChild(option);
+    });
+    label.appendChild(span);
+    label.appendChild(select);
+    return label;
+  }
+
+  function openAgentSettings(payload) {
+    closeAgentSettings();
+    payload = payload || {};
+    var approval = payload.approval || {};
+    var history = Array.isArray(payload.history) ? payload.history : [];
+    var overlay = document.createElement("div");
+    var dialog = document.createElement("section");
+    var head = document.createElement("div");
+    var title = document.createElement("div");
+    var close = document.createElement("button");
+    var explanation = document.createElement("p");
+    var settings = document.createElement("div");
+    var historyTitle = document.createElement("div");
+    var historyList = document.createElement("div");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var save = document.createElement("button");
+
+    overlay.id = "ullme_agent_settings_overlay";
+    overlay.className = "ullme-dialog-overlay";
+    dialog.className = "ullme-agent-settings-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Agent tools and change history");
+    head.className = "ullme-agent-settings-head";
+    title.className = "ullme-dialog-title";
+    title.textContent = "Agent tools & change history";
+    close.type = "button";
+    close.className = "ullme-icon-button";
+    close.innerHTML = icons.close;
+    close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", closeAgentSettings);
+    explanation.className = "ullme-agent-settings-note";
+    explanation.textContent = "Choose whether agent-originated file changes run immediately, ask first, or are denied. Manual saves are still validated, backed up, and logged.";
+    settings.className = "ullme-agent-settings-grid";
+    settings.appendChild(approvalSelect("Default", "default", approval.default));
+    settings.appendChild(approvalSelect("Copy materials", "copy_materials", approval.copy_materials));
+    settings.appendChild(approvalSelect("Rewrite definitions", "rewrite_definitions", approval.rewrite_definitions));
+    settings.appendChild(approvalSelect("Write object indexes", "write_object_indexes", approval.write_object_indexes));
+    settings.appendChild(approvalSelect("Agent undo", "undo", approval.undo));
+
+    historyTitle.className = "ullme-agent-history-title";
+    historyTitle.textContent = "Recent changes";
+    historyList.className = "ullme-agent-history";
+    if (!history.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-agent-history-empty";
+      empty.textContent = "No ULLME-managed changes have been recorded yet.";
+      historyList.appendChild(empty);
+    } else {
+      history.forEach(function (entry) {
+        var row = document.createElement("div");
+        var text = document.createElement("div");
+        var summary = document.createElement("strong");
+        var meta = document.createElement("span");
+        var undo = document.createElement("button");
+        row.className = "ullme-agent-history-row";
+        summary.textContent = entry.summary || entry.action || entry.id;
+        meta.textContent = (entry.committed_at || "") + " · " + (entry.origin || "ui") + " · " + (entry.status || "");
+        text.appendChild(summary);
+        text.appendChild(meta);
+        undo.type = "button";
+        undo.className = "ullme-secondary-action";
+        undo.textContent = "Undo";
+        undo.disabled = entry.status !== "committed";
+        undo.addEventListener("click", function () {
+          undo.disabled = true;
+          undo.textContent = "Undoing…";
+          sendSidebarEvent("ullme_change_undo_event", { operation_id: entry.id });
+        });
+        row.appendChild(text);
+        row.appendChild(undo);
+        historyList.appendChild(row);
+      });
+    }
+
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Close";
+    cancel.addEventListener("click", closeAgentSettings);
+    save.type = "button";
+    save.className = "ullme-primary-action";
+    save.textContent = "Save policies";
+    save.addEventListener("click", function () {
+      var values = {};
+      Array.prototype.forEach.call(settings.querySelectorAll("select"), function (select) {
+        values[select.name] = select.value;
+      });
+      save.disabled = true;
+      sendSidebarEvent("ullme_agent_settings_save_event", values);
+    });
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeAgentSettings();
+    });
+
+    head.appendChild(title);
+    head.appendChild(close);
+    actions.appendChild(cancel);
+    actions.appendChild(save);
+    dialog.appendChild(head);
+    dialog.appendChild(explanation);
+    dialog.appendChild(settings);
+    dialog.appendChild(historyTitle);
+    dialog.appendChild(historyList);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+  }
+
+  function closeChangeApproval() {
+    var overlay = byId("ullme_change_approval_overlay");
+    if (overlay) overlay.remove();
+  }
+
+  function openChangeApproval(operation) {
+    closeChangeApproval();
+    operation = operation || {};
+    var changes = Array.isArray(operation.changes) ? operation.changes : [];
+    var overlay = document.createElement("div");
+    var dialog = document.createElement("section");
+    var title = document.createElement("div");
+    var summary = document.createElement("p");
+    var meta = document.createElement("div");
+    var list = document.createElement("div");
+    var actions = document.createElement("div");
+    var reject = document.createElement("button");
+    var approve = document.createElement("button");
+
+    overlay.id = "ullme_change_approval_overlay";
+    overlay.className = "ullme-dialog-overlay";
+    dialog.className = "ullme-change-approval-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Approve agent change");
+    title.className = "ullme-dialog-title";
+    title.textContent = "Approve agent change?";
+    summary.className = "ullme-change-approval-summary";
+    summary.textContent = operation.summary || "The assistant proposes a file change.";
+    meta.className = "ullme-change-approval-meta";
+    meta.textContent = (operation.action || "change") + (operation.courseid ? " · " + operation.courseid : "");
+    list.className = "ullme-change-approval-files";
+    changes.forEach(function (change) {
+      var row = document.createElement("div");
+      var kind = document.createElement("strong");
+      var path = document.createElement("code");
+      kind.textContent = (change.type || "change").replace(/_/g, " ");
+      path.textContent = change.target || "";
+      row.appendChild(kind);
+      row.appendChild(path);
+      list.appendChild(row);
+      if (change.preview) {
+        var preview = document.createElement("details");
+        var previewTitle = document.createElement("summary");
+        var compare = document.createElement("div");
+        var before = document.createElement("div");
+        var after = document.createElement("div");
+        var beforeLabel = document.createElement("span");
+        var afterLabel = document.createElement("span");
+        var beforeCode = document.createElement("pre");
+        var afterCode = document.createElement("pre");
+        preview.className = "ullme-change-preview";
+        previewTitle.textContent = "Review YAML";
+        compare.className = "ullme-change-preview-compare";
+        beforeLabel.textContent = "Before";
+        afterLabel.textContent = "After";
+        beforeCode.textContent = change.preview.before || "(new file)";
+        afterCode.textContent = change.preview.after || "";
+        before.appendChild(beforeLabel);
+        before.appendChild(beforeCode);
+        after.appendChild(afterLabel);
+        after.appendChild(afterCode);
+        compare.appendChild(before);
+        compare.appendChild(after);
+        preview.appendChild(previewTitle);
+        preview.appendChild(compare);
+        list.appendChild(preview);
+      }
+      if (Array.isArray(change.warnings) && change.warnings.length) {
+        var warning = document.createElement("div");
+        warning.className = "ullme-change-warning";
+        warning.textContent = change.warnings.join(" ");
+        list.appendChild(warning);
+      }
+    });
+    actions.className = "ullme-dialog-actions";
+    reject.type = "button";
+    reject.className = "ullme-secondary-action";
+    reject.textContent = "Reject";
+    approve.type = "button";
+    approve.className = "ullme-primary-action";
+    approve.textContent = "Approve once";
+    function decide(approved) {
+      reject.disabled = true;
+      approve.disabled = true;
+      sendSidebarEvent("ullme_change_approval_event", {
+        operation_id: operation.id,
+        approved: approved
+      });
+    }
+    reject.addEventListener("click", function () { decide(false); });
+    approve.addEventListener("click", function () { decide(true); });
+    actions.appendChild(reject);
+    actions.appendChild(approve);
+    dialog.appendChild(title);
+    dialog.appendChild(summary);
+    dialog.appendChild(meta);
+    dialog.appendChild(list);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    approve.focus();
+  }
+
+  function changeApprovalComplete(result) {
+    closeChangeApproval();
+    if (result && result.status === "error") {
+      window.alert(result.message || "The change could not be completed.");
+    }
+  }
+
+  function changeUndoComplete(result, payload) {
+    if (result && result.status === "error") {
+      window.alert(result.message || "The change could not be undone.");
+    }
+    openAgentSettings(payload || {});
+  }
+
   function courseDialogField(labelText, id) {
     var label = document.createElement("label");
     var span = document.createElement("span");
@@ -2279,6 +2546,10 @@
   window.ullme.definitionImportComplete = definitionImportComplete;
   window.ullme.downloadDefinition = downloadDefinition;
   window.ullme.receiveDefinitionAssistantMessage = receiveDefinitionAssistantMessage;
+  window.ullme.openAgentSettings = openAgentSettings;
+  window.ullme.openChangeApproval = openChangeApproval;
+  window.ullme.changeApprovalComplete = changeApprovalComplete;
+  window.ullme.changeUndoComplete = changeUndoComplete;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

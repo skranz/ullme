@@ -257,20 +257,18 @@ ullme_validate_definition_content = function(kind, definitionid, file, content) 
   }
 
   if (grepl("\\.ya?ml$", file, ignore.case=TRUE)) {
-    parsed = tryCatch(
-      yaml::yaml.load(content, eval.expr=FALSE),
-      error=function(e) stop("Invalid YAML: ", conditionMessage(e))
-    )
     core_yaml = (identical(kind, "tutor") && identical(file, "tutor.yaml")) ||
       (identical(kind, "skill") && identical(file, "ullme.yaml"))
     if (core_yaml) {
-      if (!is.list(parsed)) stop("The main YAML file must contain a mapping.")
-      declared_id = if (identical(kind, "tutor")) parsed$tutorid else parsed$skillid
-      if (!is.null(declared_id) &&
-          !identical(paste0(declared_id)[1], definitionid)) {
-        stop("The definition ID inside the YAML file must match its directory name.")
-      }
+      result = ullme_validate_definition_yaml(
+        kind=kind,
+        definitionid=definitionid,
+        content=content
+      )
+    } else {
+      result = ullme_parse_yaml_text(content, file)
     }
+    ullme_validation_stop(result)
   }
   if (identical(kind, "skill") && identical(file, "SKILL.md") &&
       !nzchar(trimws(content))) {
@@ -307,11 +305,16 @@ ullme_save_definition_file = function(kind, definitionid, source, file, content,
   )
 
   target = file.path(definition_dir, file)
-  temp = tempfile(pattern=".ullme-definition-", tmpdir=dirname(target))
-  on.exit(if (file.exists(temp)) unlink(temp), add=TRUE)
-  writeLines(paste0(content, collapse="\n"), temp, useBytes=TRUE)
-  if (!file.copy(temp, target, overwrite=TRUE)) stop("Could not save the definition file.")
-  TRUE
+  operation = ullme_new_change(
+    action="definition_edit",
+    summary=paste0("Save ", kind, " definition ", definitionid, "/", file),
+    origin="ui",
+    details=list(kind=kind, definitionid=definitionid, source=source),
+    changes=list(ullme_change_write(target, content)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  isTRUE(result$ok)
 }
 
 
@@ -393,7 +396,21 @@ ullme_copy_definition = function(kind, definitionid, source, target_source,
     source=target_source,
     app=app
   )
-  ullme_copy_definition_dir(source_dir=source_dir, target_dir=target_dir)
+  operation = ullme_new_change(
+    action="definition_copy",
+    summary=paste0("Create ", target_source, " copy of ", kind, " ", definitionid),
+    origin="ui",
+    details=list(
+      kind=kind,
+      definitionid=definitionid,
+      source=source,
+      target_source=target_source
+    ),
+    changes=list(ullme_change_copy(source_dir, target_dir, overwrite=FALSE)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  isTRUE(result$ok)
 }
 
 
@@ -422,7 +439,9 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
   if (dir.exists(target_dir) || file.exists(target_dir)) {
     stop("A personal definition directory with this ID already exists.")
   }
-  dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
+  stage = tempfile(pattern=".ullme-definition-create-")
+  dir.create(stage, recursive=TRUE, showWarnings=FALSE)
+  on.exit(if (dir.exists(stage)) unlink(stage, recursive=TRUE), add=TRUE)
   if (identical(kind, "tutor")) {
     yaml::write_yaml(
       list(
@@ -433,7 +452,7 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
         required_material_roles=list(),
         allowed_tools=list()
       ),
-      file.path(target_dir, "tutor.yaml")
+      file.path(stage, "tutor.yaml")
     )
   } else {
     frontmatter = trimws(yaml::as.yaml(list(
@@ -450,7 +469,7 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
         "",
         "Add the Skill instructions here."
       ),
-      file.path(target_dir, "SKILL.md"),
+      file.path(stage, "SKILL.md"),
       useBytes=TRUE
     )
     yaml::write_yaml(
@@ -465,10 +484,19 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
         expected_outputs=list(),
         required_tools=list()
       ),
-      file.path(target_dir, "ullme.yaml")
+      file.path(stage, "ullme.yaml")
     )
   }
-  TRUE
+  operation = ullme_new_change(
+    action="definition_create",
+    summary=paste0("Create personal ", kind, " definition ", definitionid),
+    origin="ui",
+    details=list(kind=kind, definitionid=definitionid, source="personal"),
+    changes=list(ullme_change_copy(stage, target_dir, overwrite=FALSE)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  isTRUE(result$ok)
 }
 
 
@@ -500,10 +528,16 @@ ullme_delete_definition_copy = function(kind, definitionid, source, app=getApp()
     source=source,
     app=app
   )
-  unlink(definition_dir, recursive=TRUE)
-  if (dir.exists(definition_dir) || file.exists(definition_dir)) {
-    stop("Could not delete the definition copy.")
-  }
+  operation = ullme_new_change(
+    action="definition_delete",
+    summary=paste0("Delete ", source, " ", kind, " definition ", definitionid),
+    origin="ui",
+    details=list(kind=kind, definitionid=definitionid, source=source),
+    changes=list(ullme_change_delete(definition_dir)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  if (!isTRUE(result$ok)) stop(result$message %||% "Could not delete the definition copy.")
 
   if (identical(kind, "tutor")) {
     return(ullme_ai_tutor_definition(definitionid, app=app))

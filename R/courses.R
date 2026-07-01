@@ -108,9 +108,10 @@ ullme_course_material_dir = function(course_dir, category) {
 }
 
 
-ullme_init_course_material_dirs = function(course_dir) {
+ullme_init_course_material_dirs = function(course_dir, app=NULL) {
   restore.point("ullme_init_course_material_dirs")
   categories = ullme_course_material_categories()
+  legacy_changes = list()
   for (category in categories) {
     target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
     dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
@@ -122,8 +123,27 @@ ullme_init_course_material_dirs = function(course_dir) {
     for (file in files) {
       target = file.path(target_dir, file)
       dir.create(dirname(target), recursive=TRUE, showWarnings=FALSE)
-      if (!file.exists(target)) file.copy(file.path(legacy_dir, file), target)
+      if (!file.exists(target)) {
+        source = file.path(legacy_dir, file)
+        if (!is.null(app) && identical(app$role, "teacher")) {
+          legacy_changes[[length(legacy_changes) + 1L]] =
+            ullme_change_copy(source, target, overwrite=FALSE)
+        } else {
+          file.copy(source, target)
+        }
+      }
     }
+  }
+  if (length(legacy_changes) > 0) {
+    operation = ullme_new_change(
+      action="material_migration",
+      summary=paste0("Migrate ", length(legacy_changes), " legacy material file",
+                     if (length(legacy_changes) == 1) "" else "s"),
+      origin="ui",
+      changes=legacy_changes,
+      app=app
+    )
+    ullme_submit_change(operation, app=app)
   }
   invisible(file.path(course_dir, "materials"))
 }
@@ -229,7 +249,7 @@ ullme_course_summary = function(app) {
     courseid=app$courseid
   )
   if (!dir.exists(course_dir)) return(NULL)
-  ullme_init_course_material_dirs(course_dir=course_dir)
+  ullme_init_course_material_dirs(course_dir=course_dir, app=app)
   list(
     course = ullme_read_course_yaml(course_dir),
     material = ullme_course_material_files(course_dir)
@@ -257,7 +277,22 @@ ullme_save_course_settings = function(app, course) {
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) return(NULL)
   course$courseid = app$courseid
-  ullme_write_course_yaml(course_dir=course_dir, course=course)
+  course = ullme_normalize_course(course)
+  content = trimws(yaml::as.yaml(course))
+  if (!identical(app$role, "teacher")) {
+    return(ullme_write_course_yaml(course_dir=course_dir, course=course))
+  }
+  validation = ullme_validate_course_yaml(content)
+  ullme_validation_stop(validation)
+  operation = ullme_new_change(
+    action="course_settings",
+    summary=paste0("Update settings for course ", app$courseid),
+    origin="ui",
+    details=list(courseid=app$courseid),
+    changes=list(ullme_change_write(ullme_course_yaml_path(course_dir), content)),
+    app=app
+  )
+  ullme_submit_change(operation, app=app)
 }
 
 
@@ -282,6 +317,49 @@ ullme_store_material_uploads = function(app, value, category) {
   if (is.null(course_dir) || is.null(value) || NROW(value) == 0) return(character(0))
   target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
   dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
+
+  if (identical(app$role, "teacher")) {
+    stage = tempfile(pattern=".ullme-material-upload-")
+    dir.create(stage, recursive=TRUE, showWarnings=FALSE)
+    on.exit(if (dir.exists(stage)) unlink(stage, recursive=TRUE), add=TRUE)
+    changes = list()
+    stored = character(0)
+    for (i in seq_len(NROW(value))) {
+      name = ullme_clean_file_name(value$name[[i]])
+      source = value$datapath[[i]]
+      if (tolower(tools::file_ext(name)) == "zip") {
+        extract_dir = file.path(stage, paste0("zip_", i))
+        dir.create(extract_dir, recursive=TRUE, showWarnings=FALSE)
+        entries = ullme_unzip_material(source=source, target_dir=extract_dir)
+        for (entry in entries) {
+          from = file.path(extract_dir, entry)
+          if (!file.exists(from) || dir.exists(from)) next
+          changes[[length(changes) + 1L]] = ullme_change_copy(
+            from, file.path(target_dir, entry), overwrite=TRUE
+          )
+          stored = c(stored, entry)
+        }
+      } else {
+        changes[[length(changes) + 1L]] = ullme_change_copy(
+          source, file.path(target_dir, name), overwrite=TRUE
+        )
+        stored = c(stored, name)
+      }
+    }
+    if (length(changes) == 0) return(character(0))
+    operation = ullme_new_change(
+      action="material_upload",
+      summary=paste0("Upload ", length(changes), " material file",
+                     if (length(changes) == 1) "" else "s", " to ", category),
+      origin="ui",
+      details=list(courseid=app$courseid, category=category),
+      changes=changes,
+      app=app
+    )
+    result = ullme_submit_change(operation, app=app)
+    if (!isTRUE(result$ok)) stop(result$message %||% "Could not store uploaded materials.")
+    return(invisible(stored))
+  }
 
   stored = character(0)
   for (i in seq_len(NROW(value))) {
@@ -323,8 +401,57 @@ ullme_delete_material_file = function(app, category, path) {
   category_dir_norm = normalizePath(category_dir, winslash="/", mustWork=TRUE)
   if (!startsWith(target, paste0(category_dir_norm, "/"))) return(FALSE)
   if (!file.exists(target) || dir.exists(target)) return(FALSE)
+  if (identical(app$role, "teacher")) {
+    operation = ullme_new_change(
+      action="material_delete",
+      summary=paste0("Delete material ", path),
+      origin="ui",
+      details=list(courseid=app$courseid, category=category),
+      changes=list(ullme_change_delete(target)),
+      app=app
+    )
+    result = ullme_submit_change(operation, app=app)
+    return(isTRUE(result$ok))
+  }
   unlink(target)
   TRUE
+}
+
+
+ullme_create_teacher_course = function(courseid, coursename="", times=NULL,
+                                        app=getApp()) {
+  courseid = ullme_clean_courseid(courseid)
+  target = ullme_course_dir(
+    main_dir=app$glob$main_dir,
+    userid=app$userid,
+    role="teacher",
+    semester=app$semester,
+    courseid=courseid
+  )
+  if (dir.exists(target) || file.exists(target)) stop("A course with this ID already exists.")
+
+  stage = tempfile(pattern=".ullme-course-create-")
+  dir.create(stage, recursive=TRUE, showWarnings=FALSE)
+  on.exit(if (dir.exists(stage)) unlink(stage, recursive=TRUE), add=TRUE)
+  ullme_init_course_material_dirs(stage)
+  course = ullme_normalize_course(list(
+    courseid=courseid,
+    coursename=paste0(coursename)[1],
+    times=times
+  ))
+  content = trimws(yaml::as.yaml(course))
+  ullme_validation_stop(ullme_validate_course_yaml(content))
+  writeLines(content, ullme_course_yaml_path(stage), useBytes=TRUE)
+
+  operation = ullme_new_change(
+    action="course_create",
+    summary=paste0("Create course ", courseid),
+    origin="ui",
+    details=list(courseid=courseid, semester=app$semester),
+    changes=list(ullme_change_copy(stage, target, overwrite=FALSE)),
+    app=app
+  )
+  ullme_submit_change(operation, app=app)
 }
 
 
