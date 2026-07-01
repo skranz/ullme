@@ -128,6 +128,28 @@ If a teacher customizes a tutor for one course, copy the complete currently reso
 
 Formal version management is not required initially.
 
+## Teacher UI
+
+The course's AI Tutors tab shows installed Tutor families and opens the resolved
+Tutor catalog. Installed cards and catalog entries can open the shared
+Definition Workspace.
+
+The workspace exposes Markdown and YAML files directly. Package and General
+definitions are read-only for teachers. A teacher can create a Personal Tutor
+definition, make a Personal copy of an existing definition, or use **Customize
+for course** to copy the complete resolved definition into
+`ai_tutor_definitions/<tutorid>/` before editing it.
+
+Personal and course-local copies can be deleted; deletion does not uninstall a
+course Tutor and instead restores the next definition in the resolution order.
+Tutor definitions can be downloaded or imported as YAML. Importing may target
+the Personal library or the selected course and replaces a complete conflicting
+copy only after an explicit preview.
+
+The optional Definition Assistant can rewrite the current file as an unsaved
+draft. Teachers review, undo, or explicitly save the result. Shared read-only
+definitions must first be copied to Personal or course-local storage.
+
 ## Enabled State
 
 Both levels may have an `enabled` field:

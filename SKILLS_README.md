@@ -75,6 +75,25 @@ package skill
 
 Do not merge arbitrary YAML fields across levels. Customization should normally create a complete personal copy.
 
+## Teacher UI
+
+The Skills button beside the teacher composer opens the activation catalog.
+Catalog entries, the catalog's management action, and Personal Settings can
+open the shared Definition Workspace.
+
+The workspace exposes `SKILL.md`, `ullme.yaml`, and Markdown or YAML reference
+files directly. Package and General Skills are read-only for teachers.
+Teachers can create Personal Skills or make a complete Personal copy before
+editing a shared Skill.
+
+Personal Skills can be deleted, downloaded as ZIP bundles, and imported from
+validated ZIP bundles. Imports require `SKILL.md` and `ullme.yaml`; conflicting
+Personal Skills are replaced as complete copies rather than merged.
+
+The optional Definition Assistant sees the selected Skill files and applies its
+rewrite only to the unsaved editor draft. Undo and explicit Save remain under
+the teacher's control.
+
 ## Activation
 
 Skills can be activated in two ways.

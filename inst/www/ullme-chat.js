@@ -8,7 +8,12 @@
     aiTutors: [],
     aiTutorCatalog: [],
     skills: [],
-    activeSkill: null
+    activeSkill: null,
+    definitionWorkspace: null,
+    definitionOriginalContent: "",
+    definitionAssistantOpen: false,
+    definitionAssistantMessages: {},
+    definitionAssistantRequestIndex: 0
   };
 
   var materialLabels = {
@@ -56,6 +61,8 @@
     var userSettings = byId("ullme_user_settings");
     var addTutorButton = byId("ullme_ai_tutor_add_btn");
     var skillsButton = byId("ullme_skills_btn");
+    var manageTutorsButton = byId("ullme_manage_tutors_btn");
+    var manageSkillsButton = byId("ullme_manage_skills_btn");
 
     if (!messages || !input || !submitButton) return;
 
@@ -147,6 +154,18 @@
       if (event.key !== "Escape") return;
       closeSidebarMenus();
       closeUserSettings();
+      if (byId("ullme_definition_import_preview")) {
+        closeDefinitionImportPreview();
+        return;
+      }
+      if (byId("ullme_definition_create_dialog")) {
+        closeCreateDefinitionDialog();
+        return;
+      }
+      if (byId("ullme_definition_overlay")) {
+        closeDefinitionWorkspace();
+        return;
+      }
       closeCatalogDialog();
     });
 
@@ -173,6 +192,20 @@
     if (skillsButton) {
       skillsButton.addEventListener("click", function () {
         openCatalogDialog("skills");
+      });
+    }
+
+    if (manageTutorsButton) {
+      manageTutorsButton.addEventListener("click", function () {
+        closeUserSettings();
+        requestDefinitionWorkspace("tutor");
+      });
+    }
+
+    if (manageSkillsButton) {
+      manageSkillsButton.addEventListener("click", function () {
+        closeUserSettings();
+        requestDefinitionWorkspace("skill");
       });
     }
 
@@ -364,6 +397,7 @@
       var description = document.createElement("div");
       var footer = document.createElement("div");
       var instances = document.createElement("span");
+      var viewDefinition = document.createElement("button");
       var toggleLabel = document.createElement("label");
       var toggle = document.createElement("input");
       var toggleTrack = document.createElement("span");
@@ -380,6 +414,13 @@
       footer.className = "ullme-feature-card-footer";
       instances.className = "ullme-feature-card-meta";
       instances.textContent = Number(tutor.instance_count || 0) + " instances";
+      viewDefinition.type = "button";
+      viewDefinition.className = "ullme-text-action ullme-feature-card-view";
+      viewDefinition.textContent = "View definition";
+      viewDefinition.disabled = tutor.source === "missing";
+      viewDefinition.addEventListener("click", function () {
+        requestDefinitionWorkspace("tutor", tutor);
+      });
       toggleLabel.className = "ullme-toggle";
       toggleLabel.title = tutor.enabled ? "Disable tutor" : "Enable tutor";
       toggle.type = "checkbox";
@@ -401,6 +442,7 @@
       head.appendChild(toggleLabel);
       footer.appendChild(instances);
       appendMaterialRoles(footer, tutor.required_material_roles);
+      footer.appendChild(viewDefinition);
       card.appendChild(head);
       card.appendChild(description);
       card.appendChild(footer);
@@ -438,6 +480,8 @@
     var heading = document.createElement("div");
     var title = document.createElement("div");
     var subtitle = document.createElement("div");
+    var headActions = document.createElement("div");
+    var manage = document.createElement("button");
     var close = document.createElement("button");
     var list = document.createElement("div");
     var note = document.createElement("div");
@@ -456,6 +500,14 @@
     subtitle.textContent = isTutorCatalog
       ? "Add a resolved tutor definition to this course."
       : "Activate a reusable workflow for your next task.";
+    headActions.className = "ullme-catalog-head-actions";
+    manage.type = "button";
+    manage.className = "ullme-secondary-action";
+    manage.textContent = "Manage definitions";
+    manage.addEventListener("click", function () {
+      closeCatalogDialog();
+      requestDefinitionWorkspace(isTutorCatalog ? "tutor" : "skill");
+    });
     close.type = "button";
     close.className = "ullme-icon-button";
     close.setAttribute("aria-label", "Close");
@@ -470,7 +522,9 @@
     heading.appendChild(title);
     heading.appendChild(subtitle);
     head.appendChild(heading);
-    head.appendChild(close);
+    headActions.appendChild(manage);
+    headActions.appendChild(close);
+    head.appendChild(headActions);
     dialog.appendChild(head);
 
     if (!items.length) {
@@ -502,6 +556,8 @@
     var title = document.createElement("div");
     var badge = document.createElement("span");
     var description = document.createElement("div");
+    var actions = document.createElement("div");
+    var view = document.createElement("button");
     var action = document.createElement("button");
     var id = isTutor ? item.tutorid : item.skillid;
     var installed = isTutor && state.aiTutors.some(function (tutor) {
@@ -517,6 +573,14 @@
     badge.textContent = sourceLabel(item.source);
     description.className = "ullme-feature-card-description";
     description.textContent = item.description || "No description";
+    actions.className = "ullme-catalog-card-actions";
+    view.type = "button";
+    view.className = "ullme-secondary-action";
+    view.textContent = "View";
+    view.addEventListener("click", function () {
+      closeCatalogDialog();
+      requestDefinitionWorkspace(isTutor ? "tutor" : "skill", item);
+    });
     action.type = "button";
     action.className = installed ? "ullme-secondary-action" : "ullme-primary-action";
     action.textContent = installed ? "Added" : (isTutor ? "Add" : "Use skill");
@@ -535,13 +599,886 @@
     body.appendChild(titleRow);
     body.appendChild(description);
     card.appendChild(body);
-    card.appendChild(action);
+    actions.appendChild(view);
+    actions.appendChild(action);
+    card.appendChild(actions);
     return card;
   }
 
   function closeCatalogDialog() {
     var overlay = byId("ullme_catalog_overlay");
     if (overlay) overlay.remove();
+  }
+
+  function requestDefinitionWorkspace(kind, item) {
+    if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
+    item = item || {};
+    sendSidebarEvent("ullme_definition_action_event", {
+      action: "open",
+      kind: kind,
+      definitionid: item.id || item.tutorid || item.skillid || "",
+      source: item.source || ""
+    });
+  }
+
+  function openDefinitionWorkspace(payload) {
+    closeCatalogDialog();
+    removeDefinitionWorkspace(true);
+    payload = payload || {};
+    state.definitionWorkspace = payload;
+
+    var overlay = document.createElement("div");
+    var workspace = document.createElement("section");
+    var header = document.createElement("header");
+    var identity = document.createElement("div");
+    var title = document.createElement("div");
+    var subtitle = document.createElement("div");
+    var navigation = document.createElement("div");
+    var kindTabs = document.createElement("div");
+    var picker = document.createElement("select");
+    var headerActions = document.createElement("div");
+    var importButton = document.createElement("button");
+    var create = document.createElement("button");
+    var assistantToggle = document.createElement("button");
+    var close = document.createElement("button");
+    var body = document.createElement("div");
+    var sidebar = document.createElement("aside");
+    var editor = document.createElement("main");
+    var assistant = document.createElement("aside");
+
+    overlay.id = "ullme_definition_overlay";
+    overlay.className = "ullme-definition-overlay";
+    workspace.className = "ullme-definition-workspace";
+    workspace.classList.toggle(
+      "ullme-definition-assistant-open",
+      state.definitionAssistantOpen
+    );
+    workspace.setAttribute("role", "dialog");
+    workspace.setAttribute("aria-modal", "true");
+    workspace.setAttribute("aria-label", "Definition Workspace");
+    header.className = "ullme-definition-header";
+    identity.className = "ullme-definition-identity";
+    title.className = "ullme-definition-title";
+    title.textContent = "Definition Workspace";
+    subtitle.className = "ullme-definition-subtitle";
+    subtitle.textContent = "View and edit the Markdown and YAML behind uLLMe.";
+    navigation.className = "ullme-definition-navigation";
+    kindTabs.className = "ullme-definition-kind-tabs";
+    picker.className = "ullme-definition-picker";
+    picker.setAttribute("aria-label", "Selected definition");
+    headerActions.className = "ullme-definition-header-actions";
+
+    ["tutor", "skill"].forEach(function (kind) {
+      var tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "ullme-definition-kind-tab";
+      tab.classList.toggle("ullme-definition-kind-tab-active", payload.kind === kind);
+      tab.textContent = kind === "tutor" ? "AI Tutors" : "Skills";
+      tab.addEventListener("click", function () {
+        if (payload.kind === kind) return;
+        requestDefinitionWorkspace(kind);
+      });
+      kindTabs.appendChild(tab);
+    });
+
+    var pickerEntries = (Array.isArray(payload.library) ? payload.library : []).filter(function (item) {
+      return item.kind === payload.kind;
+    });
+    pickerEntries.forEach(function (item, index) {
+      var option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = sourceLabel(item.source) + " · " + (item.label || item.id);
+      option.selected = Boolean(payload.selected) &&
+        payload.selected.id === item.id &&
+        payload.selected.source === item.source;
+      picker.appendChild(option);
+    });
+    picker.disabled = !pickerEntries.length;
+    picker.addEventListener("change", function () {
+      var item = pickerEntries[Number(picker.value)];
+      if (item) requestDefinitionWorkspace(item.kind, item);
+    });
+
+    importButton.type = "button";
+    importButton.className = "ullme-secondary-action";
+    importButton.textContent = "Import";
+    importButton.addEventListener("click", function () {
+      var input = byId("ullme_definition_import_" + (payload.kind || "tutor"));
+      if (!input) return;
+      input.value = "";
+      input.click();
+    });
+    create.type = "button";
+    create.className = "ullme-primary-action";
+    create.textContent = payload.kind === "skill" ? "New Skill" : "New AI Tutor";
+    create.disabled = !payload.can_create;
+    create.addEventListener("click", function () {
+      openCreateDefinitionDialog(payload.kind || "tutor");
+    });
+    assistantToggle.type = "button";
+    assistantToggle.className = "ullme-secondary-action ullme-definition-assistant-toggle";
+    assistantToggle.textContent = state.definitionAssistantOpen ? "Close AI" : "AI assistant";
+    assistantToggle.disabled = !payload.selected;
+    assistantToggle.addEventListener("click", function () {
+      state.definitionAssistantOpen = !state.definitionAssistantOpen;
+      workspace.classList.toggle(
+        "ullme-definition-assistant-open",
+        state.definitionAssistantOpen
+      );
+      assistantToggle.textContent = state.definitionAssistantOpen ? "Close AI" : "AI assistant";
+      if (state.definitionAssistantOpen) {
+        var composer = byId("ullme_definition_assistant_input");
+        if (composer) composer.focus();
+      }
+    });
+    close.type = "button";
+    close.className = "ullme-icon-button";
+    close.setAttribute("aria-label", "Close Definition Workspace");
+    close.innerHTML = icons.close;
+    close.addEventListener("click", closeDefinitionWorkspace);
+
+    identity.appendChild(title);
+    identity.appendChild(subtitle);
+    navigation.appendChild(kindTabs);
+    navigation.appendChild(picker);
+    headerActions.appendChild(importButton);
+    headerActions.appendChild(create);
+    headerActions.appendChild(assistantToggle);
+    headerActions.appendChild(close);
+    header.appendChild(identity);
+    header.appendChild(navigation);
+    header.appendChild(headerActions);
+
+    body.className = "ullme-definition-body";
+    sidebar.className = "ullme-definition-sidebar";
+    editor.className = "ullme-definition-editor";
+    assistant.className = "ullme-definition-assistant";
+    renderDefinitionSidebar(sidebar, payload);
+    renderDefinitionEditor(editor, payload);
+    renderDefinitionAssistant(assistant, payload);
+    body.appendChild(sidebar);
+    body.appendChild(editor);
+    body.appendChild(assistant);
+    workspace.appendChild(header);
+    workspace.appendChild(body);
+    overlay.appendChild(workspace);
+    document.body.appendChild(overlay);
+    close.focus();
+  }
+
+  function renderDefinitionSidebar(sidebar, payload) {
+    var library = Array.isArray(payload.library) ? payload.library : [];
+    var selected = payload.selected || {};
+    var entries = library.filter(function (item) {
+      return item.kind === payload.kind;
+    });
+    var sourceOrder = ["course", "personal", "general", "package"];
+
+    if (!entries.length) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-definition-sidebar-empty";
+      empty.textContent = "No definitions yet";
+      sidebar.appendChild(empty);
+      return;
+    }
+
+    sourceOrder.forEach(function (source) {
+      var groupEntries = entries.filter(function (item) {
+        return item.source === source;
+      });
+      if (!groupEntries.length) return;
+
+      var group = document.createElement("section");
+      var heading = document.createElement("div");
+      heading.className = "ullme-definition-source-heading";
+      heading.textContent = sourceLabel(source);
+      group.className = "ullme-definition-source-group";
+      group.appendChild(heading);
+
+      groupEntries.forEach(function (item) {
+        var button = document.createElement("button");
+        var label = document.createElement("span");
+        var id = document.createElement("span");
+        var isSelected = selected.id === item.id &&
+          selected.source === item.source &&
+          selected.kind === item.kind;
+        button.type = "button";
+        button.className = "ullme-definition-list-item";
+        button.classList.toggle("ullme-definition-list-item-active", isSelected);
+        if (isSelected) button.setAttribute("aria-current", "true");
+        label.className = "ullme-definition-list-label";
+        label.textContent = item.label || item.id;
+        id.className = "ullme-definition-list-id";
+        id.textContent = item.id;
+        button.appendChild(label);
+        button.appendChild(id);
+        button.addEventListener("click", function () {
+          if (isSelected) return;
+          requestDefinitionWorkspace(item.kind, item);
+        });
+        group.appendChild(button);
+      });
+      sidebar.appendChild(group);
+    });
+  }
+
+  function renderDefinitionEditor(editor, payload) {
+    var selected = payload.selected;
+    if (!selected) {
+      var empty = document.createElement("div");
+      empty.className = "ullme-definition-editor-empty";
+      empty.innerHTML = "<strong>No definition selected</strong><span>Create a personal definition or select one from the library.</span>";
+      editor.appendChild(empty);
+      return;
+    }
+
+    var head = document.createElement("div");
+    var heading = document.createElement("div");
+    var titleRow = document.createElement("div");
+    var title = document.createElement("div");
+    var badge = document.createElement("span");
+    var description = document.createElement("div");
+    var definitionActions = document.createElement("div");
+    var files = document.createElement("div");
+    var fileTabs = document.createElement("div");
+    var toolbar = document.createElement("div");
+    var filePath = document.createElement("code");
+    var mode = document.createElement("span");
+    var textarea = document.createElement("textarea");
+    var footer = document.createElement("div");
+    var status = document.createElement("div");
+    var save = document.createElement("button");
+    var records = Array.isArray(selected.files) ? selected.files : [];
+
+    head.className = "ullme-definition-editor-head";
+    heading.className = "ullme-definition-editor-heading";
+    titleRow.className = "ullme-definition-editor-title-row";
+    title.className = "ullme-definition-editor-title";
+    title.textContent = selected.label || selected.id;
+    badge.className = "ullme-source-badge";
+    badge.textContent = sourceLabel(selected.source);
+    description.className = "ullme-definition-editor-description";
+    description.textContent = selected.description || "No description";
+    definitionActions.className = "ullme-definition-copy-actions";
+
+    if (selected.can_make_personal) {
+      definitionActions.appendChild(definitionCopyButton(
+        selected.personal_exists ? "Open personal copy" : "Make personal copy",
+        "copy-personal",
+        selected
+      ));
+    }
+    if (selected.can_customize_course) {
+      definitionActions.appendChild(definitionCopyButton(
+        selected.course_exists ? "Open course copy" : "Customize for course",
+        "copy-course",
+        selected
+      ));
+    }
+    var download = document.createElement("button");
+    download.type = "button";
+    download.className = "ullme-secondary-action";
+    download.textContent = selected.kind === "skill" ? "Download ZIP" : "Download YAML";
+    download.addEventListener("click", function () {
+      sendSidebarEvent("ullme_definition_action_event", {
+        action: "download",
+        kind: selected.kind,
+        definitionid: selected.id,
+        source: selected.source
+      });
+    });
+    definitionActions.appendChild(download);
+    if (selected.can_delete) {
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "ullme-danger-action";
+      remove.textContent = "Delete copy";
+      remove.addEventListener("click", function () {
+        var detail = selected.source === "course"
+          ? "This removes only the course-local definition copy; the Tutor remains installed and falls back to the next available definition."
+          : "This removes the Personal copy and falls back to a General or Package definition when available.";
+        if (!window.confirm("Delete " + (selected.label || selected.id) + "?\n\n" + detail)) return;
+        sendSidebarEvent("ullme_definition_action_event", {
+          action: "delete",
+          kind: selected.kind,
+          definitionid: selected.id,
+          source: selected.source
+        });
+      });
+      definitionActions.appendChild(remove);
+    }
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(badge);
+    heading.appendChild(titleRow);
+    heading.appendChild(description);
+    head.appendChild(heading);
+    head.appendChild(definitionActions);
+
+    files.className = "ullme-definition-files";
+    fileTabs.className = "ullme-definition-file-tabs";
+    toolbar.className = "ullme-definition-file-toolbar";
+    filePath.className = "ullme-definition-file-path";
+    mode.className = "ullme-definition-file-mode";
+    textarea.id = "ullme_definition_file_editor";
+    textarea.className = "ullme-definition-file-editor";
+    textarea.spellcheck = false;
+    footer.className = "ullme-definition-editor-footer";
+    status.className = "ullme-definition-status";
+    save.type = "button";
+    save.className = "ullme-primary-action";
+    save.textContent = "Save";
+    save.disabled = true;
+
+    records.forEach(function (record) {
+      var tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "ullme-definition-file-tab";
+      tab.textContent = record.path;
+      tab.setAttribute("data-definition-file", record.path);
+      tab.addEventListener("click", function () {
+        var current = currentDefinitionFile();
+        if (current && current.path === record.path) return;
+        if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
+        selectDefinitionFile(record, selected, payload, fileTabs, filePath, mode, textarea, status, save);
+      });
+      fileTabs.appendChild(tab);
+    });
+
+    toolbar.appendChild(filePath);
+    toolbar.appendChild(mode);
+    footer.appendChild(status);
+    footer.appendChild(save);
+    files.appendChild(fileTabs);
+    files.appendChild(toolbar);
+    files.appendChild(textarea);
+    files.appendChild(footer);
+    editor.appendChild(head);
+    editor.appendChild(files);
+
+    textarea.addEventListener("input", function () {
+      var dirty = definitionWorkspaceDirty();
+      save.disabled = textarea.readOnly || !dirty;
+      status.classList.remove("ullme-definition-status-error", "ullme-definition-status-success");
+      status.textContent = dirty ? "Unsaved changes" : definitionDefaultStatus(selected, payload);
+    });
+    save.addEventListener("click", function () {
+      var record = currentDefinitionFile();
+      if (!record || textarea.readOnly || !definitionWorkspaceDirty()) return;
+      save.disabled = true;
+      status.classList.remove("ullme-definition-status-error", "ullme-definition-status-success");
+      status.textContent = "Saving...";
+      sendSidebarEvent("ullme_definition_action_event", {
+        action: "save",
+        kind: selected.kind,
+        definitionid: selected.id,
+        source: selected.source,
+        file: record.path,
+        content: textarea.value
+      });
+    });
+
+    if (!records.length) {
+      textarea.readOnly = true;
+      textarea.value = "No Markdown or YAML files were found in this definition.";
+      mode.textContent = "No editable files";
+      status.textContent = definitionDefaultStatus(selected, payload);
+      return;
+    }
+
+    var initial = records[0];
+    if (payload.draft && payload.draft.file) {
+      records.forEach(function (record) {
+        if (record.path === payload.draft.file) initial = record;
+      });
+    }
+    selectDefinitionFile(initial, selected, payload, fileTabs, filePath, mode, textarea, status, save);
+  }
+
+  function definitionCopyButton(label, action, selected) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "ullme-secondary-action";
+    button.textContent = label;
+    button.addEventListener("click", function () {
+      if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
+      sendSidebarEvent("ullme_definition_action_event", {
+        action: action,
+        kind: selected.kind,
+        definitionid: selected.id,
+        source: selected.source
+      });
+    });
+    return button;
+  }
+
+  function selectDefinitionFile(record, selected, payload, fileTabs, filePath,
+                                mode, textarea, status, save) {
+    Array.prototype.forEach.call(fileTabs.querySelectorAll(".ullme-definition-file-tab"), function (tab) {
+      tab.classList.toggle(
+        "ullme-definition-file-tab-active",
+        tab.getAttribute("data-definition-file") === record.path
+      );
+    });
+    var content = record.content || "";
+    if (payload.draft && payload.draft.file === record.path) {
+      content = payload.draft.content || "";
+    }
+    filePath.textContent = record.path;
+    mode.textContent = record.editable ? "Editable" : "Read-only";
+    textarea.readOnly = !record.editable;
+    textarea.value = content;
+    textarea.setAttribute("data-definition-file", record.path);
+    state.definitionOriginalContent = content;
+    save.disabled = true;
+    status.classList.toggle("ullme-definition-status-error", Boolean(payload.error));
+    status.classList.toggle("ullme-definition-status-success", Boolean(payload.notice) && !payload.error);
+    status.textContent = definitionDefaultStatus(selected, payload);
+  }
+
+  function definitionDefaultStatus(selected, payload) {
+    if (payload.error) return payload.error;
+    if (payload.notice) return payload.notice;
+    return selected.editable
+      ? "Changes are validated before saving."
+      : sourceLabel(selected.source) + " definitions are read-only in teacher mode.";
+  }
+
+  function currentDefinitionFile() {
+    var textarea = byId("ullme_definition_file_editor");
+    if (!textarea) return null;
+    return {
+      path: textarea.getAttribute("data-definition-file") || "",
+      content: textarea.value
+    };
+  }
+
+  function definitionWorkspaceDirty() {
+    var textarea = byId("ullme_definition_file_editor");
+    if (!textarea || textarea.readOnly) return false;
+    return textarea.value !== state.definitionOriginalContent;
+  }
+
+  function closeDefinitionWorkspace() {
+    if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
+    removeDefinitionWorkspace(false);
+  }
+
+  function removeDefinitionWorkspace(preserveAssistantState) {
+    var overlay = byId("ullme_definition_overlay");
+    if (overlay) overlay.remove();
+    closeCreateDefinitionDialog();
+    closeDefinitionImportPreview();
+    state.definitionWorkspace = null;
+    state.definitionOriginalContent = "";
+    if (!preserveAssistantState) state.definitionAssistantOpen = false;
+  }
+
+  function openCreateDefinitionDialog(kind) {
+    closeCreateDefinitionDialog();
+    var overlay = byId("ullme_definition_overlay");
+    if (!overlay) return;
+    var backdrop = document.createElement("div");
+    var dialog = document.createElement("section");
+    var title = document.createElement("div");
+    var idLabel = document.createElement("label");
+    var idText = document.createElement("span");
+    var idInput = document.createElement("input");
+    var nameLabel = document.createElement("label");
+    var nameText = document.createElement("span");
+    var nameInput = document.createElement("input");
+    var error = document.createElement("div");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var create = document.createElement("button");
+
+    backdrop.id = "ullme_definition_create_dialog";
+    backdrop.className = "ullme-definition-create-backdrop";
+    dialog.className = "ullme-definition-create-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", kind === "skill" ? "Create Skill" : "Create AI Tutor");
+    title.className = "ullme-definition-create-title";
+    title.textContent = kind === "skill" ? "New Skill" : "New AI Tutor";
+    idLabel.className = "ullme-definition-create-field";
+    idText.textContent = "ID";
+    idInput.type = "text";
+    idInput.placeholder = kind === "skill" ? "my_skill" : "my_tutor";
+    idInput.autocomplete = "off";
+    nameLabel.className = "ullme-definition-create-field";
+    nameText.textContent = "Label";
+    nameInput.type = "text";
+    nameInput.placeholder = kind === "skill" ? "My Skill" : "My AI Tutor";
+    error.className = "ullme-definition-create-error";
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", closeCreateDefinitionDialog);
+    create.type = "button";
+    create.className = "ullme-primary-action";
+    create.textContent = "Create";
+    create.addEventListener("click", function () {
+      var id = idInput.value.trim();
+      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(id)) {
+        error.textContent = "Use letters, numbers, underscores, or hyphens, starting with a letter.";
+        return;
+      }
+      sendSidebarEvent("ullme_definition_action_event", {
+        action: "create",
+        kind: kind,
+        definitionid: id,
+        label: nameInput.value.trim()
+      });
+      closeCreateDefinitionDialog();
+    });
+
+    idLabel.appendChild(idText);
+    idLabel.appendChild(idInput);
+    nameLabel.appendChild(nameText);
+    nameLabel.appendChild(nameInput);
+    actions.appendChild(cancel);
+    actions.appendChild(create);
+    dialog.appendChild(title);
+    dialog.appendChild(idLabel);
+    dialog.appendChild(nameLabel);
+    dialog.appendChild(error);
+    dialog.appendChild(actions);
+    backdrop.appendChild(dialog);
+    backdrop.addEventListener("click", function (event) {
+      if (event.target === backdrop) closeCreateDefinitionDialog();
+    });
+    overlay.appendChild(backdrop);
+    idInput.focus();
+  }
+
+  function closeCreateDefinitionDialog() {
+    var dialog = byId("ullme_definition_create_dialog");
+    if (dialog) dialog.remove();
+  }
+
+  function definitionAssistantKey(selected) {
+    if (!selected) return "";
+    return [selected.kind, selected.source, selected.id].join(":");
+  }
+
+  function definitionAssistantMessages(selected) {
+    var key = definitionAssistantKey(selected);
+    if (!key) return [];
+    if (!Array.isArray(state.definitionAssistantMessages[key])) {
+      state.definitionAssistantMessages[key] = [];
+    }
+    return state.definitionAssistantMessages[key];
+  }
+
+  function renderDefinitionAssistant(panel, payload) {
+    panel.innerHTML = "";
+    var selected = payload.selected;
+    var head = document.createElement("div");
+    var title = document.createElement("div");
+    var context = document.createElement("div");
+    var messages = document.createElement("div");
+    var composer = document.createElement("div");
+    var input = document.createElement("textarea");
+    var send = document.createElement("button");
+
+    head.className = "ullme-definition-assistant-head";
+    title.className = "ullme-definition-assistant-title";
+    title.textContent = "Definition Assistant";
+    context.className = "ullme-definition-assistant-context";
+    context.textContent = selected
+      ? (selected.label || selected.id) + " · " + sourceLabel(selected.source)
+      : "No definition selected";
+    messages.className = "ullme-definition-assistant-messages";
+    composer.className = "ullme-definition-assistant-composer";
+    input.id = "ullme_definition_assistant_input";
+    input.rows = 3;
+    input.placeholder = selected && selected.editable
+      ? "Ask AI to rewrite the current file"
+      : "Make an editable copy before applying AI rewrites";
+    input.disabled = !selected || !selected.editable;
+    send.type = "button";
+    send.className = "ullme-primary-action";
+    send.textContent = "Send";
+    send.disabled = input.disabled;
+
+    head.appendChild(title);
+    head.appendChild(context);
+    panel.appendChild(head);
+
+    var records = definitionAssistantMessages(selected);
+    if (!records.length) {
+      var intro = document.createElement("div");
+      intro.className = "ullme-definition-assistant-intro";
+      intro.textContent = selected && selected.editable
+        ? "The assistant sees this definition. Its rewrites become unsaved editor drafts; only Save writes them to disk."
+        : "Package and General definitions are read-only. Make a Personal or course-local copy to let AI rewrite them.";
+      messages.appendChild(intro);
+      if (selected && selected.editable) {
+        var starters = document.createElement("div");
+        starters.className = "ullme-definition-assistant-starters";
+        [
+          "Make the instructions clearer and more concise",
+          "Use a more Socratic teaching style",
+          "Check this file for inconsistencies"
+        ].forEach(function (prompt) {
+          var starter = document.createElement("button");
+          starter.type = "button";
+          starter.textContent = prompt;
+          starter.addEventListener("click", function () {
+            input.value = prompt;
+            input.focus();
+          });
+          starters.appendChild(starter);
+        });
+        messages.appendChild(starters);
+      }
+    }
+
+    records.forEach(function (record) {
+      var message = document.createElement("article");
+      var text = document.createElement("div");
+      message.className = "ullme-definition-assistant-message ullme-definition-assistant-message-" + record.role;
+      if (record.pending) message.classList.add("ullme-definition-assistant-message-pending");
+      if (record.requestid) message.setAttribute("data-request-id", record.requestid);
+      text.textContent = record.text;
+      message.appendChild(text);
+      if (record.undo) {
+        var undo = document.createElement("button");
+        undo.type = "button";
+        undo.className = "ullme-text-action";
+        undo.textContent = "Undo AI draft";
+        undo.addEventListener("click", function () {
+          var current = currentDefinitionFile();
+          var editor = byId("ullme_definition_file_editor");
+          if (!current || !editor || current.path !== record.undo.file) return;
+          editor.value = record.undo.content;
+          editor.dispatchEvent(new Event("input", { bubbles: true }));
+          record.undo = null;
+          renderDefinitionAssistant(panel, payload);
+        });
+        message.appendChild(undo);
+      }
+      messages.appendChild(message);
+    });
+
+    function submitDefinitionAssistant() {
+      var instruction = input.value.trim();
+      var current = currentDefinitionFile();
+      if (!instruction || !selected || !selected.editable || !current) return;
+      state.definitionAssistantRequestIndex += 1;
+      var requestid = "definition_ai_" + Date.now() + "_" + state.definitionAssistantRequestIndex;
+      records.push({ role: "user", text: instruction });
+      records.push({
+        role: "assistant",
+        text: "Working on a draft...",
+        requestid: requestid,
+        pending: true
+      });
+      renderDefinitionAssistant(panel, payload);
+      sendSidebarEvent("ullme_definition_chat_event", {
+        requestid: requestid,
+        kind: selected.kind,
+        definitionid: selected.id,
+        source: selected.source,
+        file: current.path,
+        content: current.content,
+        message: instruction
+      });
+    }
+
+    send.addEventListener("click", submitDefinitionAssistant);
+    input.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.shiftKey) return;
+      event.preventDefault();
+      submitDefinitionAssistant();
+    });
+    composer.appendChild(input);
+    composer.appendChild(send);
+    panel.appendChild(messages);
+    panel.appendChild(composer);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function receiveDefinitionAssistantMessage(response) {
+    response = response || {};
+    var matchedMessages = null;
+    Object.keys(state.definitionAssistantMessages).some(function (key) {
+      var messages = state.definitionAssistantMessages[key];
+      var found = messages.some(function (message) {
+        return message.requestid === response.requestid && message.pending;
+      });
+      if (found) matchedMessages = messages;
+      return found;
+    });
+    if (!matchedMessages) return;
+
+    var pendingIndex = -1;
+    matchedMessages.forEach(function (message, index) {
+      if (message.requestid === response.requestid && message.pending) pendingIndex = index;
+    });
+    var assistantRecord = {
+      role: "assistant",
+      text: response.message || (response.ok ? "Draft ready." : "The rewrite failed.")
+    };
+
+    var editor = byId("ullme_definition_file_editor");
+    var current = currentDefinitionFile();
+    var selected = state.definitionWorkspace && state.definitionWorkspace.selected;
+    var matchesSelection = selected && response.ok &&
+      response.definitionid === selected.id &&
+      response.source === selected.source;
+    if (matchesSelection && response.draft && editor && current &&
+        response.draft.file === current.path) {
+      assistantRecord.undo = { file: current.path, content: editor.value };
+      editor.value = response.draft.content || "";
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      var changedTab = document.querySelector(
+        '.ullme-definition-file-tab[data-definition-file="' +
+        cssAttributeValue(current.path) +
+        '"]'
+      );
+      if (changedTab) changedTab.classList.add("ullme-definition-file-tab-ai");
+    }
+    if (pendingIndex >= 0) matchedMessages.splice(pendingIndex, 1, assistantRecord);
+
+    var panel = document.querySelector(".ullme-definition-assistant");
+    if (panel && state.definitionWorkspace) {
+      renderDefinitionAssistant(panel, state.definitionWorkspace);
+    }
+  }
+
+  function cssAttributeValue(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function openDefinitionImportPreview(preview) {
+    closeDefinitionImportPreview();
+    preview = preview || {};
+    var host = byId("ullme_definition_overlay") || document.body;
+    var backdrop = document.createElement("div");
+    var dialog = document.createElement("section");
+    var title = document.createElement("div");
+    var summary = document.createElement("div");
+    var files = document.createElement("div");
+    var targetLabel = document.createElement("label");
+    var targetText = document.createElement("span");
+    var target = document.createElement("select");
+    var warning = document.createElement("div");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var confirm = document.createElement("button");
+
+    backdrop.id = "ullme_definition_import_preview";
+    backdrop.className = "ullme-definition-create-backdrop";
+    dialog.className = "ullme-definition-import-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Import definition");
+    title.className = "ullme-definition-create-title";
+    title.textContent = preview.kind === "skill" ? "Import Skill ZIP" : "Import AI Tutor YAML";
+    summary.className = "ullme-definition-import-summary";
+    files.className = "ullme-definition-import-files";
+    targetLabel.className = "ullme-definition-create-field";
+    targetText.textContent = "Destination";
+    warning.className = "ullme-definition-import-warning";
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", closeDefinitionImportPreview);
+    confirm.type = "button";
+    confirm.className = "ullme-primary-action";
+
+    if (preview.error) {
+      summary.classList.add("ullme-definition-status-error");
+      summary.textContent = preview.error;
+      confirm.textContent = "Close";
+      confirm.addEventListener("click", closeDefinitionImportPreview);
+    } else {
+      summary.innerHTML = "<strong></strong><span></span>";
+      summary.querySelector("strong").textContent = preview.label || preview.id;
+      summary.querySelector("span").textContent = preview.id;
+      (Array.isArray(preview.files) ? preview.files : []).forEach(function (file) {
+        var item = document.createElement("code");
+        item.textContent = file;
+        files.appendChild(item);
+      });
+      (Array.isArray(preview.targets) ? preview.targets : ["personal"]).forEach(function (source) {
+        var option = document.createElement("option");
+        option.value = source;
+        option.textContent = source === "course"
+          ? "Selected course"
+          : "Personal library";
+        target.appendChild(option);
+      });
+      function updateImportConflict() {
+        var conflict = Boolean(preview.conflicts && preview.conflicts[target.value]);
+        warning.textContent = conflict
+          ? "A complete definition already exists here. Importing will replace that copy; files are not merged."
+          : "The imported definition will be created as a complete copy.";
+        warning.classList.toggle("ullme-definition-import-warning-danger", conflict);
+        confirm.className = conflict ? "ullme-danger-action" : "ullme-primary-action";
+        confirm.textContent = conflict ? "Replace complete copy" : "Import";
+      }
+      target.addEventListener("change", updateImportConflict);
+      updateImportConflict();
+      confirm.addEventListener("click", function () {
+        var conflict = Boolean(preview.conflicts && preview.conflicts[target.value]);
+        sendSidebarEvent("ullme_definition_action_event", {
+          action: "import",
+          kind: preview.kind,
+          import_token: preview.token,
+          target_source: target.value,
+          replace: conflict
+        });
+        closeDefinitionImportPreview();
+      });
+    }
+
+    targetLabel.appendChild(targetText);
+    targetLabel.appendChild(target);
+    actions.appendChild(cancel);
+    actions.appendChild(confirm);
+    dialog.appendChild(title);
+    dialog.appendChild(summary);
+    if (!preview.error) {
+      dialog.appendChild(files);
+      dialog.appendChild(targetLabel);
+      dialog.appendChild(warning);
+    }
+    dialog.appendChild(actions);
+    backdrop.appendChild(dialog);
+    backdrop.addEventListener("click", function (event) {
+      if (event.target === backdrop) closeDefinitionImportPreview();
+    });
+    host.appendChild(backdrop);
+    confirm.focus();
+  }
+
+  function closeDefinitionImportPreview() {
+    var preview = byId("ullme_definition_import_preview");
+    if (preview) preview.remove();
+  }
+
+  function definitionImportComplete(inputId) {
+    var input = byId(inputId);
+    if (input) input.value = "";
+    if (window.Shiny && Shiny.setInputValue) {
+      Shiny.setInputValue(inputId, null, { priority: "event" });
+    } else if (window.Shiny && Shiny.onInputChange) {
+      Shiny.onInputChange(inputId, null);
+    }
+  }
+
+  function downloadDefinition(url, filename) {
+    var anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename || "";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   }
 
   function renderActiveSkill(skill) {
@@ -1337,6 +2274,11 @@
   window.ullme.receiveStoredUploads = receiveStoredUploads;
   window.ullme.materialUploadComplete = completePendingMaterialUpload;
   window.ullme.updateCourseList = updateCourseList;
+  window.ullme.openDefinitionWorkspace = openDefinitionWorkspace;
+  window.ullme.openDefinitionImportPreview = openDefinitionImportPreview;
+  window.ullme.definitionImportComplete = definitionImportComplete;
+  window.ullme.downloadDefinition = downloadDefinition;
+  window.ullme.receiveDefinitionAssistantMessage = receiveDefinitionAssistantMessage;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

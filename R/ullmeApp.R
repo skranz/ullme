@@ -68,6 +68,8 @@ ullmeApp = function(main_dir, userid="skranz", role="teacher", allowed_roles = c
   app$cur_session_dir = ullme_cur_session_dir(user_dir=app$user_dir)
   app$uploads_dir = ullme_cur_session_images_dir(cur_session_dir=app$cur_session_dir)
   app$audio_dir = ullme_cur_session_audio_dir(cur_session_dir=app$cur_session_dir)
+  app$definition_downloads_dir = file.path(app$cur_session_dir, "definition_downloads")
+  app$definition_imports = list()
   app$courseids = ullme_user_courseids(
     main_dir=main_dir,
     userid=app$userid,
@@ -95,10 +97,15 @@ ullme_add_resource_paths = function(app=getApp()) {
   www_dir = ullme_www_dir()
   dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
   dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
+  dir.create(app$definition_downloads_dir, recursive=TRUE, showWarnings=FALSE)
 
   shiny::addResourcePath(prefix="ullme", directoryPath=www_dir)
   shiny::addResourcePath(prefix="ullme-uploads", directoryPath=app$uploads_dir)
   shiny::addResourcePath(prefix="ullme-audio", directoryPath=app$audio_dir)
+  shiny::addResourcePath(
+    prefix="ullme-definition-downloads",
+    directoryPath=app$definition_downloads_dir
+  )
   invisible(TRUE)
 }
 
@@ -143,6 +150,13 @@ ullme_register_handlers = function(app=getApp()) {
     changeHandler(
       id = paste0("ullme_material_upload_", category),
       fun = ullme_handle_material_upload,
+      app = app
+    )
+  })
+  lapply(c("tutor", "skill"), function(kind) {
+    changeHandler(
+      id = paste0("ullme_definition_import_", kind),
+      fun = ullme_handle_definition_import_upload,
       app = app
     )
   })
@@ -212,6 +226,18 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_skill_clear,
     app = app
   )
+  eventHandler(
+    eventId = "ullme_definition_action_event",
+    id = NULL,
+    fun = ullme_handle_definition_action,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_definition_chat_event",
+    id = NULL,
+    fun = ullme_handle_definition_chat,
+    app = app
+  )
   ullme_register_audio_handlers(app=app)
   invisible(TRUE)
 }
@@ -264,6 +290,18 @@ ullme_app_ui = function(app=getApp()) {
           type = "file",
           accept = "audio/*"
         ),
+        tags$input(
+          id = "ullme_definition_import_tutor",
+          class = "ullme-file-input",
+          type = "file",
+          accept = ".yaml,.yml,application/x-yaml,text/yaml"
+        ),
+        tags$input(
+          id = "ullme_definition_import_skill",
+          class = "ullme-file-input",
+          type = "file",
+          accept = ".zip,application/zip"
+        ),
         lapply(ullme_course_material_categories(), function(category) {
           tags$input(
             id = paste0("ullme_material_upload_", category),
@@ -308,6 +346,21 @@ ullme_appbar_ui = function(app=getApp()) {
         class = "ullme-user-settings-field",
         tags$span("Username"),
         tags$input(type="text", value=app$userid, readonly="readonly")
+      ),
+      tags$div(
+        class = "ullme-teacher-library-links",
+        tags$button(
+          id = "ullme_manage_tutors_btn",
+          class = "ullme-settings-link",
+          type = "button",
+          "AI Tutor Library"
+        ),
+        tags$button(
+          id = "ullme_manage_skills_btn",
+          class = "ullme-settings-link",
+          type = "button",
+          "Skill Library"
+        )
       )
     )
   )

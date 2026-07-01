@@ -14,24 +14,41 @@ ullme_skill_definition = function(skillid, app=getApp(), include_instructions=TR
   roots = ullme_skill_roots(app=app)
 
   for (source in names(roots)) {
-    path = file.path(roots[[source]], skillid)
-    skill_path = file.path(path, "SKILL.md")
-    metadata_path = file.path(path, "ullme.yaml")
-    if (!dir.exists(path) || !file.exists(skill_path) || !file.exists(metadata_path)) next
-    metadata = tryCatch(yaml::read_yaml(metadata_path), error=function(e) NULL)
-    if (is.null(metadata) || !is.list(metadata)) next
-    instructions = NULL
-    if (isTRUE(include_instructions)) {
-      instructions = paste(readLines(skill_path, warn=FALSE, encoding="UTF-8"), collapse="\n")
-    }
-    return(ullme_normalize_skill_definition(
-      metadata=metadata,
-      instructions=instructions,
+    skill = ullme_skill_definition_at(
       skillid=skillid,
-      source=source
-    ))
+      source=source,
+      app=app,
+      include_instructions=include_instructions
+    )
+    if (!is.null(skill)) return(skill)
   }
   NULL
+}
+
+
+ullme_skill_definition_at = function(skillid, source, app=getApp(), include_instructions=TRUE) {
+  restore.point("ullme_skill_definition_at")
+  skillid = ullme_clean_definition_id(skillid)
+  roots = ullme_skill_roots(app=app)
+  source = paste0(source)[1]
+  if (!source %in% names(roots)) return(NULL)
+
+  path = file.path(roots[[source]], skillid)
+  skill_path = file.path(path, "SKILL.md")
+  metadata_path = file.path(path, "ullme.yaml")
+  if (!dir.exists(path) || !file.exists(skill_path) || !file.exists(metadata_path)) return(NULL)
+  metadata = tryCatch(yaml::read_yaml(metadata_path), error=function(e) NULL)
+  if (is.null(metadata) || !is.list(metadata)) return(NULL)
+  instructions = NULL
+  if (isTRUE(include_instructions)) {
+    instructions = paste(readLines(skill_path, warn=FALSE, encoding="UTF-8"), collapse="\n")
+  }
+  ullme_normalize_skill_definition(
+    metadata=metadata,
+    instructions=instructions,
+    skillid=skillid,
+    source=source
+  )
 }
 
 

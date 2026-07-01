@@ -37,20 +37,36 @@ ullme_ai_tutor_definition = function(tutorid, app=getApp()) {
   roots = ullme_ai_tutor_definition_roots(app=app)
 
   for (source in names(roots)) {
-    root = roots[[source]]
-    if (length(root) == 0) next
-    path = file.path(root, tutorid)
-    definition_path = file.path(path, "tutor.yaml")
-    if (!dir.exists(path) || !file.exists(definition_path)) next
-    definition = tryCatch(yaml::read_yaml(definition_path), error=function(e) NULL)
-    if (is.null(definition) || !is.list(definition)) next
-    return(ullme_normalize_ai_tutor_definition(
-      definition=definition,
+    definition = ullme_ai_tutor_definition_at(
       tutorid=tutorid,
-      source=source
-    ))
+      source=source,
+      app=app
+    )
+    if (!is.null(definition)) return(definition)
   }
   NULL
+}
+
+
+ullme_ai_tutor_definition_at = function(tutorid, source, app=getApp()) {
+  restore.point("ullme_ai_tutor_definition_at")
+  tutorid = ullme_clean_definition_id(tutorid)
+  roots = ullme_ai_tutor_definition_roots(app=app)
+  source = paste0(source)[1]
+  if (!source %in% names(roots)) return(NULL)
+
+  root = roots[[source]]
+  if (length(root) == 0) return(NULL)
+  path = file.path(root, tutorid)
+  definition_path = file.path(path, "tutor.yaml")
+  if (!dir.exists(path) || !file.exists(definition_path)) return(NULL)
+  definition = tryCatch(yaml::read_yaml(definition_path), error=function(e) NULL)
+  if (is.null(definition) || !is.list(definition)) return(NULL)
+  ullme_normalize_ai_tutor_definition(
+    definition=definition,
+    tutorid=tutorid,
+    source=source
+  )
 }
 
 

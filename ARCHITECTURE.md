@@ -51,7 +51,8 @@ All roles use one compact application bar containing:
 - add-course button for teacher and student roles
 - personal-settings button
 
-The personal-settings popover currently displays the instance userid.
+The personal-settings popover displays the instance userid and gives teachers
+direct access to the AI Tutor and Skill libraries.
 
 Teacher mode divides the workspace into two equal panes. The course pane is on
 the left and chat is on the right. The course pane has these tabs:
@@ -70,6 +71,31 @@ Skills belong to the teacher assistant rather than the course tab row. A
 composer button opens the resolved Skill catalog. Selecting a Skill displays
 its introduction, starter prompts, and composer placeholder above the composer
 until the teacher clears it or selects another Skill.
+
+Both catalogs, installed Tutor cards, and personal settings can open the shared
+Definition Workspace. It is a large overlay rather than a permanent third
+column. Its source-grouped sidebar shows Package, General, Personal, and
+course-local definitions, including shadowed copies. The editor exposes the
+Markdown and YAML files inside the selected definition.
+
+Package and General definitions are read-only in teacher mode. Personal
+definitions and course-local Tutor definitions are editable. Teachers can
+create personal definitions, copy a definition into their personal library, or
+copy a resolved Tutor definition into the selected course before editing it.
+YAML is parsed and definition IDs are checked before a file is saved.
+
+Editable copies can be deleted independently of course Tutor installation.
+Deleting a copy restores normal definition resolution. Skills download as ZIP
+bundles and import from validated ZIP bundles; Tutor definitions download and
+import as YAML. Imports target Personal storage or, for Tutors, the selected
+course. Conflicts replace complete copies rather than merging files.
+
+The Definition Assistant is an optional adaptive panel. Opening it collapses
+the source library into a definition picker and divides the workspace between
+the editor and chat. Assistant rewrites modify only the browser's unsaved
+editor draft and provide Undo; the existing Save action remains the only path
+to disk. The fake-AI implementation exercises this protocol while structured
+responses from a real model remain to be connected.
 
 Student and admin modes reuse the same chat pane at full width. They do not
 create a separate chat implementation.
@@ -95,6 +121,12 @@ create a separate chat implementation.
 - `ullme_skill_activate_event`: activates one resolved Skill for the teacher
   assistant.
 - `ullme_skill_clear_event`: clears the active Skill.
+- `ullme_definition_action_event`: opens the Definition Workspace and performs
+  server-validated create, copy, delete, import, download, and save operations.
+- `ullme_definition_import_tutor` and `ullme_definition_import_skill`: upload
+  Tutor YAML and Skill ZIP files for validation and import preview.
+- `ullme_definition_chat_event`: constructs definition-scoped context and
+  returns an in-memory rewrite draft.
 
 Audio handlers are registered separately by `ullme_register_audio_handlers()`.
 
