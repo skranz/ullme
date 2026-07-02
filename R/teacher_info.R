@@ -47,11 +47,9 @@ ullme_teacher_project_state = function(app=getApp()) {
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) {
     material = list()
-    organization = list(indexes=list(), unassigned=list())
     tutors = list()
   } else {
     material = ullme_course_material_files(course_dir)
-    organization = ullme_course_organization_payload(course_dir)
     tutors = ullme_course_ai_tutors(app=app)
   }
   category_counts = vapply(material, length, integer(1))
@@ -61,6 +59,11 @@ ullme_teacher_project_state = function(app=getApp()) {
     function(tutor) !identical(tutor$enabled, FALSE),
     logical(1)
   ))
+  tutor_instances = sum(vapply(
+    tutors,
+    function(tutor) as.integer(tutor$instance_count %||% 0L),
+    integer(1)
+  ))
   list(
     semester=app$semester,
     selected_course=app$courseid %||% "",
@@ -69,11 +72,10 @@ ullme_teacher_project_state = function(app=getApp()) {
     course_ids=as.list(semester_courses),
     material_files=material_count,
     material_by_category=as.list(category_counts),
-    object_indexes=length(organization$indexes %||% list()),
-    unassigned_materials=length(organization$unassigned %||% list()),
     installed_ai_tutors=length(tutors),
     enabled_ai_tutors=enabled_tutors,
-    available_ai_tutor_definitions=length(ullme_ai_tutor_catalog(app=app)),
+    ai_tutor_instances=tutor_instances,
+    available_ai_tutor_templates=length(ullme_ai_tutor_catalog(app=app)),
     available_skills=length(ullme_skill_catalog(app=app)),
     active_skill=app$active_skillid %||% ""
   )
@@ -90,25 +92,22 @@ ullme_teacher_next_steps = function(state) {
     if (state$material_files == 0) {
       steps = c(steps, "Upload teaching materials to the selected course.")
     }
-    if (state$material_files > 0 &&
-        (state$object_indexes == 0 || state$unassigned_materials > 0)) {
-      steps = c(
-        steps,
-        "Review course organization or ask the AI to propose object indexes."
-      )
-    }
     if (state$installed_ai_tutors == 0) {
       steps = c(steps, "Add an AI Tutor to the course when the materials are ready.")
     }
     if (state$material_files > 0 && state$installed_ai_tutors > 0) {
       steps = c(
         steps,
-        "Review Tutor definitions and test whether their material roles are satisfied."
+        if (state$ai_tutor_instances == 0) {
+          "Review the Tutor's instance-matching patterns against the course files."
+        } else {
+          "Review Tutor instances and confirm their associated documents."
+        }
       )
     }
   }
   if (length(steps) == 0) {
-    steps = "Ask for help with materials, organization, AI Tutors, Skills, or definitions."
+    steps = "Ask for help with materials, AI Tutors, Tutor instances, or Skills."
   }
   as.list(steps)
 }
@@ -125,11 +124,10 @@ ullme_teacher_project_state_text = function(app=getApp()) {
     if (nzchar(state$selected_course)) state$selected_course else "none",
     "\n",
     "- Material files: ", state$material_files, "\n",
-    "- Object indexes: ", state$object_indexes,
-    "; unassigned materials: ", state$unassigned_materials, "\n",
     "- AI Tutors installed/enabled: ", state$installed_ai_tutors, "/",
-    state$enabled_ai_tutors, "\n",
-    "- Available Tutor definitions: ", state$available_ai_tutor_definitions,
+    state$enabled_ai_tutors,
+    "; instances: ", state$ai_tutor_instances, "\n",
+    "- Available Tutor templates: ", state$available_ai_tutor_templates,
     "; Skills: ", state$available_skills,
     if (nzchar(state$active_skill)) {
       paste0("; active Skill: ", state$active_skill)

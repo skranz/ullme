@@ -85,12 +85,13 @@ utool_read_definition_yaml = function(kind, definitionid, source,
 
 
 utool_list_ai_tutors = function(app=getApp()) {
-  lapply(ullme_ai_tutor_catalog(app=app), function(tutor) {
+  lapply(ullme_course_ai_tutors(app=app), function(tutor) {
     list(
       tutorid=tutor$tutorid,
       label=tutor$label,
-      source=tutor$source,
       description=tutor$description,
+      enabled=tutor$enabled,
+      instance_count=tutor$instance_count,
       required_material_roles=tutor$required_material_roles
     )
   })
@@ -252,7 +253,7 @@ utool_rewrite_definition_yaml = function(kind, definitionid, source,
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
   if (!ullme_definition_is_editable(kind, source, app=app)) {
-    stop("Only personal definitions and course-local Tutor definitions are editable.")
+    stop("Only course AI Tutors and personal Skills are editable.")
   }
   validation = ullme_validate_definition_yaml(kind, definitionid, yaml_content)
   ullme_validation_stop(validation)

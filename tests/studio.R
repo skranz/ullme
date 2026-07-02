@@ -1,7 +1,10 @@
 library(ullme)
 
-root = file.path(tempdir(), "ullme-studio-check")
-unlink(root, recursive=TRUE)
+test_main_dir = tempfile("ullme-studio-main-")
+dir.create(test_main_dir, recursive=TRUE)
+cleanup_app = new.env(parent=emptyenv())
+cleanup_app$glob = list(main_dir=test_main_dir)
+root = ullme_tempdir(pattern=".ullme-studio-check-", app=cleanup_app)
 course_dir = file.path(root, "teachers", "alice", "courses", "WS2526", "micro")
 dir.create(file.path(course_dir, "materials", "ps"), recursive=TRUE)
 dir.create(file.path(course_dir, "materials", "background"), recursive=TRUE)
@@ -62,4 +65,4 @@ stopifnot(
   length(organization$indexes) >= 3L,
   !"ps/ps1.pdf" %in% unlist(organization$unassigned)
 )
-unlink(root, recursive=TRUE)
+ullme_remove_tempdir(root, app=cleanup_app)

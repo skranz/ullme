@@ -8,6 +8,7 @@
     aiTutors: [],
     aiTutorCatalog: [],
     skills: [],
+    courseSkills: [],
     activeSkill: null,
     definitionWorkspace: null,
     definitionOriginalContent: "",
@@ -15,14 +16,18 @@
     definitionAssistantMessages: {},
     definitionAssistantRequestIndex: 0,
     courseFiles: [],
-    organization: { types: [], indexes: [], unassigned: [] },
-    organizationView: "visual",
     materialView: "materials",
+    materialTree: [],
+    materialSelection: {},
+    materialExpanded: {},
+    materialSort: "name",
+    materialSortDirection: "asc",
+    materialUploadDestination: "general",
+    pendingMaterialDrop: null,
     studioView: "materials",
     previousStudioView: "materials",
     courseFile: null,
     courseFileOriginalContent: "",
-    organizationProposal: null,
     selectedCourseid: ""
   };
 
@@ -159,27 +164,28 @@
     var uploadButton = byId("ullme_upload_btn");
     var fileInput = byId("ullme_image_upload");
     var voiceButton = byId("ullme_voice_btn");
-    var roleSelect = byId("ullme_role_select");
     var semesterSelect = byId("ullme_semester_select");
     var courseSelect = byId("ullme_course_select");
     var addCourseButton = byId("ullme_add_course_btn");
     var courseTabs = byId("ullme_course_tabs");
     var settingsSave = byId("ullme_course_settings_save");
-    var materialCategories = byId("ullme_material_categories");
     var materialUploadButton = byId("ullme_material_upload_btn");
-    var materialDropzone = byId("ullme_material_dropzone");
+    var materialInlineUpload = byId("ullme_material_inline_upload");
+    var materialSortName = byId("ullme_material_sort_name");
+    var materialSortDate = byId("ullme_material_sort_date");
+    var materialSelectAll = byId("ullme_material_select_all");
+    var materialClearSelection = byId("ullme_material_clear_selection");
+    var materialApplyOperation = byId("ullme_material_apply_operation");
+    var materialDeleteSelected = byId("ullme_material_delete_selected");
+    var materialCreateDirectory = byId("ullme_material_create_directory");
     var userSettingsButton = byId("ullme_user_settings_btn");
     var userSettings = byId("ullme_user_settings");
-    var addTutorButton = byId("ullme_ai_tutor_add_btn");
     var skillsButton = byId("ullme_skills_btn");
-    var manageTutorsButton = byId("ullme_manage_tutors_btn");
     var manageSkillsButton = byId("ullme_manage_skills_btn");
     var agentSettingsButton = byId("ullme_agent_settings_btn");
     var studioNav = byId("ullme_studio_nav");
     var studioUploadButton = byId("ullme_studio_upload_btn");
     var aiPaneToggle = byId("ullme_ai_pane_toggle");
-    var organizationButton = byId("ullme_organization_propose_btn");
-    var organizationPanel = byId("ullme_organization_panel");
     var materialPanel = byId("ullme_material_panel");
     var courseFileBack = byId("ullme_course_file_back");
     var courseFileSave = byId("ullme_course_file_save");
@@ -223,22 +229,6 @@
         if (window.ullmeAudio && window.ullmeAudio.startRecording) {
           window.ullmeAudio.startRecording();
         }
-      });
-    }
-
-    if (roleSelect) {
-      roleSelect.addEventListener("click", function (event) {
-        event.stopPropagation();
-        closeUserSettings();
-        var previousRole = roleSelect.getAttribute("data-value") || "";
-        toggleSidebarMenu(roleSelect, function (role) {
-          if (teacherWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) {
-            setSidebarValue(roleSelect, previousRole);
-            return;
-          }
-          setRoleLayout(role);
-          sendSidebarEvent("ullme_role_select_event", { role: role });
-        });
       });
     }
 
@@ -331,14 +321,14 @@
       studioNav.addEventListener("click", function (event) {
         var item = event.target.closest(".ullme-studio-nav-item");
         if (!item || !studioNav.contains(item)) return;
-        activateStudioView(item.getAttribute("data-studio-view") || "materials");
+        var view = item.getAttribute("data-studio-view");
+        if (view) activateStudioView(view);
       });
     }
 
     if (studioUploadButton) {
       studioUploadButton.addEventListener("click", function () {
-        var inputElement = materialInputForCategory(currentMaterialCategory());
-        if (inputElement) inputElement.click();
+        openMaterialUpload(currentMaterialDestination());
       });
     }
 
@@ -352,34 +342,6 @@
           collapsed ? "Expand AI pane" : "Collapse AI pane"
         );
         aiPaneToggle.title = collapsed ? "Expand AI pane" : "Collapse AI pane";
-      });
-    }
-
-    if (organizationButton) {
-      organizationButton.addEventListener("click", function () {
-        organizationButton.disabled = true;
-        organizationButton.querySelector("span").textContent = "Organizing…";
-        sendSidebarEvent("ullme_organization_propose_event", {
-          model: (byId("ullme_model_select") || {}).value || null
-        });
-      });
-    }
-
-    if (organizationPanel) {
-      organizationPanel.addEventListener("click", function (event) {
-        var toggle = event.target.closest(".ullme-organization-view-button");
-        if (!toggle) return;
-        state.organizationView = toggle.getAttribute("data-organization-view") || "visual";
-        Array.prototype.forEach.call(
-          organizationPanel.querySelectorAll(".ullme-organization-view-button"),
-          function (button) {
-            button.classList.toggle(
-              "ullme-organization-view-button-active",
-              button === toggle
-            );
-          }
-        );
-        renderCourseOrganization(state.organization);
       });
     }
 
@@ -422,22 +384,9 @@
       });
     }
 
-    if (addTutorButton) {
-      addTutorButton.addEventListener("click", function () {
-        openCatalogDialog("tutors");
-      });
-    }
-
     if (skillsButton) {
       skillsButton.addEventListener("click", function () {
         openCatalogDialog("skills");
-      });
-    }
-
-    if (manageTutorsButton) {
-      manageTutorsButton.addEventListener("click", function () {
-        closeUserSettings();
-        requestDefinitionWorkspace("tutor");
       });
     }
 
@@ -461,18 +410,14 @@
       });
     }
 
-    if (materialCategories) {
-      materialCategories.addEventListener("click", function (event) {
-        var item = event.target.closest(".ullme-material-category");
-        if (!item || !materialCategories.contains(item)) return;
-        selectMaterialCategory(item.getAttribute("data-category") || "general");
-      });
-    }
-
     if (materialUploadButton) {
       materialUploadButton.addEventListener("click", function () {
-        var materialInput = materialInputForCategory(currentMaterialCategory());
-        if (materialInput) materialInput.click();
+        openMaterialUpload(currentMaterialDestination());
+      });
+    }
+    if (materialInlineUpload) {
+      materialInlineUpload.addEventListener("click", function () {
+        openMaterialUpload(currentMaterialDestination());
       });
     }
 
@@ -486,7 +431,57 @@
         }
       });
     });
-    bindMaterialDropzone(materialDropzone);
+    if (window.ullmeMaterialInteractions) {
+      state.materialInteractions = window.ullmeMaterialInteractions.create({
+        surface: materialPanel && materialPanel.querySelector(".ullme-material-files"),
+        rows: byId("ullme_material_files"),
+        getSelectedPaths: selectedMaterialPaths,
+        setSelectedPaths: function (paths, render) {
+          state.materialSelection = {};
+          (paths || []).forEach(function (path) {
+            state.materialSelection[path] = true;
+          });
+          if (render) renderMaterialTree();
+        },
+        selectionComplete: renderMaterialTree,
+        movePaths: moveMaterialPathsTo,
+        uploadFiles: queueMaterialFiles,
+        currentDestination: currentMaterialDestination
+      });
+    }
+    if (materialSortName) {
+      materialSortName.addEventListener("click", function () {
+        setMaterialSort("name");
+      });
+    }
+    if (materialSortDate) {
+      materialSortDate.addEventListener("click", function () {
+        setMaterialSort("date");
+      });
+    }
+    if (materialSelectAll) {
+      materialSelectAll.addEventListener("click", function () {
+        (state.materialTree || []).forEach(function (record) {
+          if (record.type === "file") state.materialSelection[record.path] = true;
+        });
+        renderMaterialTree();
+      });
+    }
+    if (materialClearSelection) {
+      materialClearSelection.addEventListener("click", function () {
+        state.materialSelection = {};
+        renderMaterialTree();
+      });
+    }
+    if (materialApplyOperation) {
+      materialApplyOperation.addEventListener("click", applySelectedMaterialOperation);
+    }
+    if (materialDeleteSelected) {
+      materialDeleteSelected.addEventListener("click", deleteSelectedMaterials);
+    }
+    if (materialCreateDirectory) {
+      materialCreateDirectory.addEventListener("click", createMaterialDirectory);
+    }
   }
 
   function teacherWorkspaceDirty() {
@@ -634,11 +629,6 @@
   }
 
   function activateStudioView(view) {
-    if (view === "definitions") {
-      setStudioNavigation(view, "Definitions");
-      requestDefinitionWorkspace("tutor");
-      return;
-    }
     var definitionOverlay = byId("ullme_definition_overlay");
     if (definitionOverlay && definitionOverlay.classList.contains("ullme-definition-embedded")) {
       if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
@@ -652,7 +642,6 @@
     state.studioView = view;
     var titles = {
       materials: "Materials",
-      organization: "Course organization",
       "ai-tutors": "AI Tutors",
       settings: "Course settings",
       file: "File editor"
@@ -679,92 +668,22 @@
   }
 
   function updateAIContext() {
-    var context = byId("ullme_ai_context");
     var studioContext = byId("ullme_studio_context");
     var courseSelect = byId("ullme_course_select");
     var courseid = courseSelect ? courseSelect.getAttribute("data-value") : "";
-    var detail = state.courseFile && state.studioView === "file"
-      ? state.courseFile.path
-      : state.studioView.replace(/-/g, " ");
-    var label = [courseid, detail].filter(Boolean).join(" / ") || "Course context";
-    if (context) context.textContent = label;
     if (studioContext) studioContext.textContent = courseid || "Select a course";
   }
 
   function renderAITutors(tutors) {
-    var list = byId("ullme_ai_tutor_list");
-    if (!list) return;
     tutors = Array.isArray(tutors) ? tutors : [];
-    list.innerHTML = "";
-
-    if (!tutors.length) {
-      var empty = document.createElement("div");
-      empty.className = "ullme-feature-empty";
-      empty.innerHTML = "<strong>No AI Tutors yet</strong><span>Add a tutor definition to make it available in this course.</span>";
-      list.appendChild(empty);
-      return;
+    if (window.ullmeTutors && window.ullmeTutors.update) {
+      window.ullmeTutors.update(
+        tutors,
+        state.aiTutorCatalog,
+        state.activeSkill,
+        state.courseSkills
+      );
     }
-
-    tutors.forEach(function (tutor) {
-      var card = document.createElement("article");
-      var head = document.createElement("div");
-      var titleWrap = document.createElement("div");
-      var title = document.createElement("div");
-      var badge = document.createElement("span");
-      var description = document.createElement("div");
-      var footer = document.createElement("div");
-      var instances = document.createElement("span");
-      var viewDefinition = document.createElement("button");
-      var toggleLabel = document.createElement("label");
-      var toggle = document.createElement("input");
-      var toggleTrack = document.createElement("span");
-
-      card.className = "ullme-feature-card";
-      head.className = "ullme-feature-card-head";
-      titleWrap.className = "ullme-feature-card-title-wrap";
-      title.className = "ullme-feature-card-title";
-      title.textContent = tutor.label || tutor.tutorid;
-      badge.className = "ullme-source-badge";
-      badge.textContent = sourceLabel(tutor.source);
-      description.className = "ullme-feature-card-description";
-      description.textContent = tutor.description || "No description";
-      footer.className = "ullme-feature-card-footer";
-      instances.className = "ullme-feature-card-meta";
-      instances.textContent = Number(tutor.instance_count || 0) + " instances";
-      viewDefinition.type = "button";
-      viewDefinition.className = "ullme-text-action ullme-feature-card-view";
-      viewDefinition.textContent = "View definition";
-      viewDefinition.disabled = tutor.source === "missing";
-      viewDefinition.addEventListener("click", function () {
-        requestDefinitionWorkspace("tutor", tutor);
-      });
-      toggleLabel.className = "ullme-toggle";
-      toggleLabel.title = tutor.enabled ? "Disable tutor" : "Enable tutor";
-      toggle.type = "checkbox";
-      toggle.checked = Boolean(tutor.enabled);
-      toggle.setAttribute("aria-label", "Enable " + (tutor.label || tutor.tutorid));
-      toggle.addEventListener("change", function () {
-        sendSidebarEvent("ullme_ai_tutor_toggle_event", {
-          tutorid: tutor.tutorid,
-          enabled: toggle.checked
-        });
-      });
-      toggleTrack.className = "ullme-toggle-track";
-
-      titleWrap.appendChild(title);
-      titleWrap.appendChild(badge);
-      head.appendChild(titleWrap);
-      toggleLabel.appendChild(toggle);
-      toggleLabel.appendChild(toggleTrack);
-      head.appendChild(toggleLabel);
-      footer.appendChild(instances);
-      appendMaterialRoles(footer, tutor.required_material_roles);
-      footer.appendChild(viewDefinition);
-      card.appendChild(head);
-      card.appendChild(description);
-      card.appendChild(footer);
-      list.appendChild(card);
-    });
   }
 
   function appendMaterialRoles(parent, roles) {
@@ -812,15 +731,15 @@
     head.className = "ullme-catalog-head";
     heading.className = "ullme-catalog-heading";
     title.className = "ullme-catalog-title";
-    title.textContent = isTutorCatalog ? "AI Tutor Library" : "Skills";
+    title.textContent = isTutorCatalog ? "Add AI Tutor" : "Add Skill";
     subtitle.className = "ullme-catalog-subtitle";
     subtitle.textContent = isTutorCatalog
-      ? "Add a resolved tutor definition to this course."
+      ? "Choose a template. uLLMe creates a complete editable copy in this course."
       : "Activate a reusable workflow for your next task.";
     headActions.className = "ullme-catalog-head-actions";
     manage.type = "button";
     manage.className = "ullme-secondary-action";
-    manage.textContent = "Manage definitions";
+    manage.textContent = "Manage Skills";
     manage.addEventListener("click", function () {
       closeCatalogDialog();
       requestDefinitionWorkspace(isTutorCatalog ? "tutor" : "skill");
@@ -833,13 +752,13 @@
     list.className = "ullme-catalog-list";
     note.className = "ullme-catalog-note";
     note.textContent = isTutorCatalog
-      ? "Definitions resolve in this order: course, personal, general, package."
+      ? "Templates are never used directly after adding; the course copy is authoritative."
       : "Skills resolve in this order: personal, general, package.";
 
     heading.appendChild(title);
     heading.appendChild(subtitle);
     head.appendChild(heading);
-    headActions.appendChild(manage);
+    if (!isTutorCatalog) headActions.appendChild(manage);
     headActions.appendChild(close);
     head.appendChild(headActions);
     dialog.appendChild(head);
@@ -847,7 +766,7 @@
     if (!items.length) {
       var empty = document.createElement("div");
       empty.className = "ullme-feature-empty";
-      empty.innerHTML = "<strong>Nothing here yet</strong><span>Add definitions in the corresponding package, general, or personal directory.</span>";
+      empty.innerHTML = "<strong>Nothing here yet</strong><span>No reusable templates are available.</span>";
       list.appendChild(empty);
     } else {
       items.forEach(function (item) {
@@ -880,6 +799,9 @@
     var installed = isTutor && state.aiTutors.some(function (tutor) {
       return tutor.tutorid === id;
     });
+    var courseSkill = !isTutor && state.courseSkills.some(function (skill) {
+      return skill.skillid === id;
+    });
 
     card.className = "ullme-catalog-card";
     body.className = "ullme-catalog-card-body";
@@ -899,8 +821,12 @@
       requestDefinitionWorkspace(isTutor ? "tutor" : "skill", item);
     });
     action.type = "button";
-    action.className = installed ? "ullme-secondary-action" : "ullme-primary-action";
-    action.textContent = installed ? "Added" : (isTutor ? "Add" : "Use skill");
+    action.className = installed || courseSkill
+      ? "ullme-secondary-action"
+      : "ullme-primary-action";
+    action.textContent = installed
+      ? "Added"
+      : (isTutor ? "Add" : (courseSkill ? "Activate" : "Add"));
     action.disabled = installed;
     action.addEventListener("click", function () {
       if (isTutor) {
@@ -912,11 +838,11 @@
     });
 
     titleRow.appendChild(title);
-    titleRow.appendChild(badge);
+    if (!isTutor) titleRow.appendChild(badge);
     body.appendChild(titleRow);
     body.appendChild(description);
     card.appendChild(body);
-    actions.appendChild(view);
+    if (!isTutor) actions.appendChild(view);
     actions.appendChild(action);
     card.appendChild(actions);
     return card;
@@ -1823,6 +1749,9 @@
     var container = byId("ullme_active_skill");
     var input = byId("ullme_chat_input");
     state.activeSkill = skill || null;
+    if (window.ullmeTutors && window.ullmeTutors.updateSkill) {
+      window.ullmeTutors.updateSkill(state.activeSkill);
+    }
     if (!container) return;
     container.innerHTML = "";
     container.classList.toggle("ullme-active-skill-visible", Boolean(skill));
@@ -2198,9 +2127,6 @@
     if (result && result.status === "error") {
       window.alert(result.message || "The change could not be completed.");
     }
-    if (state.organizationProposal && result && !result.ok) {
-      renderOrganizationProposal(state.organizationProposal);
-    }
   }
 
   function changeUndoComplete(result, payload) {
@@ -2287,53 +2213,66 @@
   }
 
   function currentMaterialCategory() {
-    var active = document.querySelector(".ullme-material-category-active");
-    return active ? active.getAttribute("data-category") || "general" : "general";
+    return currentMaterialDestination().split("/")[0] || "general";
   }
 
   function materialInputForCategory(category) {
     return byId("ullme_material_upload_" + category);
   }
 
-  function bindMaterialDropzone(dropzone) {
-    if (!dropzone) return;
+  function currentMaterialDestination() {
+    var destination = byId("ullme_material_destination");
+    return destination && destination.value
+      ? destination.value
+      : state.materialUploadDestination || "general";
+  }
 
-    ["dragenter", "dragover"].forEach(function (eventName) {
-      dropzone.addEventListener(eventName, function (event) {
-        event.preventDefault();
-        dropzone.classList.add("ullme-material-dropzone-active");
-      });
+  function prepareMaterialUpload(destination) {
+    destination = destination || "general";
+    var category = destination.split("/")[0] || "general";
+    var input = materialInputForCategory(category);
+    if (!input) return null;
+    state.materialUploadDestination = destination;
+    sendSidebarEvent("ullme_material_upload_destination_event", {
+      path: destination
     });
+    return input;
+  }
 
-    ["dragleave", "dragend"].forEach(function (eventName) {
-      dropzone.addEventListener(eventName, function () {
-        dropzone.classList.remove("ullme-material-dropzone-active");
-      });
-    });
+  function openMaterialUpload(destination) {
+    var input = prepareMaterialUpload(destination);
+    if (input) input.click();
+  }
 
-    dropzone.addEventListener("drop", function (event) {
-      event.preventDefault();
-      dropzone.classList.remove("ullme-material-dropzone-active");
-      queueMaterialFiles(Array.prototype.slice.call(event.dataTransfer.files || []));
-    });
-
-    dropzone.addEventListener("click", function () {
-      var input = materialInputForCategory(currentMaterialCategory());
-      if (input) input.click();
-    });
-
-    dropzone.addEventListener("keydown", function (event) {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      dropzone.click();
+  function queueMaterialFiles(files, destination) {
+    destination = destination || "general";
+    var category = destination.split("/")[0] || "general";
+    var input = materialInputForCategory(category);
+    if (!input || !files.length || typeof DataTransfer === "undefined") return;
+    state.materialUploadDestination = destination;
+    state.pendingMaterialDrop = {
+      destination: destination,
+      inputId: input.id,
+      files: files
+    };
+    sendSidebarEvent("ullme_material_upload_destination_event", {
+      path: destination
     });
   }
 
-  function queueMaterialFiles(files) {
-    var input = materialInputForCategory(currentMaterialCategory());
-    if (!input || !files.length || typeof DataTransfer === "undefined") return;
+  function materialUploadDestinationReady(result) {
+    result = result || {};
+    var pending = state.pendingMaterialDrop;
+    if (!pending || pending.destination !== result.path) return;
+    state.pendingMaterialDrop = null;
+    if (!result.ok) {
+      window.alert(result.message || "The upload folder is no longer available.");
+      return;
+    }
+    var input = byId(pending.inputId);
+    if (!input) return;
     var transfer = new DataTransfer();
-    files.forEach(function (file) {
+    pending.files.forEach(function (file) {
       transfer.items.add(file);
     });
     input.files = transfer.files;
@@ -2741,46 +2680,328 @@
   }
 
   function renderMaterialFiles(material, category) {
+    renderMaterialTree();
+  }
+
+  function materialTimestamp(value) {
+    if (!value) return 0;
+    var normalized = String(value).replace(/([+-]\d\d)(\d\d)$/, "$1:$2");
+    var timestamp = Date.parse(normalized);
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  function materialDateLabel(value) {
+    var timestamp = materialTimestamp(value);
+    if (!timestamp) return "";
+    return new Date(timestamp).toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function setMaterialSort(field) {
+    field = field === "date" ? "date" : "name";
+    if (state.materialSort === field) {
+      state.materialSortDirection =
+        state.materialSortDirection === "asc" ? "desc" : "asc";
+    } else {
+      state.materialSort = field;
+      state.materialSortDirection = field === "date" ? "desc" : "asc";
+    }
+    renderMaterialTree();
+  }
+
+  function updateMaterialSortHeadings() {
+    ["name", "date"].forEach(function (field) {
+      var button = byId("ullme_material_sort_" + field);
+      if (!button) return;
+      var active = state.materialSort === field;
+      var arrow = button.querySelector(".ullme-material-sort-arrow");
+      button.classList.toggle("ullme-material-sort-heading-active", active);
+      button.setAttribute(
+        "aria-sort",
+        active
+          ? (state.materialSortDirection === "asc" ? "ascending" : "descending")
+          : "none"
+      );
+      if (arrow) {
+        arrow.textContent = active
+          ? (state.materialSortDirection === "asc" ? "\u2191" : "\u2193")
+          : "";
+      }
+    });
+  }
+
+  function materialChildrenByParent(records) {
+    var children = {};
+    records.forEach(function (record) {
+      var parent = record.parent || "";
+      if (!children[parent]) children[parent] = [];
+      children[parent].push(record);
+    });
+    Object.keys(children).forEach(function (parent) {
+      children[parent].sort(function (left, right) {
+        if (left.type !== right.type) return left.type === "directory" ? -1 : 1;
+        var direction = state.materialSortDirection === "desc" ? -1 : 1;
+        if (state.materialSort === "date") {
+          var dateDifference =
+            materialTimestamp(left.modified) - materialTimestamp(right.modified);
+          if (dateDifference) return dateDifference * direction;
+        }
+        return String(left.name).localeCompare(String(right.name), undefined, {
+          numeric: true,
+          sensitivity: "base"
+        }) * direction;
+      });
+    });
+    return children;
+  }
+
+  function selectedMaterialPaths() {
+    return Object.keys(state.materialSelection || {}).filter(function (path) {
+      return Boolean(state.materialSelection[path]);
+    });
+  }
+
+  function materialDescendantFiles(folderPath) {
+    var prefix = folderPath + "/";
+    return (state.materialTree || []).filter(function (record) {
+      return record.type === "file" && record.path.indexOf(prefix) === 0;
+    }).map(function (record) {
+      return record.path;
+    });
+  }
+
+  function updateMaterialBatchControls() {
+    var selected = selectedMaterialPaths();
+    var count = byId("ullme_material_selection_count");
+    var apply = byId("ullme_material_apply_operation");
+    var remove = byId("ullme_material_delete_selected");
+    var batch = byId("ullme_material_batch_bar");
+    if (count) count.textContent = selected.length + " selected";
+    if (apply) apply.disabled = selected.length === 0;
+    if (remove) remove.disabled = selected.length === 0;
+    if (batch) {
+      batch.classList.toggle("ullme-material-batch-bar-active", selected.length > 0);
+    }
+  }
+
+  function updateMaterialDestinations(records) {
+    var select = byId("ullme_material_destination");
+    if (!select) return;
+    var previous = select.value || currentMaterialCategory();
+    var directories = records.filter(function (record) {
+      return record.type === "directory";
+    }).sort(function (left, right) {
+      return left.path.localeCompare(right.path, undefined, {
+        numeric: true,
+        sensitivity: "base"
+      });
+    });
+    select.innerHTML = "";
+    directories.forEach(function (record) {
+      var option = document.createElement("option");
+      option.value = record.path;
+      option.textContent = record.path;
+      select.appendChild(option);
+    });
+    var available = directories.some(function (record) {
+      return record.path === previous;
+    });
+    if (available) select.value = previous;
+    if (!select.value && directories.length) select.value = directories[0].path;
+  }
+
+  function moveMaterialPathsTo(paths, destination) {
+    paths = (paths || []).filter(function (path) {
+      var separator = path.lastIndexOf("/");
+      var parent = separator >= 0 ? path.slice(0, separator) : "";
+      return parent !== destination;
+    });
+    if (!paths.length) return;
+    sendSidebarEvent("ullme_material_operation_event", {
+      action: "move",
+      paths: paths,
+      destination: destination
+    });
+  }
+
+  function appendMaterialTreeRows(container, children, parent, depth) {
+    (children[parent] || []).forEach(function (record) {
+      var isDirectory = record.type === "directory";
+      var descendants = isDirectory ? materialDescendantFiles(record.path) : [];
+      var selectedDescendants = descendants.filter(function (path) {
+        return Boolean(state.materialSelection[path]);
+      });
+      var row = document.createElement("div");
+      var toggle = document.createElement("button");
+      var checkbox = document.createElement("input");
+      var icon = document.createElement("span");
+      var name = document.createElement("button");
+      var date = document.createElement("span");
+      row.className = "ullme-material-tree-row ullme-material-tree-" + record.type;
+      row.setAttribute("role", "treeitem");
+      row.setAttribute("data-path", record.path);
+      row.setAttribute("data-parent", record.parent || "");
+      row.setAttribute("data-type", record.type);
+      row.style.setProperty("--ullme-tree-depth", depth);
+      if (isDirectory) {
+        row.setAttribute("aria-label", "Folder " + record.path + ", drop files here");
+      }
+
+      toggle.type = "button";
+      toggle.className = "ullme-material-tree-toggle";
+      if (isDirectory) {
+        var expanded = state.materialExpanded[record.path] !== false;
+        toggle.textContent = expanded ? "\u25be" : "\u25b8";
+        toggle.setAttribute("aria-label", (expanded ? "Collapse " : "Expand ") + record.path);
+        toggle.addEventListener("click", function () {
+          state.materialExpanded[record.path] = !expanded;
+          renderMaterialTree();
+        });
+      } else {
+        toggle.disabled = true;
+        toggle.textContent = "";
+      }
+
+      checkbox.type = "checkbox";
+      checkbox.className = "ullme-material-tree-check";
+      checkbox.setAttribute("aria-label", "Select " + record.path);
+      checkbox.checked = isDirectory
+        ? descendants.length > 0 && selectedDescendants.length === descendants.length
+        : Boolean(state.materialSelection[record.path]);
+      checkbox.indeterminate = isDirectory &&
+        selectedDescendants.length > 0 &&
+        selectedDescendants.length < descendants.length;
+      checkbox.disabled = isDirectory && descendants.length === 0;
+      checkbox.addEventListener("change", function () {
+        var affected = isDirectory ? descendants : [record.path];
+        affected.forEach(function (path) {
+          if (checkbox.checked) state.materialSelection[path] = true;
+          else delete state.materialSelection[path];
+        });
+        renderMaterialTree();
+      });
+
+      icon.className = "ullme-material-tree-icon";
+      icon.textContent = isDirectory ? "\u25a0" : "\u2022";
+      name.type = "button";
+      name.className = "ullme-material-tree-name";
+      name.textContent = record.name;
+      name.title = record.path;
+      if (isDirectory) {
+        name.addEventListener("click", function () {
+          state.materialExpanded[record.path] =
+            state.materialExpanded[record.path] === false;
+          renderMaterialTree();
+        });
+      } else {
+        name.draggable = true;
+        var fullPath = "materials/" + record.path;
+        var courseRecord = courseFileRecord(fullPath);
+        var openable = Boolean(courseRecord && courseRecord.text);
+        name.title = openable
+          ? "Open " + record.path
+          : record.path + " (binary file)";
+        if (openable) {
+          name.addEventListener("click", function () {
+            requestCourseFile(fullPath);
+          });
+        } else {
+          name.classList.add("ullme-material-tree-name-unavailable");
+          name.setAttribute("aria-disabled", "true");
+        }
+      }
+
+      date.className = "ullme-material-tree-date";
+      date.textContent = materialDateLabel(record.modified);
+      row.appendChild(toggle);
+      row.appendChild(checkbox);
+      row.appendChild(icon);
+      row.appendChild(name);
+      row.appendChild(date);
+      container.appendChild(row);
+
+      if (isDirectory && state.materialExpanded[record.path] !== false) {
+        appendMaterialTreeRows(container, children, record.path, depth + 1);
+      }
+    });
+  }
+
+  function renderMaterialTree() {
     var list = byId("ullme_material_files");
     if (!list) return;
-    category = category || currentMaterialCategory();
-    var files = material && material[category] ? material[category] : [];
+    var records = Array.isArray(state.materialTree) ? state.materialTree : [];
+    var validFiles = {};
+    records.forEach(function (record) {
+      if (record.type === "file") validFiles[record.path] = true;
+    });
+    Object.keys(state.materialSelection || {}).forEach(function (path) {
+      if (!validFiles[path]) delete state.materialSelection[path];
+    });
     list.innerHTML = "";
+    updateMaterialDestinations(records);
+    updateMaterialSortHeadings();
 
-    if (!files.length) {
+    if (!records.length) {
       var empty = document.createElement("div");
       empty.className = "ullme-material-empty";
-      empty.textContent = "No files";
+      empty.textContent = "No material folders or files";
       list.appendChild(empty);
+      updateMaterialBatchControls();
       return;
     }
+    appendMaterialTreeRows(list, materialChildrenByParent(records), "", 0);
+    updateMaterialBatchControls();
+  }
 
-    files.forEach(function (path) {
-      var row = document.createElement("div");
-      var name = document.createElement("button");
-      var remove = document.createElement("button");
-      row.className = "ullme-material-file";
-      name.type = "button";
-      name.className = "ullme-material-file-name ullme-material-file-open";
-      name.textContent = path;
-      var fullPath = "materials/" + category + "/" + path;
-      var record = courseFileRecord(fullPath);
-      name.disabled = !record || !record.text;
-      name.title = record && record.text ? "Open " + path : "Binary material";
-      name.addEventListener("click", function () { requestCourseFile(fullPath); });
-      remove.type = "button";
-      remove.className = "ullme-danger-action";
-      remove.textContent = "Delete";
-      remove.addEventListener("click", function () {
-        sendSidebarEvent("ullme_material_delete_event", {
-          category: category,
-          path: path
-        });
-      });
-      row.appendChild(name);
-      row.appendChild(remove);
-      list.appendChild(row);
+  function applySelectedMaterialOperation() {
+    var paths = selectedMaterialPaths();
+    var operation = byId("ullme_material_operation");
+    var destination = byId("ullme_material_destination");
+    if (!paths.length || !operation || !destination || !destination.value) return;
+    sendSidebarEvent("ullme_material_operation_event", {
+      action: operation.value,
+      paths: paths,
+      destination: destination.value
     });
+  }
+
+  function deleteSelectedMaterials() {
+    var paths = selectedMaterialPaths();
+    if (!paths.length) return;
+    if (!window.confirm(
+      "Permanently delete " + paths.length + " selected material file" +
+      (paths.length === 1 ? "?" : "s?")
+    )) return;
+    sendSidebarEvent("ullme_material_operation_event", {
+      action: "delete",
+      paths: paths
+    });
+  }
+
+  function createMaterialDirectory() {
+    var destination = byId("ullme_material_destination");
+    if (!destination || !destination.value) return;
+    var name = window.prompt("Name for the new folder inside " + destination.value + ":");
+    if (name == null || !String(name).trim()) return;
+    name = String(name).trim();
+    sendSidebarEvent("ullme_material_create_directory_event", {
+      path: destination.value + "/" + name
+    });
+  }
+
+  function materialOperationComplete(result) {
+    result = result || {};
+    if (!result.ok) {
+      window.alert(result.message || "The material operation failed.");
+      return;
+    }
+    state.materialSelection = {};
+    renderMaterialTree();
   }
 
   function toggleSidebarMenu(button, onSelect) {
@@ -3204,17 +3425,13 @@
     scrollMessagesToBottom();
   }
 
-  function updateCourseList(courseids, selectedCourseid, showCourses, summary, role, semester) {
+  function updateCourseList(courseids, selectedCourseid, showCourses, summary, semester) {
     var courseSelect = byId("ullme_course_select");
     var courseTabs = byId("ullme_course_tabs");
     var addCourseButton = byId("ullme_add_course_btn");
 
     courseids = Array.isArray(courseids) ? courseids : [];
     selectedCourseid = selectedCourseid || "";
-    if (role) {
-      setRoleLayout(role);
-      setSidebarValue(byId("ullme_role_select"), role);
-    }
     if (semester) setSidebarValue(byId("ullme_semester_select"), semester);
     if (courseSelect) {
       courseSelect.classList.toggle("ullme-course-select-hidden", !showCourses);
@@ -3222,7 +3439,10 @@
       setSidebarValue(courseSelect, selectedCourseid);
     }
     if (addCourseButton) {
-      addCourseButton.classList.toggle("ullme-add-course-button-hidden", !showCourses);
+      addCourseButton.classList.toggle(
+        "ullme-add-course-button-hidden",
+        !showCourses
+      );
     }
     if (courseTabs) courseTabs.classList.toggle("ullme-course-tabs-hidden", !selectedCourseid);
     updateActiveCourse(summary, selectedCourseid);
@@ -3238,50 +3458,38 @@
     state.selectedCourseid = selectedCourseid || "";
     var course = summary && summary.course ? summary.course : { courseid: selectedCourseid || "" };
     var material = summary && summary.material ? summary.material : {};
+    var materialTree = summary && Array.isArray(summary.material_tree)
+      ? summary.material_tree
+      : [];
     var aiTutors = summary && Array.isArray(summary.ai_tutors) ? summary.ai_tutors : [];
     var aiTutorCatalog = summary && Array.isArray(summary.ai_tutor_catalog) ? summary.ai_tutor_catalog : [];
     var skills = summary && Array.isArray(summary.skills) ? summary.skills : [];
+    var courseSkills = summary && Array.isArray(summary.course_skills)
+      ? summary.course_skills
+      : [];
     var activeSkill = summary ? summary.active_skill : null;
     var courseFiles = summary && Array.isArray(summary.course_files) ? summary.course_files : [];
-    var organization = summary && summary.organization
-      ? summary.organization
-      : { types: [], indexes: [], unassigned: [] };
     var courseWorkspace = byId("ullme_course_workspace");
     state.courseMaterial = material;
+    state.materialTree = materialTree;
     state.aiTutors = aiTutors;
     state.aiTutorCatalog = aiTutorCatalog;
     state.skills = skills;
+    state.courseSkills = courseSkills;
     state.courseFiles = courseFiles;
-    state.organization = organization;
-    state.organizationProposal = null;
     if (courseWorkspace) {
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
     fillCourseSettings(course);
-    renderMaterialFiles(material, currentMaterialCategory());
+    renderMaterialTree();
     renderCourseFileTree(courseFiles);
-    renderCourseOrganization(organization);
     renderAITutors(aiTutors);
     renderActiveSkill(activeSkill);
     updateAIContext();
     if (!selectedCourseid) activateStudioView("materials");
   }
 
-  function setRoleLayout(role) {
-    var app = byId("ullme_app");
-    if (!app) return;
-    ["teacher", "student", "admin"].forEach(function (candidate) {
-      app.classList.toggle("ullme-role-" + candidate, role === candidate);
-    });
-    if (role !== "teacher") {
-      var overlay = byId("ullme_definition_overlay");
-      if (overlay && overlay.classList.contains("ullme-definition-embedded")) {
-        removeDefinitionWorkspace(true);
-      }
-    }
-  }
-
-  function completePendingMaterialUpload(inputId) {
+  function completePendingMaterialUpload(inputId, result) {
     inputId = inputId || state.pendingMaterialInputId;
     if (!inputId) return;
     if (state.pendingMaterialInputId && inputId !== state.pendingMaterialInputId) return;
@@ -3293,6 +3501,9 @@
       Shiny.setInputValue(inputId, null, { priority: "event" });
     } else if (window.Shiny && Shiny.onInputChange) {
       Shiny.onInputChange(inputId, null);
+    }
+    if (result && result.ok === false) {
+      window.alert(result.message || "The material upload failed.");
     }
   }
 
@@ -3330,7 +3541,10 @@
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
   window.ullme.materialUploadComplete = completePendingMaterialUpload;
+  window.ullme.materialUploadDestinationReady = materialUploadDestinationReady;
+  window.ullme.materialOperationComplete = materialOperationComplete;
   window.ullme.updateCourseList = updateCourseList;
+  window.ullme.openCatalogDialog = openCatalogDialog;
   window.ullme.openDefinitionWorkspace = openDefinitionWorkspace;
   window.ullme.openDefinitionImportPreview = openDefinitionImportPreview;
   window.ullme.definitionImportComplete = definitionImportComplete;
@@ -3343,8 +3557,6 @@
   window.ullme.openCourseFile = openCourseFile;
   window.ullme.courseFileSaveComplete = courseFileSaveComplete;
   window.ullme.courseFileError = courseFileError;
-  window.ullme.openOrganizationProposal = openOrganizationProposal;
-  window.ullme.organizationApplyComplete = organizationApplyComplete;
   window.ullme.updateModelCatalog = updateModelCatalog;
 
   if (document.readyState === "loading") {

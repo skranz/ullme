@@ -14,7 +14,12 @@ stopifnot(
   )
 )
 
-key_file = tempfile("ullme-test-key-")
+test_main_dir = tempfile("ullme-ai-provider-main-")
+dir.create(test_main_dir, recursive=TRUE)
+cleanup_app = new.env(parent=emptyenv())
+cleanup_app$glob = list(main_dir=test_main_dir)
+test_dir = ullme_tempdir(pattern=".ullme-ai-provider-", app=cleanup_app)
+key_file = file.path(test_dir, "api-key.txt")
 writeLines("dummy-secret", key_file)
 config = ullme_api_config(
   api_provider="nvidia",
@@ -25,7 +30,7 @@ stopifnot(
   config$model == ullme_nvidia_default_model(),
   identical(config$credentials(), "dummy-secret")
 )
-unlink(key_file)
+ullme_remove_tempdir(test_dir, app=cleanup_app)
 
 registry = ullme_tool_registry()
 stopifnot(all(c(

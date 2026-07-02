@@ -2,15 +2,18 @@
 
 ## Runtime And State Ownership
 
-uLLMe is an R package built on Shiny and shinyEvents. `ullmeApp()` creates an
-`eventsApp()` and registers explicit event and change handlers instead of using
-reactive expressions throughout the application.
+uLLMe is an R package built on Shiny and shinyEvents. `teacherApp()` and
+`studentApp()` create fixed-role `eventsApp()` instances and register explicit
+event and change handlers instead of using reactive expressions throughout the
+application. Shared construction and handlers live in `R/ullme.R`; the
+role-specific constructors and workspace markup live in `R/teacherApp.R` and
+`R/studentApp.R`.
 
 Each Shiny app instance has its own `app` object. User- and session-specific
 state therefore lives directly on `app`, including:
 
 - `app$userid`
-- `app$role` and `app$allowed_roles`
+- the fixed `app$role` and `app$app_kind`
 - `app$semester`
 - `app$courseids` and `app$courseid`
 - user, session, image, and audio paths
@@ -26,7 +29,9 @@ R builds a stable HTML shell and loads:
 
 ```text
 inst/www/ullme-chat.css
+inst/www/ullme-materials.js
 inst/www/ullme-chat.js
+inst/www/ullme-tutors.js
 inst/www/ullme-audio.js
 ```
 
@@ -42,53 +47,40 @@ explicit JavaScript calls.
 
 ## Application Layout
 
-All roles use one compact application bar containing:
+Both apps use one compact application bar containing:
 
 - the `uLLMe` brand
-- role selector
+- a fixed Teacher or Student label
 - semester selector
-- course selector for teacher and student roles
-- add-course button for teacher and student roles
+- course selector
+- add-course button in the teacher app
 - personal-settings button
 
 The personal-settings popover displays the instance userid and gives teachers
-direct access to the AI Tutor and Skill libraries.
+access to Skill and agent settings. AI Tutors are added from the rail's Add
+menu.
 
-Teacher mode divides the workspace into two equal panes. The course pane is on
-the left and chat is on the right. The course pane has these tabs:
+Teacher mode divides the workspace into a compact navigation rail, the main
+course work surface, and a resizable AI assistant pane. Materials and Settings
+are fixed rail entries. Each installed AI Tutor and each course Skill receive a
+dynamic rail entry. The active Skill is highlighted. The Add menu opens the
+Tutor-template or Skill catalog.
 
-1. AI Tutors
-2. Materials
-3. Settings
-
-AI Tutors contains the tutor families installed in the selected course and
-opens a library of resolved tutor definitions. Materials and Settings remain
-mounted in the stable shell and are switched client-side. The material upload
-command is an icon at the right side of the tab row and is shown only for the
-Materials tab.
+Selecting a Tutor opens one course-local Tutor with Instances, Definition, and
+YAML tabs. `course/ai_tutors/<tutorid>/tutor.yaml` is always a complete,
+editable definition. Personal, general, and package definitions are templates
+used only to create that course copy; they are never resolved at Tutor runtime.
+An optional `instance_generation.file_matcher` block enables form-based
+matching of primary and associated material files.
 
 Skills belong to the teacher assistant rather than the course tab row. A
 composer button opens the resolved Skill catalog. Selecting a Skill displays
 its introduction, starter prompts, and composer placeholder above the composer
 until the teacher clears it or selects another Skill.
 
-Both catalogs, installed Tutor cards, and personal settings can open the shared
-Definition Workspace. It is a large overlay rather than a permanent third
-column. Its source-grouped sidebar shows Package, General, Personal, and
-course-local definitions, including shadowed copies. The editor exposes the
-Markdown and YAML files inside the selected definition.
-
-Package and General definitions are read-only in teacher mode. Personal
-definitions and course-local Tutor definitions are editable. Teachers can
-create personal definitions, copy a definition into their personal library, or
-copy a resolved Tutor definition into the selected course before editing it.
-YAML is parsed and definition IDs are checked before a file is saved.
-
-Editable copies can be deleted independently of course Tutor installation.
-Deleting a copy restores normal definition resolution. Skills download as ZIP
-bundles and import from validated ZIP bundles; Tutor definitions download and
-import as YAML. Imports target Personal storage or, for Tutors, the selected
-course. Conflicts replace complete copies rather than merging files.
+The legacy Definitions work surface is not part of Teacher Studio. Tutor
+editing belongs to the selected Tutor pane. Skill definitions may still use
+their dedicated library tooling.
 
 The Definition Assistant is an optional adaptive panel. Opening it collapses
 the source library into a definition picker and divides the workspace between
@@ -97,8 +89,9 @@ editor draft and provide Undo; the existing Save action remains the only path
 to disk. The fake-AI implementation exercises this protocol while structured
 responses from a real model remain to be connected.
 
-Student and admin modes reuse the same chat pane at full width. They do not
-create a separate chat implementation.
+The student app builds a chat-first workspace without the Teacher Studio,
+teacher navigation, or pane resizers. It reuses the common chat implementation
+while keeping its constructor and workspace markup separate.
 
 ## shinyEvents Boundary
 
@@ -107,22 +100,26 @@ create a separate chat implementation.
 - `ullme_submit_chat_event`: submits text, model, message IDs, and image
   metadata.
 - `ullme_image_upload`: stores images selected or pasted into the chat.
-- `ullme_role_select_event`: updates `app$role` and refreshes courses.
 - `ullme_semester_select_event`: updates `app$semester` and refreshes courses.
 - `ullme_course_select_event`: updates `app$courseid`.
 - `ullme_add_course_event`: creates and selects a course.
 - `ullme_course_settings_save_event`: writes course settings to `course.yaml`.
 - `ullme_material_category_event`: records the active material category.
-- `ullme_material_delete_event`: validates and deletes a material file.
+- `ullme_material_delete_event`: validates and deletes one material file.
+- `ullme_material_operation_event`: copies, moves, or deletes selected material
+  files through the containment-checked helpers in `R/ullme_io.R`.
+- `ullme_material_create_directory_event`: creates a subdirectory below the
+  active course's material root.
 - `ullme_material_upload_<category>`: stores files for one material category.
-- `ullme_ai_tutor_add_event`: installs a resolved tutor definition in the
-  selected course.
+- `ullme_ai_tutor_add_event`: copies a Tutor template into the selected course.
 - `ullme_ai_tutor_toggle_event`: enables or disables an installed course tutor.
+- `ullme_ai_tutor_save_event`: validates and saves the selected course Tutor's
+  form or YAML definition.
 - `ullme_skill_activate_event`: activates one resolved Skill for the teacher
   assistant.
 - `ullme_skill_clear_event`: clears the active Skill.
-- `ullme_definition_action_event`: opens the Definition Workspace and performs
-  server-validated create, copy, delete, import, download, and save operations.
+- `ullme_definition_action_event`: supports the remaining Skill-library
+  definition actions.
 - `ullme_definition_import_tutor` and `ullme_definition_import_skill`: upload
   Tutor YAML and Skill ZIP files for validation and import preview.
 - `ullme_definition_chat_event`: constructs definition-scoped context and
@@ -130,15 +127,16 @@ create a separate chat implementation.
 
 Audio handlers are registered separately by `ullme_register_audio_handlers()`.
 
-After role, semester, course, settings, material, Tutor, or Skill changes, R
+After semester, course, settings, material, Tutor, or Skill changes, R
 calls `window.ullme.updateCourseList(...)`. The browser updates selectors,
-role-aware layout classes, settings fields, tutor cards, Skill state, and
+  fixed-role layout classes, settings fields, Tutor panes, Skill state, and
 material lists without rebuilding the UI.
 
 ## Users, Roles, And Semesters
 
-`ullmeApp()` accepts `userid`, `role`, and `allowed_roles`. Supported roles
-are `teacher`, `student`, and `admin`.
+`teacherApp()` accepts a teacher `userid`; `studentApp()` accepts a student
+`userid` and optional `teacherid`. An app's role cannot be changed after
+construction.
 
 The role-independent user directory is:
 
@@ -153,8 +151,7 @@ main_dir/teachers/<userid>
 main_dir/students/<userid>
 ```
 
-Course storage is currently available for teacher and student roles. Admin has
-no course directory.
+Course storage is available for teacher and student apps.
 
 Semesters use these abbreviations:
 
@@ -223,6 +220,19 @@ is also a known contract mismatch to resolve before enabling validation: the UI
 writes full lowercase weekday names such as `monday`, while the schema
 currently enumerates two-letter values such as `mo`.
 
+## Temporary directories
+
+Temporary working directories are created by `ullme_tempdir()` below
+`<main_dir>/temp`. Recursive removal is centralized in
+`ullme_remove_tempdir()`. It canonicalizes both paths, refuses the temp root
+itself, requires the target to be a strict descendant, and rejects symbolic
+links or tree entries resolving outside that exact temporary directory.
+
+Non-temporary user paths scheduled for deletion are first checked against the
+user's authorized roots and atomically moved into one of these guarded
+temporary directories. The guarded temporary-directory remover is the only
+place where recursive `unlink()` is called.
+
 ## Materials
 
 Each course stores material below one common root:
@@ -239,6 +249,29 @@ Each course stores material below one common root:
 Existing files found in legacy top-level category directories are copied into
 the corresponding new directory when material storage is initialized.
 
+The Materials tab renders these categories and their subdirectories as a file
+tree. Clicking the Name or Modified heading sorts siblings and toggles the sort
+direction. Folder checkboxes select their descendant files. Selected files can
+be dragged onto another folder to move them, while files dragged from the local
+computer onto a folder are uploaded directly into that directory. Compact
+move, copy, and delete controls remain available as keyboard-friendly
+alternatives.
+
+`inst/www/ullme-materials.js` owns pointer and drag gestures for the tree:
+rectangle selection (with Ctrl/Cmd additive selection), multi-file dragging,
+and resolution of row drop targets. Dropping onto a file resolves to that
+file's parent directory. Rendering, sorting, and server messaging remain in
+`ullme-chat.js`.
+
+All UI file operations pass paths relative to the active course's `materials`
+directory to `delete_material_file()`, `move_material_file()`,
+`copy_material_file()`, or `create_material_directory()` in `R/ullme_io.R`.
+Those helpers derive the material root from the active app and course,
+canonicalize it, reject absolute and parent paths,
+check existing ancestors (including resolved links), and re-check containment
+before changing the filesystem. The delete helper accepts files only and does
+not provide recursive directory deletion.
+
 The browser supports the upload icon, clicking the drop area, and drag and
 drop. The selected category determines which hidden Shiny file input receives
 the files. After R stores an upload, it refreshes course state and calls
@@ -253,7 +286,8 @@ Deletion accepts a category and relative path. R rejects absolute paths and
 parent traversal, normalizes the target, verifies that it remains inside the
 category directory, and only then deletes the file.
 
-`ullmeApp(max_upload_mb=100)` raises Shiny's process-wide request-size option
+`teacherApp(max_upload_mb=100)` and `studentApp(max_upload_mb=100)` raise
+Shiny's process-wide request-size option
 to at least the configured value. Upload state itself remains instance-specific.
 
 ## Chat And Image Flow

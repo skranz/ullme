@@ -136,7 +136,7 @@ ullme_validate_course_file_content = function(path, content, app=getApp(),
     ))
   }
   tutor_match = regexec(
-    "^ai_tutor_definitions/([A-Za-z][A-Za-z0-9_-]*)/tutor\\.ya?ml$",
+    "^ai_tutors/([A-Za-z][A-Za-z0-9_-]*)/tutor\\.ya?ml$",
     relative,
     ignore.case=TRUE
   )

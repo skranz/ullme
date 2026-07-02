@@ -1,8 +1,10 @@
 library(ullme)
 
-root = file.path(tempdir(), "ullme-agent-tools-check")
-unlink(root, recursive=TRUE)
-dir.create(root, recursive=TRUE)
+test_main_dir = tempfile("ullme-agent-tools-main-")
+dir.create(test_main_dir, recursive=TRUE)
+cleanup_app = new.env(parent=emptyenv())
+cleanup_app$glob = list(main_dir=test_main_dir)
+root = ullme_tempdir(pattern=".ullme-agent-tools-check-", app=cleanup_app)
 
 app = new.env(parent=emptyenv())
 app$glob = list(main_dir=root)
@@ -57,4 +59,4 @@ stopifnot(inherits(
   "try-error"
 ))
 
-unlink(root, recursive=TRUE)
+ullme_remove_tempdir(root, app=cleanup_app)

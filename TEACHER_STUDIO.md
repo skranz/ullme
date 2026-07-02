@@ -8,32 +8,42 @@ Teacher mode uses a workbench layout with three regions:
 
 Student mode remains chat-first.
 
-## Work surfaces
+## Navigation
 
-- **Materials** provides material categories plus an **All course files** view.
-  Any authorized text file up to 2 MB can be opened in the universal editor.
-  Binary files remain visible but are not text-editable.
-- **Organize** renders course object indexes as ordered problem sets,
-  solutions, slides, scripts, and events. It also shows unassigned materials.
-  Each object index can be opened as YAML.
-- **Tutors** manages the AI Tutors installed in the selected course.
-- **Definitions** embeds the Tutor and Skill definition workspace in the main
-  work surface.
-- **Settings** edits course metadata.
-- **History** opens approval policies and transaction/undo history.
+The rail contains fixed entries for **Materials**, **Settings**, and
+**History**. Each AI Tutor installed in the selected course gets its own Tutor
+entry. Skills added to the course get Skill entries; the currently active one
+is highlighted.
 
-The AI pane receives the selected course, current work surface, and open file
-path as context. It can be collapsed when more editor space is needed.
+The **Add** menu currently offers:
 
-## Organize with AI
+- **Add AI Tutor**, which copies a reusable template into the course; and
+- **Add Skill**, which adds and activates a reusable teacher workflow.
 
-The organizer groups formats of the same document, proposes ordered indexes,
-and maps solution files to problem sets. Its proposal remains a draft:
+There is no separate Organize or Definitions work surface.
 
-1. review the proposed object groups;
-2. inspect individual YAML files if desired;
-3. choose **Apply proposal**; and
-4. approve the transaction when the user's policy is `ask`.
+## AI Tutor work surface
 
-Applying a proposal uses the same validation, backup, audit, and undo layer as
-manual edits.
+Selecting a Tutor always opens that specific course Tutor. Its definition is
+stored at:
+
+```text
+ai_tutors/<tutorid>/tutor.yaml
+```
+
+This is a complete, editable course copy. General, personal, and package
+Tutors are templates used only when adding a Tutor; the course never runs a
+template directly.
+
+The Tutor work surface has:
+
+- **Instances**, a table relating each Tutor instance to material roles such
+  as problem set and solution;
+- **Definition**, form-based editing for common metadata, teaching
+  instructions, and optional instance-matching rules; and
+- **YAML**, direct editing of the complete course-local definition.
+
+A Tutor opts into the file-matching helper with
+`instance_generation.file_matcher`. The matcher scans a material directory,
+captures an instance ID from primary files, and associates related files with
+patterns containing `{{id}}`.

@@ -133,6 +133,46 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
   if (is.list(value) && !nzchar(trimws(paste0(value$label %||% "")[1]))) {
     warnings = c(warnings, "label is empty.")
   }
+  if (identical(kind, "tutor") && is.list(value)) {
+    generation = value$instance_generation %||% list()
+    if (!is.list(generation)) {
+      errors = c(errors, "instance_generation must be a mapping.")
+      generation = list()
+    }
+    matcher = generation$file_matcher %||% NULL
+    if (!is.null(matcher)) {
+      if (!is.list(matcher)) {
+        errors = c(errors, "instance_generation.file_matcher must be a mapping.")
+      } else {
+        directory = paste0(matcher$directory %||% "")[1]
+        primary_role = paste0(matcher$primary_role %||% "")[1]
+        primary_pattern = paste0(matcher$primary_pattern %||% "")[1]
+        id_group = suppressWarnings(as.integer(matcher$id_group %||% 1L)[1])
+        if (!ullme_safe_relative_material_path(directory)) {
+          errors = c(errors, "file_matcher.directory must be a relative material directory.")
+        }
+        if (!grepl("^[A-Za-z][A-Za-z0-9_-]*$", primary_role)) {
+          errors = c(errors, "file_matcher.primary_role must be a valid role ID.")
+        }
+        if (!nzchar(primary_pattern)) {
+          errors = c(errors, "file_matcher.primary_pattern is required.")
+        } else {
+          valid_pattern = tryCatch({
+            grepl(primary_pattern, "", perl=TRUE)
+            TRUE
+          }, error=function(e) FALSE)
+          if (!valid_pattern) errors = c(errors, "file_matcher.primary_pattern is not a valid regular expression.")
+        }
+        if (is.na(id_group) || id_group < 1L) {
+          errors = c(errors, "file_matcher.id_group must be a positive integer.")
+        }
+        associated = matcher$associated %||% list()
+        if (!is.list(associated)) {
+          errors = c(errors, "file_matcher.associated must be a mapping.")
+        }
+      }
+    }
+  }
   ullme_validation_result(length(errors) == 0, errors, warnings, value)
 }
 

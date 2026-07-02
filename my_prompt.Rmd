@@ -1021,7 +1021,7 @@ ullme_delete_material_file = function(app, category, path) {
   category_dir_norm = normalizePath(category_dir, winslash="/", mustWork=TRUE)
   if (!startsWith(target, paste0(category_dir_norm, "/"))) return(FALSE)
   if (!file.exists(target) || dir.exists(target)) return(FALSE)
-  unlink(target)
+  file.remove(target)
   TRUE
 }
 

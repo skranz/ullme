@@ -111,12 +111,43 @@ ullme_path_hash = function(path) {
 }
 
 
-ullme_copy_path = function(source, target, overwrite=FALSE) {
+.ullme_remove_user_path = function(path, app=getApp()) {
+  target = ullme_assert_authorized_target(path, app=app)
+  if (!file.exists(target) && !dir.exists(target)) return(invisible(FALSE))
+
+  quarantine = ullme_tempdir(pattern=".ullme-remove-", app=app)
+  quarantined_target = file.path(quarantine, basename(target))
+  if (!file.rename(target, quarantined_target)) {
+    ullme_remove_tempdir(quarantine, app=app)
+    stop("Could not move the path into the guarded temporary directory.")
+  }
+
+  removal_error = tryCatch({
+    ullme_remove_tempdir(quarantine, app=app)
+    NULL
+  }, error=function(e) e)
+  if (!is.null(removal_error)) {
+    restored = file.rename(quarantined_target, target)
+    if (dir.exists(quarantine)) {
+      try(ullme_remove_tempdir(quarantine, app=app), silent=TRUE)
+    }
+    stop(
+      conditionMessage(removal_error),
+      if (!isTRUE(restored)) " The original path could not be restored." else ""
+    )
+  }
+  invisible(TRUE)
+}
+
+
+ullme_copy_path = function(source, target, overwrite=FALSE, app=getApp()) {
   if (!file.exists(source) && !dir.exists(source)) stop("Copy source does not exist.")
   if ((file.exists(target) || dir.exists(target)) && !isTRUE(overwrite)) {
     stop("Copy target already exists.")
   }
-  if (file.exists(target) || dir.exists(target)) unlink(target, recursive=TRUE)
+  if (file.exists(target) || dir.exists(target)) {
+    .ullme_remove_user_path(target, app=app)
+  }
   dir.create(dirname(target), recursive=TRUE, showWarnings=FALSE)
   if (!dir.exists(source)) {
     if (!file.copy(source, target, overwrite=FALSE, copy.mode=TRUE, copy.date=TRUE)) {
@@ -253,47 +284,56 @@ ullme_submit_change = function(operation, app=getApp()) {
 }
 
 
-ullme_backup_change_targets = function(operation, backup_dir) {
+ullme_backup_change_targets = function(operation, backup_dir, app=getApp()) {
   before_dir = file.path(backup_dir, "before")
   dir.create(before_dir, recursive=TRUE, showWarnings=FALSE)
   for (i in seq_along(operation$changes)) {
     change = operation$changes[[i]]
     if (!isTRUE(change$before_exists)) next
     target = file.path(before_dir, sprintf("%04d", i))
-    ullme_copy_path(change$target, target)
+    ullme_copy_path(change$target, target, app=app)
     operation$changes[[i]]$backup = gsub("\\\\", "/", file.path("before", sprintf("%04d", i)))
   }
   operation
 }
 
 
-ullme_apply_change_entry = function(change) {
+ullme_apply_change_entry = function(change, app=getApp()) {
   if (identical(change$type, "write_text")) {
     dir.create(dirname(change$target), recursive=TRUE, showWarnings=FALSE)
     temp = tempfile(".ullme-write-", tmpdir=dirname(change$target))
-    on.exit(if (file.exists(temp)) unlink(temp), add=TRUE)
+    on.exit(if (file.exists(temp)) file.remove(temp), add=TRUE)
     writeLines(change$content, temp, useBytes=TRUE)
-    if (file.exists(change$target)) unlink(change$target)
+    if (file.exists(change$target)) {
+      .ullme_remove_user_path(change$target, app=app)
+    }
     if (!file.rename(temp, change$target)) {
       if (!file.copy(temp, change$target, overwrite=FALSE)) stop("Could not write ", basename(change$target), ".")
     }
   } else if (identical(change$type, "copy_path")) {
-    ullme_copy_path(change$source, change$target, overwrite=isTRUE(change$overwrite))
+    ullme_copy_path(
+      change$source,
+      change$target,
+      overwrite=isTRUE(change$overwrite),
+      app=app
+    )
   } else if (identical(change$type, "delete_path")) {
-    unlink(change$target, recursive=TRUE)
+    .ullme_remove_user_path(change$target, app=app)
     if (file.exists(change$target) || dir.exists(change$target)) stop("Could not delete ", basename(change$target), ".")
   }
   invisible(TRUE)
 }
 
 
-ullme_restore_change_targets = function(operation, backup_dir) {
+ullme_restore_change_targets = function(operation, backup_dir, app=getApp()) {
   for (i in rev(seq_along(operation$changes))) {
     change = operation$changes[[i]]
-    if (file.exists(change$target) || dir.exists(change$target)) unlink(change$target, recursive=TRUE)
+    if (file.exists(change$target) || dir.exists(change$target)) {
+      .ullme_remove_user_path(change$target, app=app)
+    }
     if (isTRUE(change$before_exists)) {
       backup = file.path(backup_dir, change$backup)
-      ullme_copy_path(backup, change$target)
+      ullme_copy_path(backup, change$target, app=app)
     }
   }
   invisible(TRUE)
@@ -351,7 +391,7 @@ ullme_append_change_index = function(operation, app=getApp()) {
 
 ullme_commit_change = function(operation, approved_by="user", app=getApp()) {
   lock = ullme_acquire_change_lock(app=app)
-  on.exit(ullme_release_change_lock(lock), add=TRUE)
+  on.exit(ullme_release_change_lock(lock, app=app), add=TRUE)
   for (change in operation$changes) {
     current_exists = file.exists(change$target) || dir.exists(change$target)
     current_hash = ullme_path_hash(change$target)
@@ -364,14 +404,14 @@ ullme_commit_change = function(operation, approved_by="user", app=getApp()) {
   backup_dir = file.path(ullme_change_backup_root(app=app), operation$id)
   if (dir.exists(backup_dir) || file.exists(backup_dir)) stop("Change ID already exists.")
   dir.create(backup_dir, recursive=TRUE, showWarnings=FALSE)
-  operation = ullme_backup_change_targets(operation, backup_dir)
+  operation = ullme_backup_change_targets(operation, backup_dir, app=app)
   operation$approved_by = approved_by
   operation$committed_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
 
   error = NULL
   tryCatch({
     for (i in seq_along(operation$changes)) {
-      ullme_apply_change_entry(operation$changes[[i]])
+      ullme_apply_change_entry(operation$changes[[i]], app=app)
       operation$changes[[i]]$after_exists =
         file.exists(operation$changes[[i]]$target) || dir.exists(operation$changes[[i]]$target)
       operation$changes[[i]]$after_hash = ullme_path_hash(operation$changes[[i]]$target)
@@ -382,7 +422,7 @@ ullme_commit_change = function(operation, approved_by="user", app=getApp()) {
 
   if (!is.null(error)) {
     rollback_error = tryCatch({
-      ullme_restore_change_targets(operation, backup_dir)
+      ullme_restore_change_targets(operation, backup_dir, app=app)
       NULL
     }, error=function(e) e)
     operation$status = if (is.null(rollback_error)) "rolled_back" else "rollback_failed"
@@ -400,20 +440,69 @@ ullme_commit_change = function(operation, approved_by="user", app=getApp()) {
 }
 
 
+ullme_change_lock_is_stale = function(lock) {
+  if (!dir.exists(lock)) return(FALSE)
+  marker = file.path(lock, "owner")
+  info = file.info(if (file.exists(marker)) marker else lock)
+  modified = info$mtime[[1]]
+  if (is.na(modified)) return(FALSE)
+  age = as.numeric(difftime(Sys.time(), modified, units="secs"))
+  if (file.exists(marker)) age > 30 * 60 else age > 5
+}
+
+
+ullme_clear_stale_change_lock = function(lock, app=getApp()) {
+  if (ullme_change_lock_is_stale(lock)) {
+    .ullme_remove_user_path(lock, app=app)
+  }
+  invisible(TRUE)
+}
+
+
 ullme_acquire_change_lock = function(app=getApp(), attempts=50L) {
   history_dir = ullme_change_history_dir(app=app)
   dir.create(history_dir, recursive=TRUE, showWarnings=FALSE)
   lock = file.path(history_dir, ".write-lock")
+  ullme_clear_stale_change_lock(lock, app=app)
   for (i in seq_len(max(1L, as.integer(attempts)))) {
-    if (dir.create(lock, showWarnings=FALSE)) return(lock)
+    if (dir.create(lock, showWarnings=FALSE)) {
+      marker = file.path(lock, "owner")
+      marker_error = tryCatch({
+        writeLines(
+          paste(
+            app$userid,
+            format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
+          ),
+          marker,
+          useBytes=TRUE
+        )
+        NULL
+      }, error=function(e) e)
+      if (!is.null(marker_error)) {
+        .ullme_remove_user_path(lock, app=app)
+        stop("Could not initialize the uLLMe change lock.")
+      }
+      return(lock)
+    }
     Sys.sleep(0.02)
+  }
+  ullme_clear_stale_change_lock(lock, app=app)
+  if (dir.create(lock, showWarnings=FALSE)) {
+    writeLines(
+      paste(app$userid, format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")),
+      file.path(lock, "owner"),
+      useBytes=TRUE
+    )
+    return(lock)
   }
   stop("Another file change is currently being committed. Please try again.")
 }
 
 
-ullme_release_change_lock = function(lock) {
-  if (!is.null(lock) && dir.exists(lock)) unlink(lock, recursive=TRUE)
+ullme_release_change_lock = function(lock, app=getApp()) {
+  if (!is.null(lock) && dir.exists(lock)) {
+    .ullme_remove_user_path(lock, app=app)
+  }
   invisible(TRUE)
 }
 

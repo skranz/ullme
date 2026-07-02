@@ -110,7 +110,8 @@ ullme_start_mock_openai_api_job = function(port = 8123,
                                           response_text = NULL,
                                           tool_mode = c("auto", "always", "never"),
                                           name = "ullme mock OpenAI API",
-                                          source_file = file.path(getwd(), "R", "mock_api.R")) {
+                                          source_file = file.path(getwd(), "R", "mock_api.R"),
+                                          app = getApp()) {
   restore.point("ullme_start_mock_openai_api_job")
   ullme_mock_require_namespace("rstudioapi")
   if (!rstudioapi::isAvailable()) {
@@ -119,7 +120,8 @@ ullme_start_mock_openai_api_job = function(port = 8123,
 
   tool_mode = match.arg(tool_mode)
   source_file = normalizePath(source_file, winslash = "/", mustWork = FALSE)
-  job_file = tempfile("ullme-mock-api-", fileext = ".R")
+  job_dir = ullme_tempdir(pattern=".ullme-mock-api-", app=app)
+  job_file = file.path(job_dir, "mock-api-job.R")
   source_line = if (file.exists(source_file)) {
     paste0("source(", deparse(source_file), ")")
   } else {
@@ -149,6 +151,7 @@ ullme_start_mock_openai_api_job = function(port = 8123,
     port = port,
     host = host,
     base_url = paste0("http://", host, ":", port, "/v1"),
+    job_dir = job_dir,
     job_file = job_file
   ))
 }

@@ -2,9 +2,10 @@
 
 - We currently try to save everything in a well-structured file system instead of a data base. Seems to make debugging / adaption easier.
 
-- Roles: "teacher", "student", "admin"
+- Applications have one fixed role: `"teacher"` or `"student"`.
 
-- A "user" can in principle have different roles, but "teacher" and "admin" roles will be restriced.
+- Teacher-only capabilities are exposed by `teacherApp()`; `studentApp()` does
+  not provide a role switch or render Teacher Studio controls.
 
 - Each teacher can have multiple "courses". Courses are assigned to semester, multiple students can be registered to a course.
 
@@ -23,8 +24,21 @@
 - Try to make it look similar to known, widely used AI chat interfaces. 
 
 - Teacher mode uses the [Teacher Studio](TEACHER_STUDIO.md): a course
-  workspace for materials, object organization, editable text files, AI Tutor
-  and Skill definitions, and a collapsible context-aware AI pane.
+  workspace for materials, editable text files, course-local AI Tutors and
+  their instances, active Skills, and a collapsible context-aware AI pane.
+
+Create fixed-role applications with:
+
+```r
+teacher_app = teacherApp(main_dir, userid="teacher_id")
+student_app = studentApp(
+  main_dir,
+  userid="student_id",
+  teacherid="teacher_id"
+)
+```
+
+Roles are fixed by the constructor and cannot be switched inside an app.
 
 
 # Code Design

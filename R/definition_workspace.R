@@ -318,7 +318,7 @@ ullme_save_definition_file = function(kind, definitionid, source, file, content,
 }
 
 
-ullme_copy_definition_dir = function(source_dir, target_dir) {
+ullme_copy_definition_dir = function(source_dir, target_dir, app=getApp()) {
   restore.point("ullme_copy_definition_dir")
   if (!dir.exists(source_dir)) stop("The source definition does not exist.")
   if (dir.exists(target_dir) || file.exists(target_dir)) {
@@ -327,9 +327,8 @@ ullme_copy_definition_dir = function(source_dir, target_dir) {
 
   parent = dirname(target_dir)
   dir.create(parent, recursive=TRUE, showWarnings=FALSE)
-  stage = tempfile(pattern=".ullme-copy-", tmpdir=parent)
-  dir.create(stage, recursive=TRUE, showWarnings=FALSE)
-  on.exit(if (dir.exists(stage)) unlink(stage, recursive=TRUE), add=TRUE)
+  stage = ullme_tempdir(pattern=".ullme-copy-", app=app)
+  on.exit(ullme_remove_tempdir(stage, app=app), add=TRUE)
 
   files = list.files(
     source_dir,
@@ -439,9 +438,8 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
   if (dir.exists(target_dir) || file.exists(target_dir)) {
     stop("A personal definition directory with this ID already exists.")
   }
-  stage = tempfile(pattern=".ullme-definition-create-")
-  dir.create(stage, recursive=TRUE, showWarnings=FALSE)
-  on.exit(if (dir.exists(stage)) unlink(stage, recursive=TRUE), add=TRUE)
+  stage = ullme_tempdir(pattern=".ullme-definition-create-", app=app)
+  on.exit(ullme_remove_tempdir(stage, app=app), add=TRUE)
   if (identical(kind, "tutor")) {
     yaml::write_yaml(
       list(

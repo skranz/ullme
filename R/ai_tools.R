@@ -27,7 +27,7 @@ ullme_tool_registry = function() {
       perm=ullme_tool_perm()
     ),
     list_ai_tutors=list(
-      description="List AI Tutor definitions visible to the current teacher, including source and description.",
+      description="List the complete course-local AI Tutors in the selected course, including instance counts.",
       perm=ullme_tool_perm()
     ),
     list_skills=list(
@@ -60,7 +60,7 @@ ullme_tool_registry = function() {
       perm=ullme_tool_perm(course_must_exist=TRUE, mutates=TRUE)
     ),
     rewrite_definition_yaml=list(
-      description="Validate and replace the YAML metadata for an editable personal or course AI Tutor or Skill.",
+      description="Validate and replace YAML for a course AI Tutor or editable personal Skill.",
       perm=ullme_tool_perm(mutates=TRUE)
     ),
     rewrite_course_text_file=list(

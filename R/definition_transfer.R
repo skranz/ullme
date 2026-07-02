@@ -1,8 +1,6 @@
 ullme_definition_import_root = function(app=getApp()) {
   restore.point("ullme_definition_import_root")
-  path = file.path(app$cur_session_dir, "definition_imports")
-  dir.create(path, recursive=TRUE, showWarnings=FALSE)
-  path
+  .ullme_temp_root(app=app)
 }
 
 
@@ -71,10 +69,15 @@ ullme_prepare_definition_import = function(kind, value, app=getApp(),
   }
 
   token = ullme_definition_import_token()
-  import_root = file.path(ullme_definition_import_root(app=app), token)
-  dir.create(import_root, recursive=TRUE, showWarnings=FALSE)
+  import_root = ullme_tempdir(
+    pattern=paste0(".ullme-definition-", token, "-"),
+    app=app
+  )
   on_error = TRUE
-  on.exit(if (on_error && dir.exists(import_root)) unlink(import_root, recursive=TRUE), add=TRUE)
+  on.exit(
+    if (on_error) ullme_remove_tempdir(import_root, app=app),
+    add=TRUE
+  )
 
   if (identical(kind, "tutor")) {
     if (!tolower(tools::file_ext(original_name)) %in% c("yaml", "yml")) {
@@ -260,7 +263,7 @@ ullme_apply_definition_import = function(token, target_source="personal",
     stop("The imported definition failed validation after copying.")
   }
 
-  if (dir.exists(record$import_root)) unlink(record$import_root, recursive=TRUE)
+  ullme_remove_tempdir(record$import_root, app=app)
   app$definition_imports[[token]] = NULL
   list(
     kind=kind,
@@ -301,7 +304,9 @@ ullme_prepare_definition_download = function(kind, definitionid, source, app=get
   } else {
     filename = paste0(definitionid, ".zip")
     target = file.path(app$definition_downloads_dir, filename)
-    if (file.exists(target)) unlink(target)
+    if (file.exists(target) && !file.remove(target)) {
+      stop("Could not replace the existing Skill ZIP download.")
+    }
     files = list.files(
       definition_dir,
       recursive=TRUE,

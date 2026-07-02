@@ -65,6 +65,16 @@ body {
   align-items: center;
 }
 
+.ullme-fixed-role {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  color: #343936;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0 7px;
+}
+
 .ullme-user-settings-button {
   flex: 0 0 auto;
 }
@@ -552,7 +562,7 @@ body {
 
 .ullme-role-teacher .ullme-studio-main {
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: #fbfcfb;
@@ -560,7 +570,7 @@ body {
 
 .ullme-role-teacher .ullme-studio-main > .ullme-course-workspace,
 .ullme-role-teacher .ullme-studio-main > .ullme-definition-mount {
-  grid-row: 2;
+  grid-row: 1;
   min-height: 0;
 }
 
@@ -646,9 +656,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 58px;
+  min-height: 38px;
   border-bottom: 1px solid #e2e5e3;
-  padding: 8px 10px 8px 14px;
+  padding: 4px 7px 4px 10px;
 }
 
 .ullme-ai-pane-heading {
@@ -659,7 +669,7 @@ body {
 
 .ullme-ai-pane-title {
   color: #242725;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1376,87 +1386,277 @@ body {
   background: #ecd4d4;
 }
 
-.ullme-material-categories {
+.ullme-material-toolbar,
+.ullme-material-batch-bar {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 4px 0 12px;
+  gap: 5px;
+  font-size: 10px;
 }
 
-.ullme-material-category {
+.ullme-material-toolbar {
   min-height: 30px;
-  border: 0;
-  border-radius: 6px;
-  background: #eeeeee;
-  color: #444444;
-  font: inherit;
-  font-size: 13px;
-  padding: 5px 10px;
+  margin-bottom: 6px;
 }
 
-.ullme-material-category-active {
-  background: #111111;
-  color: #ffffff;
+.ullme-material-batch-bar {
+  display: none;
+  min-height: 32px;
+  border-top: 1px solid #edf0ee;
+  padding: 5px 0;
 }
 
-.ullme-material-dropzone {
-  display: grid;
-  place-items: center;
-  min-height: 112px;
-  border: 1px dashed #b8c8c2;
-  border-radius: 7px;
-  outline: 0;
-  background: #f6faf8;
-  color: #315c50;
-  padding: 16px;
-  text-align: center;
+.ullme-material-batch-bar-active {
+  display: flex;
 }
 
-.ullme-material-dropzone:hover,
-.ullme-material-dropzone:focus,
-.ullme-material-dropzone-active {
-  border-color: #5f8f81;
-  background: #edf6f2;
+.ullme-material-toolbar button,
+.ullme-material-batch-bar button,
+.ullme-material-toolbar select,
+.ullme-material-batch-bar select {
+  min-height: 26px;
+  border-radius: 5px;
+  font-size: 10px;
+  padding: 3px 8px;
 }
 
-.ullme-material-dropzone-title {
-  font-size: 14px;
-  font-weight: 650;
+.ullme-material-batch-bar select {
+  border: 1px solid #d6dbd8;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #303431;
+  padding: 4px 24px 4px 7px;
 }
 
-.ullme-material-dropzone-meta {
-  color: #6a7e77;
-  font-size: 12px;
-  margin-top: 3px;
+#ullme_material_destination {
+  min-width: 130px;
+  max-width: 230px;
+}
+
+.ullme-material-selection-count {
+  color: #737975;
+  font-size: 10px;
+}
+
+.ullme-material-drag-hint {
+  color: #8a908c;
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+#ullme_material_inline_upload {
+  margin-left: auto;
 }
 
 .ullme-material-files {
   display: grid;
-  gap: 6px;
-  margin-top: 12px;
+  gap: 0;
+  border: 1px solid #e3e7e4;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.ullme-material-file {
+.ullme-material-tree-header,
+.ullme-material-tree-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 18px 18px 12px minmax(0, 1fr) minmax(120px, 0.32fr);
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  border-bottom: 1px solid #eeeeee;
-  padding: 5px 0;
+  gap: 4px;
 }
 
-.ullme-material-file-name {
+.ullme-material-tree-header {
+  min-height: 29px;
+  border-bottom: 1px solid #dfe4e1;
+  background: #f8faf9;
+  padding: 0 8px;
+}
+
+.ullme-material-sort-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
-  color: #222222;
-  font-size: 14px;
-  overflow-wrap: anywhere;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: #6f7672;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  padding: 0 3px;
+  text-align: left;
+}
+
+#ullme_material_sort_name {
+  grid-column: 4;
+}
+
+#ullme_material_sort_date {
+  grid-column: 5;
+}
+
+.ullme-material-sort-heading:hover,
+.ullme-material-sort-heading-active {
+  color: #294e42;
+}
+
+.ullme-material-sort-arrow {
+  font-size: 10px;
+}
+
+.ullme-material-tree-rows {
+  display: grid;
+  min-height: 34px;
+}
+
+.ullme-material-tree-row {
+  min-height: 30px;
+  border-bottom: 1px solid #eff1ef;
+  padding: 1px 8px 1px calc(7px + var(--ullme-tree-depth) * 16px);
+  transition: background 100ms ease, box-shadow 100ms ease;
+}
+
+.ullme-material-tree-row:last-child {
+  border-bottom: 0;
+}
+
+.ullme-material-tree-row:hover {
+  background: #f7faf8;
+}
+
+.ullme-material-tree-rows {
+  cursor: crosshair;
+}
+
+.ullme-material-tree-file .ullme-material-tree-name {
+  cursor: grab;
+}
+
+.ullme-material-tree-file .ullme-material-tree-name:active {
+  cursor: grabbing;
+}
+
+.ullme-material-tree-dragging {
+  opacity: 0.45;
+}
+
+.ullme-material-folder-drop-active {
+  background: #e5f3ed;
+  box-shadow: inset 3px 0 #39765f;
+}
+
+.ullme-material-tree-drop-active {
+  border-color: #39765f;
+  box-shadow: 0 0 0 2px rgba(57, 118, 95, 0.13);
+}
+
+.ullme-material-selection-box {
+  position: fixed;
+  z-index: 80;
+  border: 1px solid #37785f;
+  background: rgba(67, 139, 108, 0.13);
+  pointer-events: none;
+}
+
+.ullme-material-rectangle-selecting,
+.ullme-material-rectangle-selecting * {
+  cursor: crosshair !important;
+  user-select: none !important;
+}
+
+.ullme-material-tree-toggle,
+.ullme-material-tree-name {
+  border: 0;
+  background: transparent;
+  color: #292e2b;
+  font: inherit;
+}
+
+.ullme-material-tree-toggle {
+  width: 18px;
+  height: 25px;
+  color: #737a76;
+  padding: 0;
+}
+
+.ullme-material-tree-toggle:disabled {
+  opacity: 0;
+}
+
+.ullme-material-tree-check {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #23694f;
+}
+
+.ullme-material-tree-icon {
+  color: #9c8154;
+  font-size: 9px;
+  text-align: center;
+}
+
+.ullme-material-tree-file .ullme-material-tree-icon {
+  color: #9aa09c;
+}
+
+.ullme-material-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 3px;
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ullme-material-tree-name:not(:disabled):hover {
+  color: #176247;
+  text-decoration: underline;
+}
+
+.ullme-material-tree-name-unavailable {
+  cursor: default;
+  opacity: 0.78;
+}
+
+.ullme-material-tree-directory .ullme-material-tree-name {
+  font-weight: 650;
+}
+
+.ullme-material-tree-date {
+  color: #8a908c;
+  font-size: 9px;
+  white-space: nowrap;
 }
 
 .ullme-material-empty {
   color: #888888;
   font-size: 14px;
   padding: 12px 0;
+}
+
+@media (max-width: 620px) {
+  .ullme-material-drag-hint {
+    display: none;
+  }
+
+  .ullme-material-tree-header,
+  .ullme-material-tree-row {
+    grid-template-columns: 18px 18px 12px minmax(0, 1fr);
+  }
+
+  #ullme_material_sort_date,
+  .ullme-material-tree-date {
+    display: none;
+  }
+
+  #ullme_material_sort_name {
+    grid-column: 4;
+  }
 }
 
 .ullme-dialog-overlay {
@@ -3027,6 +3227,356 @@ body {
   }
 }
 
+/* Course-local AI Tutor workspace */
+.ullme-role-teacher .ullme-studio-nav {
+  overflow-y: auto;
+}
+
+.ullme-dynamic-nav-items {
+  display: grid;
+  gap: 2px;
+}
+
+.ullme-dynamic-nav-items:empty {
+  display: none;
+}
+
+.ullme-dynamic-nav-item span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ullme-skill-nav-item {
+  color: #735d16;
+}
+
+.ullme-skill-nav-item-active {
+  background: #f1ead1;
+  color: #6b5310;
+}
+
+.ullme-add-nav-wrap {
+  margin: 0 0 2px;
+}
+
+.ullme-add-menu {
+  position: fixed;
+  z-index: 1300;
+  display: none;
+  min-width: 168px;
+  border: 1px solid #dfe4e1;
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(25, 38, 31, 0.16);
+  background: #ffffff;
+  padding: 5px;
+}
+
+.ullme-add-menu-open {
+  display: grid;
+  gap: 2px;
+}
+
+.ullme-add-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #252a27;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 7px 9px;
+}
+
+.ullme-add-menu button:hover {
+  background: #edf3f0;
+}
+
+.ullme-add-menu .ullme-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.ullme-ai-tutor-detail-shell {
+  width: min(920px, 100%);
+}
+
+.ullme-ai-tutor-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.ullme-tutor-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e4e8e6;
+  padding-bottom: 12px;
+}
+
+.ullme-tutor-detail-identity {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.ullme-tutor-selector {
+  max-width: 420px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1e2421;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 650;
+  padding: 0 22px 0 0;
+}
+
+.ullme-tutor-detail-description {
+  max-width: 650px;
+  color: #6b716d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ullme-tutor-detail-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.ullme-tutor-enabled {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #4f5551;
+  font-size: 11px;
+}
+
+.ullme-tutor-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e4e8e6;
+}
+
+.ullme-tutor-tab {
+  min-height: 34px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #6a706c;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 11px;
+}
+
+.ullme-tutor-tab:hover {
+  color: #24312b;
+}
+
+.ullme-tutor-tab-active {
+  border-bottom-color: #2f7357;
+  color: #245b45;
+  font-weight: 600;
+}
+
+.ullme-tutor-tab-panel {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+}
+
+.ullme-matcher-summary {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #dce8e2;
+  border-radius: 8px;
+  background: #f3f8f5;
+  color: #51615a;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 9px 11px;
+}
+
+.ullme-matcher-summary strong {
+  color: #2c5443;
+  font-size: 12px;
+}
+
+.ullme-instance-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e1e5e3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ullme-instance-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.ullme-instance-table-wrap th,
+.ullme-instance-table-wrap td {
+  border-bottom: 1px solid #ecefed;
+  text-align: left;
+  vertical-align: top;
+  padding: 9px 10px;
+}
+
+.ullme-instance-table-wrap th {
+  background: #f7f9f8;
+  color: #5b625e;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.ullme-instance-table-wrap tr:last-child td {
+  border-bottom: 0;
+}
+
+.ullme-instance-table-wrap code {
+  display: block;
+  color: #35413b;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ullme-instance-missing {
+  color: #a33636;
+  font-size: 10px;
+}
+
+.ullme-tutor-definition-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.ullme-tutor-form-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e1e5e3;
+  border-radius: 9px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.ullme-tutor-form-section h3 {
+  margin: 0;
+  color: #2b312e;
+  font-size: 13px;
+}
+
+.ullme-tutor-form-help {
+  margin: -3px 0 2px;
+  color: #737a76;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ullme-tutor-field {
+  display: grid;
+  gap: 4px;
+  color: #555c58;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ullme-tutor-field input,
+.ullme-tutor-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #d9dfdc;
+  border-radius: 7px;
+  outline: 0;
+  background: #ffffff;
+  color: #242a27;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 7px 8px;
+}
+
+.ullme-tutor-field textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.ullme-tutor-field input:focus,
+.ullme-tutor-field textarea:focus {
+  border-color: #6fa58e;
+  box-shadow: 0 0 0 2px rgba(91, 150, 124, 0.12);
+}
+
+.ullme-tutor-field small {
+  color: #858b87;
+  font-weight: 400;
+}
+
+.ullme-matcher-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.ullme-tutor-form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.ullme-tutor-yaml-note {
+  color: #69716d;
+  font-size: 11px;
+}
+
+.ullme-tutor-yaml-editor {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 440px;
+  border: 1px solid #d9dfdc;
+  border-radius: 8px;
+  outline: 0;
+  background: #fbfcfb;
+  color: #202622;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 12px;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.ullme-tutor-yaml-editor:focus {
+  border-color: #6fa58e;
+}
+
+@media (max-width: 760px) {
+  .ullme-tutor-detail-header,
+  .ullme-tutor-detail-actions {
+    align-items: flex-start;
+  }
+
+  .ullme-tutor-detail-header {
+    display: grid;
+  }
+
+  .ullme-tutor-definition-form,
+  .ullme-matcher-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Compact, adjustable three-pane teacher studio */
 .ullme-role-teacher .ullme-workspace {
   --ullme-nav-width: 62px;
@@ -3056,7 +3606,7 @@ body {
 
 .ullme-role-teacher .ullme-studio-main {
   grid-column: 3;
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .ullme-role-teacher .ullme-chat-pane {
@@ -3129,12 +3679,12 @@ body {
 }
 
 .ullme-role-teacher .ullme-ai-pane-header {
-  min-height: 48px;
-  padding: 6px 7px 6px 11px;
+  min-height: 36px;
+  padding: 3px 6px 3px 9px;
 }
 
 .ullme-role-teacher .ullme-ai-pane-title {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .ullme-role-teacher .ullme-chat-messages {
@@ -3172,10 +3722,44 @@ body {
 }
 
 .ullme-role-teacher .ullme-composer {
-  grid-template-columns: 30px 30px minmax(0, 1fr) auto 30px 34px;
-  min-height: 42px;
-  border-radius: 21px;
-  padding: 2px 4px 2px 6px;
+  grid-template-areas:
+    "input input input input input submit"
+    "skills upload spacer model voice submit";
+  grid-template-columns: 25px 25px minmax(0, 1fr) auto 25px 36px;
+  min-height: 68px;
+  row-gap: 1px;
+  border-radius: 18px;
+  padding: 5px 4px 4px 7px;
+}
+
+.ullme-role-teacher
+  .ullme-composer.ullme-composer-multiline {
+  grid-template-areas:
+    "input input input input input submit"
+    "skills upload spacer model voice submit";
+  grid-template-columns: 25px 25px minmax(0, 1fr) auto 25px 36px;
+  row-gap: 1px;
+  padding: 6px 4px 4px 7px;
+}
+
+.ullme-role-teacher
+  .ullme-composer.ullme-composer-has-uploads,
+.ullme-role-teacher
+  .ullme-composer.ullme-composer-multiline.ullme-composer-has-uploads {
+  grid-template-areas:
+    "preview preview preview preview preview preview"
+    "input input input input input submit"
+    "skills upload spacer model voice submit";
+  grid-template-columns: 25px 25px minmax(0, 1fr) auto 25px 36px;
+  row-gap: 3px;
+  padding-top: 7px;
+}
+
+.ullme-role-teacher .ullme-composer.ullme-composer-recording {
+  grid-template-areas: "recording recording recording recording recording recording";
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 58px;
+  padding: 7px 10px;
 }
 
 .ullme-role-teacher .ullme-chat-input {
@@ -3187,19 +3771,25 @@ body {
 
 .ullme-role-teacher .ullme-icon-button,
 .ullme-role-teacher .ullme-submit-button {
-  width: 30px;
-  height: 30px;
+  width: 25px;
+  height: 25px;
+}
+
+.ullme-role-teacher .ullme-composer .ullme-icon-button .ullme-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .ullme-role-teacher .ullme-submit-button {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
 }
 
 .ullme-role-teacher .ullme-model-select {
   max-width: 92px;
-  font-size: 11px;
-  padding: 6px 4px;
+  height: 25px;
+  font-size: 10px;
+  padding: 3px 4px;
 }
 
 /* Definition editing uses the center pane as one canvas. */
