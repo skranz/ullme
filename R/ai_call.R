@@ -111,7 +111,16 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
       now = as.numeric(Sys.time())
       changed = nzchar(part$value) &&
         part$type %in% c("text", "thinking")
-      if (changed && now - state$last_update >= 0.08) {
+      response_size = nchar(state$text, type="bytes") +
+        nchar(state$thinking, type="bytes")
+      if (response_size < 4000) {
+        update_interval = 0.08
+      } else if (response_size < 12000) {
+        update_interval = 0.14
+      } else {
+        update_interval = 0.25
+      }
+      if (changed && now - state$last_update >= update_interval) {
         on_update(state$text, state$thinking, FALSE)
         state$last_update = now
       }

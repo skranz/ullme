@@ -940,8 +940,11 @@ ullme_intro_msg = function() {
 ullme_chat_output_html = function(text, app=getApp()) {
   restore.point("ullme_chat_output_html")
   text = paste0(text %||% "", collapse="\n")
-  if (!isTRUE(app$render_chat_markdown)) return("")
-  paste0(commonmark::markdown_html(text), collapse="\n")
+  if (!isTRUE(app$render_chat_markdown) || !nzchar(text)) return("")
+  paste0(
+    commonmark::markdown_html(text, extensions=TRUE),
+    collapse="\n"
+  )
 }
 
 
@@ -1186,10 +1189,11 @@ ullme_handle_material_category = function(category="general", app=getApp(), ...)
 }
 
 
-ullme_handle_material_upload_destination = function(path="general",
+ullme_handle_material_upload_destination = function(path="general", tree=NULL,
                                                      app=getApp(), ...) {
   restore.point("ullme_handle_material_upload_destination")
   app$material_upload_directory = ""
+  app$material_upload_tree = NULL
   original_path = paste0(path)[1]
   result = tryCatch({
     course_dir = ullme_active_course_dir(app=app)
@@ -1204,6 +1208,11 @@ ullme_handle_material_upload_destination = function(path="general",
     if (!dir.exists(target)) stop("The material upload destination is not a directory.")
     app$material_category = category
     app$material_upload_directory = path
+    app$material_upload_tree = ullme_prepare_material_upload_tree(
+      tree=tree,
+      destination=path,
+      material_dir=material_dir
+    )
     list(ok=TRUE, path=path, message="")
   }, error=function(e) {
     list(ok=FALSE, path=original_path, message=conditionMessage(e))
@@ -1226,6 +1235,7 @@ ullme_handle_material_upload = function(id, value, app=getApp(), ...) {
   app$material_category = category
   on.exit({
     app$material_upload_directory = category
+    app$material_upload_tree = NULL
   }, add=TRUE)
   result = tryCatch({
     destination = paste0(app$material_upload_directory %||% "")[1]
@@ -1646,10 +1656,84 @@ ullme_session_dir_name = function(session) {
 ullme_clean_file_name = function(x) {
   restore.point("ullme_clean_file_name")
   x = basename(x)
+  x = ullme_transliterate_german(x)
   x = gsub("[^A-Za-z0-9._-]+", "_", x)
   x = gsub("^_+|_+$", "", x)
   x[!nzchar(x)] = "upload"
   x
+}
+
+
+ullme_transliterate_german = function(x) {
+  restore.point("ullme_transliterate_german")
+  x = enc2utf8(paste0(x))
+  replacements = c(
+    "\u00c4"="Ae", "\u00d6"="Oe", "\u00dc"="Ue",
+    "\u00e4"="ae", "\u00f6"="oe", "\u00fc"="ue",
+    "\u00df"="ss", "\u1e9e"="SS"
+  )
+  for (letter in names(replacements)) {
+    x = gsub(letter, replacements[[letter]], x, fixed=TRUE, useBytes=TRUE)
+  }
+  stringi::stri_trans_general(x, "Latin-ASCII")
+}
+
+
+ullme_clean_relative_upload_path = function(path) {
+  path = gsub("\\\\", "/", paste0(path)[1])
+  if (!ullme_safe_relative_material_path(path)) {
+    stop("A dropped folder contains an unsafe relative path.")
+  }
+  parts = strsplit(path, "/", fixed=TRUE)[[1]]
+  cleaned = vapply(parts, ullme_clean_file_name, character(1))
+  .ullme_material_relative_path(paste(cleaned, collapse="/"))
+}
+
+
+ullme_prepare_material_upload_tree = function(tree, destination, material_dir) {
+  if (is.null(tree) || !is.list(tree)) return(NULL)
+  files = unlist(tree$files %||% list(), use.names=TRUE)
+  directories = unlist(tree$directories %||% list(), use.names=FALSE)
+  if (length(files) > 5000L || length(directories) > 5000L) {
+    stop("The dropped folder contains too many entries.")
+  }
+  if (length(files) && (
+    is.null(names(files)) ||
+    any(!nzchar(names(files))) ||
+    anyDuplicated(names(files))
+  )) {
+    stop("The dropped folder has invalid upload metadata.")
+  }
+  if (length(files)) {
+    upload_names = basename(names(files))
+    if (!identical(upload_names, names(files)) || anyDuplicated(upload_names)) {
+      stop("The dropped folder has invalid upload filenames.")
+    }
+    files = stats::setNames(
+      vapply(files, ullme_clean_relative_upload_path, character(1)),
+      upload_names
+    )
+  } else {
+    files = character(0)
+  }
+  if (length(directories)) {
+    directories = unique(vapply(
+      directories,
+      ullme_clean_relative_upload_path,
+      character(1)
+    ))
+    for (directory in directories) {
+      target = .ullme_material_path(
+        material_dir,
+        paste(destination, directory, sep="/")
+      )
+      if (!dir.exists(target) &&
+          !dir.create(target, recursive=TRUE, showWarnings=FALSE)) {
+        stop("Could not create a folder from the dropped directory.")
+      }
+    }
+  }
+  list(destination=destination, files=files, directories=directories)
 }
 
 

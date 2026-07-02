@@ -2406,6 +2406,14 @@ body {
   max-width: 100%;
 }
 
+.ullme-message-text-markdown table {
+  border-collapse: collapse;
+}
+
+.ullme-message-text-markdown :where(th, td) {
+  border: 1px solid #d8ddda;
+}
+
 .ullme-message-thinking {
   border-left: 2px solid #d7dcda;
   color: #686e6b;

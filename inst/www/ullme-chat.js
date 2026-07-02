@@ -2236,19 +2236,50 @@
     if (input) input.click();
   }
 
-  function queueMaterialFiles(files, destination) {
+  function folderUploadFile(file, index) {
+    var extension = "";
+    var dot = file.name.lastIndexOf(".");
+    if (dot > 0) extension = file.name.slice(dot).replace(/[^A-Za-z0-9.]/g, "");
+    var name = "ullme_folder_" + Date.now() + "_" + index + extension;
+    return new File([file], name, {
+      type: file.type,
+      lastModified: file.lastModified
+    });
+  }
+
+  function queueMaterialFiles(files, destination, relativePaths, directories) {
     destination = destination || "general";
     var category = destination.split("/")[0] || "general";
     var input = materialInputForCategory(category);
-    if (!input || !files.length || typeof DataTransfer === "undefined") return;
+    directories = Array.isArray(directories) ? directories : [];
+    var isFolderUpload = Array.isArray(relativePaths);
+    if (!input || (!files.length && !directories.length) ||
+        typeof DataTransfer === "undefined") return;
+
+    var uploadFiles = files;
+    var tree = null;
+    if (isFolderUpload) {
+      var filePaths = {};
+      uploadFiles = files.map(function (file, index) {
+        var wrapped = folderUploadFile(file, index);
+        filePaths[wrapped.name] = relativePaths[index] || file.name;
+        return wrapped;
+      });
+      tree = {
+        files: filePaths,
+        directories: directories
+      };
+    }
+
     state.materialUploadDestination = destination;
     state.pendingMaterialDrop = {
       destination: destination,
       inputId: input.id,
-      files: files
+      files: uploadFiles
     };
     sendSidebarEvent("ullme_material_upload_destination_event", {
-      path: destination
+      path: destination,
+      tree: tree
     });
   }
 
@@ -3209,6 +3240,8 @@
 
   function receiveAssistantStream(messageId, text, html, thinking,
                                   thinkingHtml, done, error) {
+    var messages = byId("ullme_chat_messages");
+    var previousScrollTop = messages ? messages.scrollTop : 0;
     var article = byId(messageId);
     if (!article) {
       appendAssistantMessage({
@@ -3224,6 +3257,7 @@
         state.chatBusy = false;
         updateSubmitState();
       }
+      if (messages) messages.scrollTop = previousScrollTop;
       return;
     }
 
@@ -3261,7 +3295,7 @@
       state.chatBusy = false;
       updateSubmitState();
     }
-    scrollMessagesToBottom();
+    if (messages) messages.scrollTop = previousScrollTop;
   }
 
   function updateCourseList(courseids, selectedCourseid, showCourses, summary, semester) {

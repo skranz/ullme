@@ -11,6 +11,67 @@
     return Array.prototype.indexOf.call(dataTransfer.types || [], "Files") >= 0;
   }
 
+  function readDirectoryEntries(reader) {
+    var entries = [];
+    return new Promise(function (resolve, reject) {
+      function readBatch() {
+        reader.readEntries(function (batch) {
+          if (!batch.length) {
+            resolve(entries);
+            return;
+          }
+          entries = entries.concat(Array.prototype.slice.call(batch));
+          readBatch();
+        }, reject);
+      }
+      readBatch();
+    });
+  }
+
+  function readDroppedEntry(entry, parent, result) {
+    var relativePath = parent ? parent + "/" + entry.name : entry.name;
+    if (entry.isFile) {
+      return new Promise(function (resolve, reject) {
+        entry.file(function (file) {
+          result.files.push(file);
+          result.paths.push(relativePath);
+          resolve();
+        }, reject);
+      });
+    }
+    if (!entry.isDirectory) return Promise.resolve();
+    result.directories.push(relativePath);
+    return readDirectoryEntries(entry.createReader()).then(function (children) {
+      return Promise.all(children.map(function (child) {
+        return readDroppedEntry(child, relativePath, result);
+      }));
+    });
+  }
+
+  function droppedFiles(dataTransfer) {
+    var result = { files: [], paths: [], directories: [] };
+    var items = Array.prototype.slice.call(dataTransfer && dataTransfer.items || []);
+    var entries = items.map(function (item) {
+      return item.kind === "file" && item.webkitGetAsEntry
+        ? item.webkitGetAsEntry()
+        : null;
+    }).filter(Boolean);
+
+    if (entries.length) {
+      return Promise.all(entries.map(function (entry) {
+        return readDroppedEntry(entry, "", result);
+      })).then(function () {
+        return result;
+      });
+    }
+
+    result.files = Array.prototype.slice.call(
+      dataTransfer && dataTransfer.files || []
+    );
+    result.paths = result.files.map(function (file) { return file.name; });
+    return Promise.resolve(result);
+  }
+
   function rowDestination(row, fallback) {
     if (!row) return fallback();
     return row.getAttribute("data-type") === "directory"
@@ -63,11 +124,21 @@
     }
 
     function dropPayload(event, destination) {
-      var files = Array.prototype.slice.call(
-        event.dataTransfer && event.dataTransfer.files || []
-      );
-      if (files.length) {
-        options.uploadFiles(files, destination);
+      if (localFiles(event.dataTransfer)) {
+        droppedFiles(event.dataTransfer).then(function (drop) {
+          if (!drop.files.length && !drop.directories.length) return;
+          options.uploadFiles(
+            drop.files,
+            destination,
+            drop.paths,
+            drop.directories
+          );
+        }).catch(function (error) {
+          window.alert(
+            "The dropped folder could not be read: " +
+            (error && error.message ? error.message : String(error))
+          );
+        });
         return;
       }
       var paths = dragPaths;
