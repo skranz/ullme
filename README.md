@@ -41,6 +41,9 @@ student_app = studentApp(
 Roles are fixed by the constructor and cannot be switched inside an app.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
+Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait
+for complete responses. `teacherApp(show_chat_thinking=TRUE)` also shows
+provider-supplied thinking content in a closed, expandable field when present.
 
 
 # Code Design

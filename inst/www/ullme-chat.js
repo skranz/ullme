@@ -3,6 +3,7 @@
     uploads: [],
     messageIndex: 0,
     isRecording: false,
+    chatBusy: false,
     assistantRequests: {},
     pendingMaterialInputId: "",
     aiTutors: [],
@@ -519,13 +520,14 @@
     var input = byId("ullme_chat_input");
     var submitButton = byId("ullme_submit_btn");
     if (!input || !submitButton) return;
-    submitButton.disabled = input.value.trim().length === 0 && state.uploads.length === 0;
+    submitButton.disabled = state.chatBusy ||
+      (input.value.trim().length === 0 && state.uploads.length === 0);
   }
 
   function submitChat() {
     var input = byId("ullme_chat_input");
     var modelSelect = byId("ullme_model_select");
-    if (!input) return;
+    if (!input || state.chatBusy) return;
 
     var text = input.value.trim();
     var uploads = state.uploads.slice();
@@ -560,6 +562,7 @@
       nonce: Math.random()
     };
 
+    state.chatBusy = true;
     appendUserMessage({
       id: clientMessageId,
       text: text,
@@ -2853,6 +2856,13 @@
     }
 
     text.className = "ullme-message-text";
+    if (message.thinkingText) {
+      updateAssistantThinking(
+        bubble,
+        message.thinkingText,
+        message.thinkingHtml || ""
+      );
+    }
     setAssistantMessageContent(text, message.text || "", message.html || "");
     bubble.appendChild(text);
 
@@ -2887,6 +2897,31 @@
     } else {
       element.textContent = text || "";
     }
+  }
+
+  function updateAssistantThinking(bubble, thinking, html) {
+    var details = bubble.querySelector(".ullme-message-thinking");
+    if (!thinking) {
+      if (details) details.remove();
+      return;
+    }
+    if (!details) {
+      details = document.createElement("details");
+      details.className = "ullme-message-thinking";
+      var summary = document.createElement("summary");
+      var content = document.createElement("div");
+      summary.textContent = "Thinking";
+      content.className = "ullme-message-thinking-text";
+      details.appendChild(summary);
+      details.appendChild(content);
+      var response = bubble.querySelector(".ullme-message-text");
+      bubble.insertBefore(details, response || null);
+    }
+    setAssistantMessageContent(
+      details.querySelector(".ullme-message-thinking-text"),
+      thinking,
+      html
+    );
   }
 
   function miniAction(label, icon, onClick, disabled) {
@@ -2954,15 +2989,19 @@
   function retryAssistantMessage(messageId) {
     var payload = state.assistantRequests[messageId];
     var article = byId(messageId);
-    if (!payload || !article) return;
+    if (!payload || !article || state.chatBusy) return;
 
     var messageText = article.querySelector(".ullme-message-text");
     var actions = article.querySelector(".ullme-message-actions");
     var meta = article.querySelector(".ullme-message-meta");
+    var bubble = article.querySelector(".ullme-bubble");
 
     article.classList.add("ullme-thinking");
+    state.chatBusy = true;
+    updateSubmitState();
     if (meta) meta.remove();
     if (actions) actions.remove();
+    if (bubble) updateAssistantThinking(bubble, "", "");
     if (messageText) setAssistantMessageContent(messageText, "Thinking...", "");
 
     payload.nonce = Math.random();
@@ -3147,6 +3186,8 @@
         html: html || "",
         meta: ""
       });
+      state.chatBusy = false;
+      updateSubmitState();
       return;
     }
 
@@ -3156,9 +3197,69 @@
     var bubble = article.querySelector(".ullme-bubble");
 
     if (meta) meta.remove();
+    if (bubble) updateAssistantThinking(bubble, "", "");
     if (messageText) setAssistantMessageContent(messageText, text || "", html || "");
     if (bubble && !bubble.querySelector(".ullme-message-actions")) {
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
+    }
+    state.chatBusy = false;
+    updateSubmitState();
+    scrollMessagesToBottom();
+  }
+
+  function receiveAssistantStream(messageId, text, html, thinking,
+                                  thinkingHtml, done, error) {
+    var article = byId(messageId);
+    if (!article) {
+      appendAssistantMessage({
+        id: messageId || nextId("assistant"),
+        text: text || (error || ""),
+        html: text ? (html || "") : "",
+        thinkingText: thinking || "",
+        thinkingHtml: thinkingHtml || "",
+        meta: error || "",
+        thinking: !done
+      });
+      if (done) {
+        state.chatBusy = false;
+        updateSubmitState();
+      }
+      return;
+    }
+
+    var bubble = article.querySelector(".ullme-bubble");
+    var messageText = article.querySelector(".ullme-message-text");
+    var meta = article.querySelector(".ullme-message-meta");
+    if ((text || thinking) && meta && meta.textContent === "Thinking") {
+      meta.remove();
+      meta = null;
+    }
+    if (bubble) updateAssistantThinking(bubble, thinking || "", thinkingHtml || "");
+    if (messageText) {
+      setAssistantMessageContent(
+        messageText,
+        text || ((!thinking && error) ? error : ""),
+        text ? (html || "") : ""
+      );
+    }
+    if (text || thinking || done) article.classList.remove("ullme-thinking");
+
+    if (error && bubble && (text || thinking)) {
+      if (!meta) {
+        meta = document.createElement("div");
+        meta.className = "ullme-message-meta ullme-message-error";
+        bubble.insertBefore(meta, bubble.firstChild);
+      }
+      meta.textContent = error;
+    } else if (error && meta) {
+      meta.remove();
+    }
+    if (done && bubble && !bubble.querySelector(".ullme-message-actions")) {
+      bubble.appendChild(renderAssistantActions(messageId, text || ""));
+    }
+    if (done) {
+      state.chatBusy = false;
+      updateSubmitState();
     }
     scrollMessagesToBottom();
   }
@@ -3277,6 +3378,7 @@
 
   window.ullme = window.ullme || {};
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
+  window.ullme.receiveAssistantStream = receiveAssistantStream;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
   window.ullme.materialUploadComplete = completePendingMaterialUpload;
   window.ullme.materialUploadDestinationReady = materialUploadDestinationReady;

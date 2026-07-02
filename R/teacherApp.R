@@ -11,7 +11,9 @@ teacherApp = function(main_dir, userid="skranz",
                        api_key_file=NULL,
                        api_provider=c("fake", "nvidia", "local"),
                        api_model=NULL, api_base_url=NULL,
-                       render_chat_markdown=TRUE) {
+                       render_chat_markdown=TRUE,
+                       stream_chat=TRUE,
+                       show_chat_thinking=TRUE) {
   restore.point("teacherApp")
   .ullme_app(
     main_dir=main_dir,
@@ -24,7 +26,9 @@ teacherApp = function(main_dir, userid="skranz",
     api_key_file=api_key_file,
     api_provider=api_provider,
     api_model=api_model,
-    api_base_url=api_base_url
+    api_base_url=api_base_url,
+    stream_chat=stream_chat,
+    show_chat_thinking=show_chat_thinking
   )
 }
 

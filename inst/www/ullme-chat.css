@@ -2406,6 +2406,32 @@ body {
   max-width: 100%;
 }
 
+.ullme-message-thinking {
+  border-left: 2px solid #d7dcda;
+  color: #686e6b;
+  font-size: 0.88em;
+  margin: 0;
+  padding: 0;
+}
+
+.ullme-message-thinking summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style-position: inside;
+  margin: 0;
+  padding: 0;
+}
+
+.ullme-message-thinking-text {
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+}
+
+.ullme-message-error {
+  color: #9b2d2d;
+}
+
 .ullme-thinking .ullme-message-text {
   color: #777777;
 }

@@ -35,7 +35,9 @@ ullme_teacherid = function(app=getApp()) {
                       api_key_file=NULL,
                       api_provider=c("fake", "nvidia", "local"),
                       api_model=NULL, api_base_url=NULL,
-                      render_chat_markdown=TRUE) {
+                      render_chat_markdown=TRUE,
+                      stream_chat=TRUE,
+                      show_chat_thinking=FALSE) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
@@ -65,6 +67,16 @@ ullme_teacherid = function(app=getApp()) {
       is.na(render_chat_markdown)) {
     stop("render_chat_markdown must be TRUE or FALSE.")
   }
+  if (!is.logical(stream_chat) ||
+      length(stream_chat) != 1L ||
+      is.na(stream_chat)) {
+    stop("stream_chat must be TRUE or FALSE.")
+  }
+  if (!is.logical(show_chat_thinking) ||
+      length(show_chat_thinking) != 1L ||
+      is.na(show_chat_thinking)) {
+    stop("show_chat_thinking must be TRUE or FALSE.")
+  }
   # Shiny's upload limit is process-wide, even though upload state is per app.
   current_upload_limit = getOption("shiny.maxRequestSize", 5 * 1024^2)
   options(shiny.maxRequestSize=max(current_upload_limit, max_upload_mb * 1024^2))
@@ -82,6 +94,11 @@ ullme_teacherid = function(app=getApp()) {
   app$semester = ullme_semester()
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
+  app$stream_chat = isTRUE(stream_chat)
+  app$show_chat_thinking =
+    identical(role, "teacher") && isTRUE(show_chat_thinking)
+  app$chat_response_active = FALSE
+  app$chat_tasks = list()
   app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
@@ -1381,6 +1398,22 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   text = paste0(text, collapse="\n")
   has_uploads = length(uploads) > 0
   if (!nzchar(trimws(text)) && !has_uploads) return(invisible(NULL))
+  if (isTRUE(app$chat_response_active)) {
+    callJS(
+      .fun="window.ullme.receiveAssistantStream",
+      .args=list(
+        assistantMessageId,
+        "",
+        "",
+        "",
+        "",
+        TRUE,
+        "Wait for the current response to finish before sending another message."
+      ),
+      .app=app
+    )
+    return(invisible(NULL))
+  }
 
   ai_input = if (nzchar(trimws(text))) text else "[uploaded image]"
   skill = ullme_active_skill(app=app)
@@ -1403,32 +1436,143 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     collapse="\n\n"
   )
   if (!nzchar(system_instructions)) system_instructions = NULL
-  answer = tryCatch(
-    ullme_ask_ai(
-      input=ai_input,
-      model=model,
-      context=context %||% list(),
-      system_instructions=system_instructions,
-      app=app
-    ),
-    error=function(e) paste0(
-      "I could not reach the configured model: ",
-      ullme_safe_ai_error(e, app$api_config)
-    )
-  )
   if (is.null(assistantMessageId) || !nzchar(assistantMessageId)) {
     assistantMessageId = paste0("assistant_", as.integer(runif(1, 1, 1e9)))
   }
+  if (ullme_uses_fake_ai(app=app)) {
+    answer = paste0("Fake AI answer to:\n", ai_input)
+    callJS(
+      .fun="window.ullme.receiveAssistantMessage",
+      .args=list(
+        assistantMessageId,
+        answer,
+        ullme_chat_output_html(answer, app=app)
+      ),
+      .app=app
+    )
+    return(invisible(answer))
+  }
+
+  app$chat_response_active = TRUE
+  finish = function() {
+    app$chat_response_active = FALSE
+    app$chat_tasks[[assistantMessageId]] = NULL
+  }
+  fail = function(error, text="", thinking="") {
+    message = paste0(
+      "I could not reach the configured model: ",
+      ullme_safe_ai_error(error, app$api_config)
+    )
+    ullme_send_chat_stream_update(
+      message_id=assistantMessageId,
+      text=text,
+      thinking=thinking,
+      done=TRUE,
+      error=message,
+      app=app
+    )
+    finish()
+    NULL
+  }
+
+  if (isTRUE(app$stream_chat)) {
+    job = tryCatch(
+      ullme_start_ai_stream(
+        input=ai_input,
+        model=model,
+        context=context %||% list(),
+        system_instructions=system_instructions,
+        include_thinking=isTRUE(app$show_chat_thinking),
+        on_update=function(text, thinking, done) {
+          ullme_send_chat_stream_update(
+            message_id=assistantMessageId,
+            text=text,
+            thinking=thinking,
+            done=done,
+            app=app
+          )
+        },
+        app=app
+      ),
+      error=function(e) e
+    )
+    if (inherits(job, "error")) {
+      return(invisible(fail(job)))
+    }
+    task = promises::then(
+      job$promise,
+      onFulfilled=function(value) {
+        finish()
+        value
+      },
+      onRejected=function(error) {
+        fail(error, text=job$state$text, thinking=job$state$thinking)
+      }
+    )
+  } else {
+    response = tryCatch(
+      ullme_start_ai_chat(
+        input=ai_input,
+        model=model,
+        context=context %||% list(),
+        system_instructions=system_instructions,
+        app=app
+      ),
+      error=function(e) e
+    )
+    if (inherits(response, "error")) {
+      return(invisible(fail(response)))
+    }
+    task = promises::then(
+      response$promise,
+      onFulfilled=function(answer) {
+        thinking = if (isTRUE(app$show_chat_thinking)) {
+          ullme_chat_last_thinking(response$chat)
+        } else {
+          ""
+        }
+        ullme_send_chat_stream_update(
+          message_id=assistantMessageId,
+          text=answer,
+          thinking=thinking,
+          done=TRUE,
+          app=app
+        )
+        finish()
+        answer
+      },
+      onRejected=function(error) fail(error)
+    )
+  }
+  app$chat_tasks[[assistantMessageId]] = task
+  invisible(task)
+}
+
+
+ullme_send_chat_stream_update = function(message_id, text="", thinking="",
+                                          done=FALSE, error="",
+                                          app=getApp()) {
+  restore.point("ullme_send_chat_stream_update")
+  text = paste0(text %||% "", collapse="")
+  thinking = if (isTRUE(app$show_chat_thinking)) {
+    paste0(thinking %||% "", collapse="")
+  } else {
+    ""
+  }
   callJS(
-    .fun = "window.ullme.receiveAssistantMessage",
-    .args = list(
-      assistantMessageId,
-      answer,
-      ullme_chat_output_html(answer, app=app)
+    .fun="window.ullme.receiveAssistantStream",
+    .args=list(
+      message_id,
+      text,
+      ullme_chat_output_html(text, app=app),
+      thinking,
+      ullme_chat_output_html(thinking, app=app),
+      isTRUE(done),
+      paste0(error %||% "")[1]
     ),
-    .app = app
+    .app=app
   )
-  invisible(answer)
+  invisible(TRUE)
 }
 
 
