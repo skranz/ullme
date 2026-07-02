@@ -37,11 +37,9 @@ stopifnot(all(c(
   "list_ai_tutors",
   "list_skills",
   "read_course_file",
-  "rewrite_course_text_file",
-  "write_object_index"
+  "rewrite_course_text_file"
 ) %in% names(registry)))
 
 stopifnot(
-  inherits(ullme_definition_rewrite_type(), "ellmer::TypeObject"),
-  inherits(ullme_organization_response_type(), "ellmer::TypeObject")
+  inherits(ullme_definition_rewrite_type(), "ellmer::TypeObject")
 )

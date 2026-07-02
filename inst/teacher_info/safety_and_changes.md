@@ -3,7 +3,7 @@
 Read operations are restricted to the current teacher's authorized data.
 Agent-originated changes follow the teacher's policy: allow, ask, or deny.
 
-YAML and JSON are checked before writing. Object indexes and definition files
+YAML and JSON are checked before writing. AI Tutor and Skill definitions
 receive additional semantic checks. Managed changes are logged and their prior
 contents are backed up in the current user's change-history directory.
 

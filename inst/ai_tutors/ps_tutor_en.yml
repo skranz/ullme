@@ -67,7 +67,7 @@ docs_per_instance:
     add_images: true
 
 # documents that will be the same for the course and
-docs_per_course:
+docs_per_course: {}
 
 
 allowed_tools: []

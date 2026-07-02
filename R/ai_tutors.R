@@ -77,6 +77,7 @@ ullme_ai_tutor_definition_at = function(tutorid, source, app=getApp()) {
   if (is.null(path) || !file.exists(path)) return(NULL)
   definition = tryCatch(yaml::read_yaml(path), error=function(e) NULL)
   if (!is.list(definition)) return(NULL)
+  if (!identical(paste0(definition$tutorid %||% "")[1], tutorid)) return(NULL)
   ullme_normalize_ai_tutor_definition(
     definition=definition,
     tutorid=tutorid,
@@ -112,6 +113,16 @@ ullme_clean_definition_id = function(id) {
   id = paste0(id)[1]
   if (is.na(id) || !grepl("^[A-Za-z][A-Za-z0-9_-]*$", id)) {
     stop("Definition IDs must start with a letter and contain only letters, numbers, underscores, or hyphens.")
+  }
+  id
+}
+
+
+ullme_clean_tutor_instance_id = function(id) {
+  restore.point("ullme_clean_tutor_instance_id")
+  id = paste0(id)[1]
+  if (is.na(id) || !grepl("^[A-Za-z0-9][A-Za-z0-9_.-]*$", id)) {
+    stop("Tutor instance IDs may contain letters, numbers, dots, underscores, or hyphens.")
   }
   id
 }
@@ -175,6 +186,22 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
       use.names=FALSE
     ))),
     yaml_content=ullme_ai_tutor_yaml(definition)
+  )
+}
+
+
+ullme_render_ai_tutor_system_prompt = function(definition, documents=list(),
+                                                customization=list()) {
+  restore.point("ullme_render_ai_tutor_system_prompt")
+  if (!is.list(definition)) stop("An AI Tutor definition is required.")
+  values = c(documents %||% list(), customization %||% list())
+  if (is.null(values$personality)) {
+    values$personality = definition$default_personality %||% ""
+  }
+  ullme_render_prompt(
+    text=definition$system_prompt %||% "",
+    values=values,
+    strict=TRUE
   )
 }
 
@@ -300,7 +327,8 @@ ullme_tutor_file_key = function(path, docid) {
   tokens = tokens[nzchar(tokens)]
   suffix = paste0("([_-](", paste(ullme_regex_escape(tokens), collapse="|"), "))+$")
   stem = sub(suffix, "", stem, perl=TRUE)
-  gsub("[^a-z0-9]+", "_", stem)
+  key = gsub("[^a-z0-9]+", "_", stem)
+  gsub("^_+|_+$", "", key)
 }
 
 
@@ -380,11 +408,13 @@ ullme_course_ai_tutors = function(app=getApp()) {
       source="course"
     )
     instance_data = ullme_read_course_ai_tutor_instances(course_dir, tutorid)
+    suggestions = ullme_suggest_course_ai_tutor_instances(course_dir, value)
     instances = instance_data$instances
     if (!isTRUE(instance_data$exists)) {
-      instances = ullme_suggest_course_ai_tutor_instances(course_dir, value)
+      instances = suggestions
     }
     definition$instances = instances
+    definition$suggested_instances = suggestions
     definition$course_docs = instance_data$course_docs
     definition$instance_count = length(instances)
     definition$instance_assignments_saved = isTRUE(instance_data$exists)
@@ -511,39 +541,49 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
   } else {
     if (!is.list(fields)) fields = list()
     current$tutorid = tutorid
-    current$lang = paste0(fields$lang %||% current$lang %||% "")[1]
-    current$label = paste0(fields$label %||% current$label %||% tutorid)[1]
-    current$description = paste0(
-      fields$description %||% current$description %||% "",
-      collapse="\n"
-    )
-    current$system_prompt = paste0(
-      fields$system_prompt %||% current$system_prompt %||% "",
-      collapse="\n"
-    )
-    current$default_personality = paste0(
-      fields$default_personality %||% current$default_personality %||% "",
-      collapse="\n"
-    )
-    current$docs_per_instance = ullme_tutor_doc_specs_from_rows(
-      fields$docs_per_instance %||% list()
-    )
-    current$docs_per_course = ullme_tutor_doc_specs_from_rows(
-      fields$docs_per_course %||% list()
-    )
-    current$allowed_tools = as.list(unique(trimws(paste0(unlist(
-      fields$allowed_tools %||% list(),
-      use.names=FALSE
-    )))))
-    current$allowed_student_customization = as.list(unique(trimws(paste0(unlist(
-      fields$allowed_student_customization %||% list(),
-      use.names=FALSE
-    )))))
-    current$allowed_tools = current$allowed_tools[nzchar(unlist(current$allowed_tools))]
-    current$allowed_student_customization =
-      current$allowed_student_customization[
-        nzchar(unlist(current$allowed_student_customization))
-      ]
+    has_field = function(name) name %in% names(fields)
+    if (has_field("lang")) current$lang = paste0(fields$lang)[1]
+    if (has_field("label")) current$label = paste0(fields$label)[1]
+    if (has_field("description")) {
+      current$description = paste0(fields$description, collapse="\n")
+    }
+    if (has_field("system_prompt")) {
+      current$system_prompt = paste0(fields$system_prompt, collapse="\n")
+    }
+    if (has_field("default_personality")) {
+      current$default_personality = paste0(
+        fields$default_personality,
+        collapse="\n"
+      )
+    }
+    if (has_field("docs_per_instance")) {
+      current$docs_per_instance = ullme_tutor_doc_specs_from_rows(
+        fields$docs_per_instance %||% list()
+      )
+    }
+    if (has_field("docs_per_course")) {
+      current$docs_per_course = ullme_tutor_doc_specs_from_rows(
+        fields$docs_per_course %||% list()
+      )
+    }
+    if (has_field("allowed_tools")) {
+      current$allowed_tools = as.list(unique(trimws(paste0(unlist(
+        fields$allowed_tools %||% list(),
+        use.names=FALSE
+      )))))
+      current$allowed_tools =
+        current$allowed_tools[nzchar(unlist(current$allowed_tools))]
+    }
+    if (has_field("allowed_student_customization")) {
+      current$allowed_student_customization = as.list(unique(trimws(paste0(unlist(
+        fields$allowed_student_customization %||% list(),
+        use.names=FALSE
+      )))))
+      current$allowed_student_customization =
+        current$allowed_student_customization[
+          nzchar(unlist(current$allowed_student_customization))
+        ]
+    }
     content = ullme_ai_tutor_yaml(current)
   }
   validation = ullme_validate_definition_yaml(
@@ -600,11 +640,33 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
   if (is.null(course_dir)) stop("Select a course first.")
   tutor_path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
   if (!file.exists(tutor_path)) stop("This AI Tutor is not part of the course.")
+  definition = yaml::read_yaml(tutor_path)
+  if (!is.list(definition)) stop("The course AI Tutor YAML is invalid.")
+  instance_docids = names(
+    ullme_normalize_tutor_doc_specs(definition$docs_per_instance)
+  )
+  course_docids = names(
+    ullme_normalize_tutor_doc_specs(definition$docs_per_course)
+  )
 
   clean_instances = list()
+  seen_instanceids = character(0)
   for (instance in instances %||% list()) {
     if (!is.list(instance)) next
-    instanceid = ullme_clean_definition_id(instance$instanceid)
+    instanceid = ullme_clean_tutor_instance_id(instance$instanceid)
+    if (instanceid %in% seen_instanceids) {
+      stop("Tutor instance IDs must be unique: ", instanceid)
+    }
+    seen_instanceids = c(seen_instanceids, instanceid)
+    unknown_docids = setdiff(names(instance$docs %||% list()), instance_docids)
+    if (length(unknown_docids) > 0) {
+      stop(
+        "Unknown per-instance document role",
+        if (length(unknown_docids) > 1) "s" else "",
+        ": ",
+        paste(unknown_docids, collapse=", ")
+      )
+    }
     docs = lapply(instance$docs %||% list(), function(paths) {
       as.list(vapply(
         ullme_tutor_document_paths(paths),
@@ -616,6 +678,18 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
     clean_instances[[length(clean_instances) + 1L]] = list(
       instanceid=instanceid,
       docs=docs
+    )
+  }
+  unknown_course_docids = setdiff(
+    names(course_docs %||% list()),
+    course_docids
+  )
+  if (length(unknown_course_docids) > 0) {
+    stop(
+      "Unknown course document role",
+      if (length(unknown_course_docids) > 1) "s" else "",
+      ": ",
+      paste(unknown_course_docids, collapse=", ")
     )
   }
   clean_course_docs = lapply(course_docs %||% list(), function(paths) {

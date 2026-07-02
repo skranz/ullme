@@ -112,10 +112,51 @@ ullme_validate_course_yaml = function(content) {
 }
 
 
+ullme_validate_tutor_doc_specs = function(value, field) {
+  errors = character(0)
+  if (is.null(value)) return(errors)
+  if (!is.list(value)) {
+    return(paste0(field, " must be a mapping of document IDs to settings."))
+  }
+  if (length(value) == 0) return(errors)
+  ids = names(value)
+  if (is.null(ids) || any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", ids))) {
+    errors = c(errors, paste0(field, " contains an invalid document ID."))
+    return(errors)
+  }
+  for (docid in ids) {
+    spec = value[[docid]]
+    label = paste0(field, ".", docid)
+    if (!is.list(spec)) {
+      errors = c(errors, paste0(label, " must be a mapping."))
+      next
+    }
+    if (!nzchar(trimws(paste0(spec$descr %||% "")[1]))) {
+      errors = c(errors, paste0(label, ".descr is required."))
+    }
+    directory = paste0(spec$pref_doc_dir %||% "")[1]
+    if (!ullme_safe_relative_material_path(directory)) {
+      errors = c(errors, paste0(label, ".pref_doc_dir must be a relative material directory."))
+    }
+    for (name in c("pref_format", "auto_convert")) {
+      formats = spec[[name]] %||% list()
+      if (!is.list(formats) && !is.character(formats)) {
+        errors = c(errors, paste0(label, ".", name, " must be a list."))
+      }
+    }
+    if (!is.null(spec$add_images) &&
+        !is.logical(spec$add_images)) {
+      errors = c(errors, paste0(label, ".add_images must be true or false."))
+    }
+  }
+  errors
+}
+
+
 ullme_validate_definition_yaml = function(kind, definitionid, content) {
   kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
-  filename = if (identical(kind, "tutor")) "tutor.yaml" else "ullme.yaml"
+  filename = if (identical(kind, "tutor")) "tutor.yml" else "ullme.yaml"
   parsed = ullme_parse_yaml_text(content, filename)
   if (!parsed$ok) return(parsed)
 
@@ -134,43 +175,68 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
     warnings = c(warnings, "label is empty.")
   }
   if (identical(kind, "tutor") && is.list(value)) {
-    generation = value$instance_generation %||% list()
-    if (!is.list(generation)) {
-      errors = c(errors, "instance_generation must be a mapping.")
-      generation = list()
-    }
-    matcher = generation$file_matcher %||% NULL
-    if (!is.null(matcher)) {
-      if (!is.list(matcher)) {
-        errors = c(errors, "instance_generation.file_matcher must be a mapping.")
-      } else {
-        directory = paste0(matcher$directory %||% "")[1]
-        primary_role = paste0(matcher$primary_role %||% "")[1]
-        primary_pattern = paste0(matcher$primary_pattern %||% "")[1]
-        id_group = suppressWarnings(as.integer(matcher$id_group %||% 1L)[1])
-        if (!ullme_safe_relative_material_path(directory)) {
-          errors = c(errors, "file_matcher.directory must be a relative material directory.")
-        }
-        if (!grepl("^[A-Za-z][A-Za-z0-9_-]*$", primary_role)) {
-          errors = c(errors, "file_matcher.primary_role must be a valid role ID.")
-        }
-        if (!nzchar(primary_pattern)) {
-          errors = c(errors, "file_matcher.primary_pattern is required.")
-        } else {
-          valid_pattern = tryCatch({
-            grepl(primary_pattern, "", perl=TRUE)
-            TRUE
-          }, error=function(e) FALSE)
-          if (!valid_pattern) errors = c(errors, "file_matcher.primary_pattern is not a valid regular expression.")
-        }
-        if (is.na(id_group) || id_group < 1L) {
-          errors = c(errors, "file_matcher.id_group must be a positive integer.")
-        }
-        associated = matcher$associated %||% list()
-        if (!is.list(associated)) {
-          errors = c(errors, "file_matcher.associated must be a mapping.")
-        }
+    scalar_fields = c(
+      "lang", "label", "description", "system_prompt",
+      "default_personality"
+    )
+    for (field in scalar_fields) {
+      if (!nzchar(trimws(paste0(value[[field]] %||% "")[1]))) {
+        errors = c(errors, paste0(field, " is required."))
       }
+    }
+    for (field in c("docs_per_instance", "docs_per_course")) {
+      if (!field %in% names(value)) {
+        errors = c(errors, paste0(field, " is required, even when empty."))
+      } else {
+        errors = c(
+          errors,
+          ullme_validate_tutor_doc_specs(value[[field]], field)
+        )
+      }
+    }
+    for (field in c("allowed_tools", "allowed_student_customization")) {
+      if (!field %in% names(value)) {
+        errors = c(errors, paste0(field, " is required, even when empty."))
+      } else if (!is.list(value[[field]]) &&
+                 !is.character(value[[field]])) {
+        errors = c(errors, paste0(field, " must be a list of IDs."))
+      }
+    }
+    tools = paste0(unlist(
+      value$allowed_tools %||% list(),
+      use.names=FALSE
+    ))
+    if (any(!grepl("^[A-Za-z][A-Za-z0-9_.-]*$", tools))) {
+      errors = c(errors, "allowed_tools contains an invalid ID.")
+    }
+    customization = paste0(unlist(
+      value$allowed_student_customization %||% list(),
+      use.names=FALSE
+    ))
+    if (any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", customization))) {
+      errors = c(errors, "allowed_student_customization contains an invalid ID.")
+    }
+    prompt = paste0(value$system_prompt %||% "", collapse="\n")
+    hits = regmatches(
+      prompt,
+      gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}", prompt, perl=TRUE)
+    )[[1]]
+    placeholders = if (length(hits) == 1 && identical(hits, "")) {
+      character(0)
+    } else {
+      unique(substring(hits, 3, nchar(hits) - 2L))
+    }
+    document_ids = c(
+      names(value$docs_per_instance %||% list()),
+      names(value$docs_per_course %||% list())
+    )
+    unknown = setdiff(placeholders, c(document_ids, customization))
+    if (length(unknown) > 0) {
+      errors = c(
+        errors,
+        paste0("system_prompt contains unknown placeholders: ",
+               paste(unknown, collapse=", "), ".")
+      )
     }
   }
   ullme_validation_result(length(errors) == 0, errors, warnings, value)

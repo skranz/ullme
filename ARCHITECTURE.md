@@ -67,11 +67,11 @@ dynamic rail entry. The active Skill is highlighted. The Add menu opens the
 Tutor-template or Skill catalog.
 
 Selecting a Tutor opens one course-local Tutor with Instances, Definition, and
-YAML tabs. `course/ai_tutors/<tutorid>/tutor.yaml` is always a complete,
-editable definition. Personal, general, and package definitions are templates
-used only to create that course copy; they are never resolved at Tutor runtime.
-An optional `instance_generation.file_matcher` block enables form-based
-matching of primary and associated material files.
+YAML tabs. `course/ai_tutors/<tutorid>/tutor.yml` is always a complete,
+editable definition copied from a flat package template in
+`inst/ai_tutors/<tutorid>.yml`. `docs_per_instance` and `docs_per_course`
+define the required document roles. Reviewed assignments are stored in
+`course/ai_tutors/<tutorid>/instances.yml`.
 
 Skills belong to the teacher assistant rather than the course tab row. A
 composer button opens the resolved Skill catalog. Selecting a Skill displays

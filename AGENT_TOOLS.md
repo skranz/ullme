@@ -16,8 +16,6 @@ Read-only tools:
 - `list_courses`
 - `list_material_files`
 - `read_definition_yaml`
-- `list_object_types`
-- `read_object_index`
 - `list_changes`
 - `change_status`
 
@@ -25,7 +23,6 @@ Modifying tools:
 
 - `copy_material`
 - `rewrite_definition_yaml`
-- `write_object_index`
 - `undo_change`
 
 Modifying tools prepare a transaction before touching the filesystem. The
@@ -39,7 +36,6 @@ agent_tools:
     read: allow
     copy_materials: ask
     rewrite_definitions: ask
-    write_object_indexes: ask
     undo: ask
 ```
 

@@ -70,10 +70,25 @@ utool_read_definition_yaml = function(kind, definitionid, source,
                                        app=getApp()) {
   kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
-  directory = ullme_definition_dir(kind, definitionid, source, app=app)
-  filename = if (identical(kind, "tutor")) "tutor.yaml" else "ullme.yaml"
-  path = file.path(directory, filename)
-  if (!file.exists(path)) stop("The requested definition YAML does not exist.")
+  if (identical(kind, "tutor")) {
+    path = if (identical(source, "course")) {
+      course_dir = ullme_active_course_dir(app=app)
+      if (is.null(course_dir)) NULL else
+        ullme_existing_course_ai_tutor_path(course_dir, definitionid)
+    } else if (identical(source, "package")) {
+      ullme_ai_tutor_template_path(definitionid)
+    } else {
+      NULL
+    }
+    filename = if (is.null(path)) "tutor.yml" else basename(path)
+  } else {
+    directory = ullme_definition_dir(kind, definitionid, source, app=app)
+    filename = "ullme.yaml"
+    path = file.path(directory, filename)
+  }
+  if (is.null(path) || !file.exists(path)) {
+    stop("The requested definition YAML does not exist.")
+  }
   list(
     kind=kind,
     definitionid=definitionid,
@@ -92,7 +107,8 @@ utool_list_ai_tutors = function(app=getApp()) {
       description=tutor$description,
       enabled=tutor$enabled,
       instance_count=tutor$instance_count,
-      required_material_roles=tutor$required_material_roles
+      docs_per_instance=tutor$doc_ids_per_instance,
+      docs_per_course=tutor$doc_ids_per_course
     )
   })
 }
@@ -136,42 +152,6 @@ utool_read_course_file = function(courseid, path, semester="sel",
     path=gsub("\\\\", "/", path),
     content=paste(readLines(target, warn=FALSE, encoding="UTF-8"), collapse="\n"),
     hash=ullme_path_hash(target)
-  )
-}
-
-
-utool_list_object_types = function(app=getApp()) {
-  lapply(ullme_object_type_ids(), function(oid) {
-    value = ullme_read_object_type(oid)
-    list(
-      oid=oid,
-      name=value$name,
-      type=value$type,
-      doc_dir=value$doc_dir %||% NULL,
-      linked_to=value$linked_to %||% NULL,
-      progresses=value$progresses %||% NULL,
-      description=value$descr
-    )
-  })
-}
-
-
-utool_read_object_index = function(courseid, oid, semester="sel",
-                                    app=getApp()) {
-  course_dir = ullme_tool_course_dir(semester, courseid, app=app)
-  path = ullme_existing_course_object_index_path(course_dir, oid)
-  if (!file.exists(path)) {
-    return(list(ok=TRUE, exists=FALSE, oid=oid, objects=list()))
-  }
-  content = paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n")
-  validation = ullme_validate_object_index_yaml(content, oid, course_dir)
-  list(
-    ok=validation$ok,
-    exists=TRUE,
-    oid=oid,
-    content=content,
-    warnings=validation$warnings,
-    errors=validation$errors
   )
 }
 
@@ -257,9 +237,18 @@ utool_rewrite_definition_yaml = function(kind, definitionid, source,
   }
   validation = ullme_validate_definition_yaml(kind, definitionid, yaml_content)
   ullme_validation_stop(validation)
-  directory = ullme_definition_dir(kind, definitionid, source, app=app)
-  filename = if (identical(kind, "tutor")) "tutor.yaml" else "ullme.yaml"
-  target = file.path(directory, filename)
+  if (identical(kind, "tutor")) {
+    course_dir = ullme_active_course_dir(app=app)
+    if (!identical(source, "course") || is.null(course_dir)) {
+      stop("AI Tutor rewrites target the selected course copy.")
+    }
+    target = ullme_existing_course_ai_tutor_path(course_dir, definitionid)
+    filename = basename(target)
+  } else {
+    directory = ullme_definition_dir(kind, definitionid, source, app=app)
+    filename = "ullme.yaml"
+    target = file.path(directory, filename)
+  }
   if (!file.exists(target)) stop("The requested definition YAML does not exist.")
 
   operation = ullme_new_change(
@@ -297,32 +286,6 @@ utool_rewrite_course_text_file = function(courseid, path, content,
     summary=paste0("Rewrite course file ", courseid, "/", path),
     origin="agent",
     details=list(courseid=courseid, path=path),
-    changes=list(change),
-    app=app
-  )
-  ullme_tool_change_result(ullme_submit_change(operation, app=app))
-}
-
-
-utool_write_object_index = function(courseid, oid, yaml_content,
-                                     semester="sel", app=getApp()) {
-  course_dir = ullme_tool_course_dir(semester, courseid, app=app)
-  oid = ullme_clean_object_id(oid)
-  validation = ullme_validate_object_index_yaml(
-    yaml_content,
-    oid=oid,
-    course_dir=course_dir,
-    require_files=TRUE
-  )
-  ullme_validation_stop(validation)
-  target = ullme_course_object_index_path(course_dir, oid)
-  change = ullme_change_write(target, yaml_content)
-  change$warnings = validation$warnings
-  operation = ullme_new_change(
-    action="write_object_indexes",
-    summary=paste0("Write ", oid, " object index for ", courseid),
-    origin="agent",
-    details=list(courseid=courseid, oid=oid),
     changes=list(change),
     app=app
   )

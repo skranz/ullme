@@ -34,7 +34,8 @@ ullme_teacherid = function(app=getApp()) {
                       uses_fake_ai=NULL, max_upload_mb=100,
                       api_key_file=NULL,
                       api_provider=c("fake", "nvidia", "local"),
-                      api_model=NULL, api_base_url=NULL) {
+                      api_model=NULL, api_base_url=NULL,
+                      render_chat_markdown=TRUE) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
@@ -59,6 +60,11 @@ ullme_teacherid = function(app=getApp()) {
   if (is.na(max_upload_mb) || max_upload_mb <= 0) {
     stop("max_upload_mb must be a positive number.")
   }
+  if (!is.logical(render_chat_markdown) ||
+      length(render_chat_markdown) != 1L ||
+      is.na(render_chat_markdown)) {
+    stop("render_chat_markdown must be TRUE or FALSE.")
+  }
   # Shiny's upload limit is process-wide, even though upload state is per app.
   current_upload_limit = getOption("shiny.maxRequestSize", 5 * 1024^2)
   options(shiny.maxRequestSize=max(current_upload_limit, max_upload_mb * 1024^2))
@@ -75,6 +81,7 @@ ullme_teacherid = function(app=getApp()) {
   app$allowed_roles = role
   app$semester = ullme_semester()
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
+  app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
@@ -87,7 +94,6 @@ ullme_teacherid = function(app=getApp()) {
   app$definition_imports = list()
   app$pending_changes = list()
   app$change_results = list()
-  app$organization_proposals = list()
   app$courseids = ullme_user_courseids(
     main_dir=main_dir,
     userid=app$userid,
@@ -173,7 +179,7 @@ ullme_register_handlers = function(app=getApp()) {
       app = app
     )
   })
-  lapply(c("tutor", "skill"), function(kind) {
+  lapply("skill", function(kind) {
     changeHandler(
       id = paste0("ullme_definition_import_", kind),
       fun = ullme_handle_definition_import_upload,
@@ -250,6 +256,12 @@ ullme_register_handlers = function(app=getApp()) {
     eventId = "ullme_ai_tutor_save_event",
     id = NULL,
     fun = ullme_handle_ai_tutor_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_instances_save_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_instances_save,
     app = app
   )
   eventHandler(
@@ -386,6 +398,7 @@ ullme_role_workspace_ui = function(app=getApp()) {
 ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE) {
   restore.point("ullme_chat_pane_ui")
   intro = ullme_intro_msg()
+  intro_html = ullme_chat_output_html(intro$text, app=app)
   tags$section(
     class = "ullme-chat-pane",
     if (isTRUE(show_header)) tags$header(
@@ -408,7 +421,8 @@ ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE) {
       class = "ullme-chat-messages",
       `data-intro-role` = intro$role,
       `data-intro-text` = intro$text,
-      `data-intro-meta` = intro$meta
+      `data-intro-meta` = intro$meta,
+      `data-intro-html` = intro_html
     ),
     ullme_composer_ui()
   )
@@ -906,6 +920,14 @@ ullme_intro_msg = function() {
 }
 
 
+ullme_chat_output_html = function(text, app=getApp()) {
+  restore.point("ullme_chat_output_html")
+  text = paste0(text %||% "", collapse="\n")
+  if (!isTRUE(app$render_chat_markdown)) return("")
+  paste0(commonmark::markdown_html(text), collapse="\n")
+}
+
+
 ullme_composer_ui = function() {
   restore.point("ullme_composer_ui")
   tags$footer(
@@ -1399,7 +1421,11 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   }
   callJS(
     .fun = "window.ullme.receiveAssistantMessage",
-    .args = list(assistantMessageId, answer),
+    .args = list(
+      assistantMessageId,
+      answer,
+      ullme_chat_output_html(answer, app=app)
+    ),
     .app = app
   )
   invisible(answer)

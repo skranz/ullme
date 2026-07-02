@@ -10,7 +10,8 @@ teacherApp = function(main_dir, userid="skranz",
                        uses_fake_ai=NULL, max_upload_mb=100,
                        api_key_file=NULL,
                        api_provider=c("fake", "nvidia", "local"),
-                       api_model=NULL, api_base_url=NULL) {
+                       api_model=NULL, api_base_url=NULL,
+                       render_chat_markdown=TRUE) {
   restore.point("teacherApp")
   .ullme_app(
     main_dir=main_dir,
@@ -19,6 +20,7 @@ teacherApp = function(main_dir, userid="skranz",
     teacherid=userid,
     uses_fake_ai=uses_fake_ai,
     max_upload_mb=max_upload_mb,
+    render_chat_markdown=render_chat_markdown,
     api_key_file=api_key_file,
     api_provider=api_provider,
     api_model=api_model,

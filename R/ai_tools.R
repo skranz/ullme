@@ -38,14 +38,6 @@ ullme_tool_registry = function() {
       description="Read an authorized text file from one of the current teacher's courses.",
       perm=ullme_tool_perm(course_must_exist=TRUE)
     ),
-    list_object_types=list(
-      description="List the available uLLMe object types such as ps, ps_sol, slides, lecture, and script.",
-      perm=ullme_tool_perm()
-    ),
-    read_object_index=list(
-      description="Read a course object index that maps ordered course materials to an object type.",
-      perm=ullme_tool_perm(course_must_exist=TRUE)
-    ),
     list_changes=list(
       description="List recent ULLME-managed file changes that can be inspected or undone.",
       perm=ullme_tool_perm()
@@ -65,10 +57,6 @@ ullme_tool_registry = function() {
     ),
     rewrite_course_text_file=list(
       description="Validate and replace a text file in one of the current teacher's courses.",
-      perm=ullme_tool_perm(course_must_exist=TRUE, mutates=TRUE)
-    ),
-    write_object_index=list(
-      description="Validate and write an ordered course object index, including ps_sol mappings.",
       perm=ullme_tool_perm(course_must_exist=TRUE, mutates=TRUE)
     ),
     undo_change=list(
@@ -223,7 +211,7 @@ ullme_tool_arg_spec = function(args, specs=list()) {
 ullme_default_tool_arg_spec = function() {
   list(
     semester=list(type="string", description="Semester such as WS2526 or SS27. Use 'sel' for the selected semester.", required=FALSE),
-    topic=list(type="string", description="Information topic, for example overview, materials, organization, tutors, skills, safety, project_state, or next_steps.", required=FALSE),
+    topic=list(type="string", description="Information topic, for example overview, materials, tutors, skills, safety, project_state, or next_steps.", required=FALSE),
     query=list(type="string", description="Optional words to search for in the teacher information library.", required=FALSE),
     courseid=list(type="string", description="Course ID owned by the current teacher.", required=TRUE),
     category=list(type="string", description="Material category: general, slides, ps, quiz, or background.", required=FALSE),
@@ -238,11 +226,10 @@ ullme_default_tool_arg_spec = function() {
     overwrite=list(type="boolean", description="Whether an existing destination may be replaced.", required=FALSE),
     kind=list(type="string", description="Definition kind: tutor or skill.", required=TRUE),
     definitionid=list(type="string", description="AI Tutor or Skill definition ID.", required=TRUE),
-    source=list(type="string", description="Definition source: personal, course, general, or package.", required=TRUE),
+    source=list(type="string", description="Definition source: course or package for Tutors; personal, general, or package for Skills.", required=TRUE),
     yaml_content=list(type="string", description="Complete replacement YAML text.", required=TRUE),
     path=list(type="string", description="Relative path within the course directory.", required=TRUE),
     content=list(type="string", description="Complete replacement text-file content.", required=TRUE),
-    oid=list(type="string", description="Object type ID such as ps, ps_sol, slides, script, or lecture.", required=TRUE),
     operation_id=list(type="string", description="Change operation ID, or 'last' for the most recent committed change.", required=FALSE),
     limit=list(type="number", description="Maximum number of history entries to return.", required=FALSE)
   )

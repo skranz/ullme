@@ -124,17 +124,6 @@ ullme_validate_course_file_content = function(path, content, app=getApp(),
   if (identical(tolower(relative), "course.yaml")) {
     return(ullme_validate_course_yaml(content))
   }
-  object_match = regexec("^objects/([A-Za-z][A-Za-z0-9_-]*)\\.ya?ml$",
-                         relative, ignore.case=TRUE)
-  parts = regmatches(relative, object_match)[[1]]
-  if (length(parts) > 1) {
-    return(ullme_validate_object_index_yaml(
-      content=content,
-      oid=parts[[2]],
-      course_dir=course_dir,
-      require_files=TRUE
-    ))
-  }
   tutor_match = regexec(
     "^ai_tutors/([A-Za-z][A-Za-z0-9_-]*)/tutor\\.ya?ml$",
     relative,

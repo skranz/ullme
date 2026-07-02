@@ -1,9 +1,0 @@
-oid: ps_sol
-name: problem set solution
-type: doc
-level: course
-doc_dir: ps
-linked_to: ps
-descr: |
-  Solution file for a problem set. Will often be provided to students later than the problem set, sometimes not at all. Is helpful to ground an AI tutor that helps students solving a problem set.
-

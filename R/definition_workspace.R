@@ -20,6 +20,9 @@ ullme_definition_roots = function(kind, app=getApp()) {
 ullme_definition_dir = function(kind, definitionid, source, app=getApp()) {
   restore.point("ullme_definition_dir")
   kind = ullme_definition_kind(kind)
+  if (identical(kind, "tutor")) {
+    stop("AI Tutors use flat package templates and dedicated course copies.")
+  }
   definitionid = ullme_clean_definition_id(definitionid)
   roots = ullme_definition_roots(kind=kind, app=app)
   source = paste0(source)[1]
@@ -54,15 +57,14 @@ ullme_definition_is_editable = function(kind, source, app=getApp()) {
   if (!identical(app$role, "teacher")) return(FALSE)
   kind = ullme_definition_kind(kind)
   source = paste0(source)[1]
-  identical(source, "personal") ||
-    (identical(kind, "tutor") && identical(source, "course"))
+  identical(kind, "skill") && identical(source, "personal")
 }
 
 
 ullme_definition_library = function(app=getApp()) {
   restore.point("ullme_definition_library")
   library = list()
-  for (kind in c("tutor", "skill")) {
+  for (kind in "skill") {
     roots = ullme_definition_roots(kind=kind, app=app)
     for (source in names(roots)) {
       ids = ullme_definition_ids(roots[[source]])
@@ -153,7 +155,7 @@ ullme_definition_exists_at = function(kind, definitionid, source, app=getApp()) 
 }
 
 
-ullme_definition_workspace_payload = function(kind="tutor", definitionid=NULL,
+ullme_definition_workspace_payload = function(kind="skill", definitionid=NULL,
                                                source=NULL, app=getApp(),
                                                notice=NULL, error=NULL,
                                                draft=NULL) {
@@ -195,19 +197,9 @@ ullme_definition_workspace_payload = function(kind="tutor", definitionid=NULL,
       source="personal",
       app=app
     )
-    selected$course_exists = identical(selected$kind, "tutor") &&
-      ullme_definition_exists_at(
-        kind="tutor",
-        definitionid=selected$id,
-        source="course",
-        app=app
-      )
     selected$can_make_personal = !identical(selected$source, "personal")
-    selected$can_customize_course = identical(selected$kind, "tutor") &&
-      !is.null(ullme_active_course_dir(app=app)) &&
-      !identical(selected$source, "course")
     selected$can_delete = selected$editable &&
-      selected$source %in% c("personal", "course")
+      identical(selected$source, "personal")
   }
 
   list(
@@ -223,7 +215,7 @@ ullme_definition_workspace_payload = function(kind="tutor", definitionid=NULL,
 }
 
 
-ullme_send_definition_workspace = function(kind="tutor", definitionid=NULL,
+ullme_send_definition_workspace = function(kind="skill", definitionid=NULL,
                                             source=NULL, app=getApp(),
                                             notice=NULL, error=NULL,
                                             draft=NULL) {
@@ -257,7 +249,8 @@ ullme_validate_definition_content = function(kind, definitionid, file, content) 
   }
 
   if (grepl("\\.ya?ml$", file, ignore.case=TRUE)) {
-    core_yaml = (identical(kind, "tutor") && identical(file, "tutor.yaml")) ||
+    core_yaml = (identical(kind, "tutor") &&
+      file %in% c("tutor.yml", "tutor.yaml")) ||
       (identical(kind, "skill") && identical(file, "ullme.yaml"))
     if (core_yaml) {
       result = ullme_validate_definition_yaml(
@@ -282,6 +275,9 @@ ullme_save_definition_file = function(kind, definitionid, source, file, content,
                                        app=getApp()) {
   restore.point("ullme_save_definition_file")
   kind = ullme_definition_kind(kind)
+  if (identical(kind, "tutor")) {
+    stop("Edit AI Tutors in the course AI Tutor pane.")
+  }
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
   if (!ullme_definition_is_editable(kind=kind, source=source, app=app)) {
@@ -356,16 +352,13 @@ ullme_copy_definition = function(kind, definitionid, source, target_source,
   restore.point("ullme_copy_definition")
   if (!identical(app$role, "teacher")) stop("Only teachers can copy definitions.")
   kind = ullme_definition_kind(kind)
+  if (identical(kind, "tutor")) {
+    stop("AI Tutors are copied from package templates directly into a course.")
+  }
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
   target_source = paste0(target_source)[1]
-  if (!target_source %in% c("personal", "course")) stop("Invalid copy destination.")
-  if (identical(target_source, "course") && !identical(kind, "tutor")) {
-    stop("Only AI Tutor definitions can be customized for a course.")
-  }
-  if (identical(target_source, "course") && is.null(ullme_active_course_dir(app=app))) {
-    stop("Select a course before creating a course-local definition.")
-  }
+  if (!identical(target_source, "personal")) stop("Invalid copy destination.")
 
   source_metadata = ullme_definition_metadata_at(
     kind=kind,
@@ -417,6 +410,9 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
   restore.point("ullme_create_definition")
   if (!identical(app$role, "teacher")) stop("Only teachers can create definitions.")
   kind = ullme_definition_kind(kind)
+  if (identical(kind, "tutor")) {
+    stop("AI Tutor templates are package files; add one to a course before editing it.")
+  }
   definitionid = ullme_clean_definition_id(definitionid)
   label = trimws(paste0(label)[1])
   if (!nzchar(label)) label = definitionid
@@ -440,24 +436,11 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
   }
   stage = ullme_tempdir(pattern=".ullme-definition-create-", app=app)
   on.exit(ullme_remove_tempdir(stage, app=app), add=TRUE)
-  if (identical(kind, "tutor")) {
-    yaml::write_yaml(
-      list(
-        tutorid=definitionid,
-        label=label,
-        description="Describe what this AI Tutor helps students do.",
-        pedagogical_instructions="Add the tutor's pedagogical instructions here.",
-        required_material_roles=list(),
-        allowed_tools=list()
-      ),
-      file.path(stage, "tutor.yaml")
-    )
-  } else {
-    frontmatter = trimws(yaml::as.yaml(list(
+  frontmatter = trimws(yaml::as.yaml(list(
       name=label,
       description="Describe the recurring task this Skill performs."
-    )))
-    writeLines(
+  )))
+  writeLines(
       c(
         "---",
         strsplit(frontmatter, "\n", fixed=TRUE)[[1]],
@@ -469,8 +452,8 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
       ),
       file.path(stage, "SKILL.md"),
       useBytes=TRUE
-    )
-    yaml::write_yaml(
+  )
+  yaml::write_yaml(
       list(
         skillid=definitionid,
         label=label,
@@ -483,8 +466,7 @@ ullme_create_definition = function(kind, definitionid, label="", app=getApp()) {
         required_tools=list()
       ),
       file.path(stage, "ullme.yaml")
-    )
-  }
+  )
   operation = ullme_new_change(
     action="definition_create",
     summary=paste0("Create personal ", kind, " definition ", definitionid),
@@ -502,14 +484,14 @@ ullme_delete_definition_copy = function(kind, definitionid, source, app=getApp()
   restore.point("ullme_delete_definition_copy")
   if (!identical(app$role, "teacher")) stop("Only teachers can delete definitions.")
   kind = ullme_definition_kind(kind)
+  if (identical(kind, "tutor")) {
+    stop("AI Tutors are managed in the course AI Tutor pane.")
+  }
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
-  if (!source %in% c("personal", "course") ||
+  if (!identical(source, "personal") ||
       !ullme_definition_is_editable(kind=kind, source=source, app=app)) {
-    stop("Only Personal and course-local definition copies can be deleted.")
-  }
-  if (identical(source, "course") && !identical(kind, "tutor")) {
-    stop("Skills do not have course-local definitions.")
+    stop("Only personal Skill copies can be deleted.")
   }
   if (!ullme_definition_exists_at(
     kind=kind,
@@ -537,14 +519,11 @@ ullme_delete_definition_copy = function(kind, definitionid, source, app=getApp()
   result = ullme_submit_change(operation, app=app)
   if (!isTRUE(result$ok)) stop(result$message %||% "Could not delete the definition copy.")
 
-  if (identical(kind, "tutor")) {
-    return(ullme_ai_tutor_definition(definitionid, app=app))
-  }
   ullme_skill_definition(definitionid, app=app, include_instructions=FALSE)
 }
 
 
-ullme_handle_definition_action = function(action="open", kind="tutor",
+ullme_handle_definition_action = function(action="open", kind="skill",
                                            definitionid=NULL, source=NULL,
                                            file=NULL, content=NULL, label=NULL,
                                            import_token=NULL, target_source=NULL,
@@ -553,7 +532,7 @@ ullme_handle_definition_action = function(action="open", kind="tutor",
   restore.point("ullme_handle_definition_action")
   if (!identical(app$role, "teacher")) return(invisible(FALSE))
   action = paste0(action)[1]
-  kind = tryCatch(ullme_definition_kind(kind), error=function(e) "tutor")
+  kind = tryCatch(ullme_definition_kind(kind), error=function(e) "skill")
   definitionid = paste0(definitionid %||% "")[1]
   source = paste0(source %||% "")[1]
   notice = NULL
@@ -581,16 +560,6 @@ ullme_handle_definition_action = function(action="open", kind="tutor",
       )
       source = "personal"
       notice = if (copied) "Personal copy created." else "Opened the existing personal copy."
-    } else if (identical(action, "copy-course")) {
-      copied = ullme_copy_definition(
-        kind=kind,
-        definitionid=definitionid,
-        source=source,
-        target_source="course",
-        app=app
-      )
-      source = "course"
-      notice = if (copied) "Course-local Tutor definition created." else "Opened the existing course-local definition."
     } else if (identical(action, "create")) {
       ullme_create_definition(
         kind=kind,
@@ -599,7 +568,7 @@ ullme_handle_definition_action = function(action="open", kind="tutor",
         app=app
       )
       source = "personal"
-      notice = if (identical(kind, "tutor")) "AI Tutor definition created." else "Skill created."
+      notice = "Skill created."
     } else if (identical(action, "delete")) {
       fallback = ullme_delete_definition_copy(
         kind=kind,

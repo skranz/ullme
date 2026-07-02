@@ -28,22 +28,23 @@ Selecting a Tutor always opens that specific course Tutor. Its definition is
 stored at:
 
 ```text
-ai_tutors/<tutorid>/tutor.yaml
+ai_tutors/<tutorid>/tutor.yml
 ```
 
-This is a complete, editable course copy. General, personal, and package
-Tutors are templates used only when adding a Tutor; the course never runs a
-template directly.
+This is a complete, editable course copy. Package Tutors are templates used
+only when adding a Tutor; the course never runs a template directly.
 
 The Tutor work surface has:
 
-- **Instances**, a table relating each Tutor instance to material roles such
-  as problem set and solution;
+- **Instances**, an editable table relating each Tutor instance to document
+  roles such as `ps` and `ps_sol`;
 - **Definition**, form-based editing for common metadata, teaching
-  instructions, and optional instance-matching rules; and
+  instructions, per-instance documents, and per-course documents; and
 - **YAML**, direct editing of the complete course-local definition.
 
-A Tutor opts into the file-matching helper with
-`instance_generation.file_matcher`. The matcher scans a material directory,
-captures an instance ID from primary files, and associates related files with
-patterns containing `{{id}}`.
+Package Tutor templates are flat files at
+`inst/ai_tutors/<tutorid>.yml`. Their `docs_per_instance` and
+`docs_per_course` mappings define document IDs, preferred formats, conversion
+preferences, preferred material directories, and image extraction. When no
+saved instance assignment exists, uLLMe suggests assignments from matching
+course files for review.

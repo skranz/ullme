@@ -34,7 +34,7 @@ ullme_handle_definition_import_upload = function(id, value, app=getApp(), ...) {
   }
   kind = sub("^ullme_definition_import_", "", paste0(id)[1])
   kind = tryCatch(ullme_definition_kind(kind), error=function(e) NULL)
-  if (is.null(kind)) return(invisible(NULL))
+  if (is.null(kind) || !identical(kind, "skill")) return(invisible(NULL))
 
   preview = tryCatch(
     ullme_prepare_definition_import(kind=kind, value=value, app=app),
@@ -60,6 +60,9 @@ ullme_prepare_definition_import = function(kind, value, app=getApp(),
                                             max_unpacked_mb=50) {
   restore.point("ullme_prepare_definition_import")
   kind = ullme_definition_kind(kind)
+  if (!identical(kind, "skill")) {
+    stop("AI Tutor templates belong in inst/ai_tutors and are added directly to a course.")
+  }
   if (NROW(value) != 1L) stop("Choose exactly one definition file.")
   source_file = value$datapath[[1]]
   original_name = ullme_clean_file_name(value$name[[1]])
@@ -79,31 +82,9 @@ ullme_prepare_definition_import = function(kind, value, app=getApp(),
     add=TRUE
   )
 
-  if (identical(kind, "tutor")) {
-    if (!tolower(tools::file_ext(original_name)) %in% c("yaml", "yml")) {
-      stop("AI Tutor imports must be YAML files.")
-    }
-    content = paste(readLines(source_file, warn=FALSE, encoding="UTF-8"), collapse="\n")
-    parsed = tryCatch(
-      yaml::yaml.load(content, eval.expr=FALSE),
-      error=function(e) stop("Invalid Tutor YAML: ", conditionMessage(e))
-    )
-    if (!is.list(parsed)) stop("Tutor YAML must contain a mapping.")
-    definitionid = ullme_clean_definition_id(parsed$tutorid %||% "")
-    ullme_validate_definition_content(
-      kind="tutor",
-      definitionid=definitionid,
-      file="tutor.yaml",
-      content=content
-    )
-    definition_dir = file.path(import_root, "definition")
-    dir.create(definition_dir, recursive=TRUE, showWarnings=FALSE)
-    writeLines(content, file.path(definition_dir, "tutor.yaml"), useBytes=TRUE)
-    label = paste0(parsed$label %||% parsed$name %||% definitionid)[1]
-  } else {
-    if (!identical(tolower(tools::file_ext(original_name)), "zip")) {
-      stop("Skill imports must be ZIP files.")
-    }
+  if (!identical(tolower(tools::file_ext(original_name)), "zip")) {
+    stop("Skill imports must be ZIP files.")
+  }
     archive = utils::unzip(source_file, list=TRUE)
     if (NROW(archive) == 0) stop("The Skill ZIP is empty.")
     if (NROW(archive) > max_entries) {
@@ -161,7 +142,6 @@ ullme_prepare_definition_import = function(kind, value, app=getApp(),
       content=paste(readLines(skill_path, warn=FALSE, encoding="UTF-8"), collapse="\n")
     )
     label = paste0(metadata$label %||% metadata$name %||% definitionid)[1]
-  }
 
   files = list.files(
     definition_dir,
@@ -184,25 +164,18 @@ ullme_prepare_definition_import = function(kind, value, app=getApp(),
   app$definition_imports[[token]] = record
   on_error = FALSE
 
-  has_course = identical(kind, "tutor") && !is.null(ullme_active_course_dir(app=app))
   list(
     token=token,
     kind=kind,
     id=definitionid,
     label=label,
     files=as.list(files),
-    targets=as.list(c("personal", if (has_course) "course")),
+    targets=as.list("personal"),
     conflicts=list(
       personal=ullme_definition_target_exists(
         kind=kind,
         definitionid=definitionid,
         source="personal",
-        app=app
-      ),
-      course=has_course && ullme_definition_target_exists(
-        kind=kind,
-        definitionid=definitionid,
-        source="course",
         app=app
       )
     ),
@@ -219,13 +192,12 @@ ullme_apply_definition_import = function(token, target_source="personal",
   record = app$definition_imports[[token]]
   if (is.null(record)) stop("This import preview has expired. Upload the file again.")
   kind = record$kind
+  if (!identical(kind, "skill")) {
+    stop("Only Skills can be imported through the Definition Workspace.")
+  }
   definitionid = record$id
   target_source = paste0(target_source)[1]
-  allowed = if (identical(kind, "tutor")) c("personal", "course") else "personal"
-  if (!target_source %in% allowed) stop("Invalid import destination.")
-  if (identical(target_source, "course") && is.null(ullme_active_course_dir(app=app))) {
-    stop("Select a course before importing a course-local Tutor.")
-  }
+  if (!identical(target_source, "personal")) stop("Invalid import destination.")
 
   target_dir = ullme_definition_dir(
     kind=kind,
@@ -278,6 +250,9 @@ ullme_prepare_definition_download = function(kind, definitionid, source, app=get
   restore.point("ullme_prepare_definition_download")
   if (!identical(app$role, "teacher")) stop("Only teachers can download definitions.")
   kind = ullme_definition_kind(kind)
+  if (!identical(kind, "skill")) {
+    stop("AI Tutor YAML is edited directly in the course AI Tutor pane.")
+  }
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
   metadata = ullme_definition_metadata_at(
@@ -295,13 +270,6 @@ ullme_prepare_definition_download = function(kind, definitionid, source, app=get
   )
   dir.create(app$definition_downloads_dir, recursive=TRUE, showWarnings=FALSE)
 
-  if (identical(kind, "tutor")) {
-    filename = paste0(definitionid, ".yaml")
-    target = file.path(app$definition_downloads_dir, filename)
-    if (!file.copy(file.path(definition_dir, "tutor.yaml"), target, overwrite=TRUE)) {
-      stop("Could not prepare the Tutor YAML download.")
-    }
-  } else {
     filename = paste0(definitionid, ".zip")
     target = file.path(app$definition_downloads_dir, filename)
     if (file.exists(target) && !file.remove(target)) {
@@ -320,7 +288,6 @@ ullme_prepare_definition_download = function(kind, definitionid, source, app=get
     on.exit(setwd(old_dir), add=TRUE)
     utils::zip(zipfile=target, files=files, flags="-r9X")
     if (!file.exists(target)) stop("Could not prepare the Skill ZIP download.")
-  }
 
   url = paste0(
     "ullme-definition-downloads/",

@@ -1,8 +1,0 @@
-oid: slides
-name: slides
-level: course
-doc_dir: slides
-type: doc
-descr: |
-  Lecture slides will typically be shown in lectures but also be provided to students. Most courses have slides distributed across different files, but often one slide set spans multiple lectures. Some courses have single slide file for the whole course.
-

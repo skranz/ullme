@@ -491,10 +491,12 @@
   function mountIntro(messages) {
     var text = messages.getAttribute("data-intro-text") || "";
     var meta = messages.getAttribute("data-intro-meta") || "";
+    var html = messages.getAttribute("data-intro-html") || "";
     if (!text) return;
     appendAssistantMessage({
       id: "ullme_intro_message",
       text: text,
+      html: html,
       meta: meta
     });
   }
@@ -697,7 +699,6 @@
 
   function sourceLabel(source) {
     var labels = {
-      course: "Course",
       personal: "Personal",
       general: "General",
       package: "Package",
@@ -742,7 +743,7 @@
     manage.textContent = "Manage Skills";
     manage.addEventListener("click", function () {
       closeCatalogDialog();
-      requestDefinitionWorkspace(isTutorCatalog ? "tutor" : "skill");
+      requestDefinitionWorkspace("skill");
     });
     close.type = "button";
     close.className = "ullme-icon-button";
@@ -818,7 +819,7 @@
     view.textContent = "View";
     view.addEventListener("click", function () {
       closeCatalogDialog();
-      requestDefinitionWorkspace(isTutor ? "tutor" : "skill", item);
+      requestDefinitionWorkspace("skill", item);
     });
     action.type = "button";
     action.className = installed || courseSkill
@@ -859,7 +860,7 @@
     sendSidebarEvent("ullme_definition_action_event", {
       action: "open",
       kind: kind,
-      definitionid: item.id || item.tutorid || item.skillid || "",
+      definitionid: item.id || item.skillid || "",
       source: item.source || ""
     });
   }
@@ -909,12 +910,12 @@
     picker.setAttribute("aria-label", "Selected definition");
     headerActions.className = "ullme-definition-header-actions";
 
-    ["tutor", "skill"].forEach(function (kind) {
+    ["skill"].forEach(function (kind) {
       var tab = document.createElement("button");
       tab.type = "button";
       tab.className = "ullme-definition-kind-tab";
       tab.classList.toggle("ullme-definition-kind-tab-active", payload.kind === kind);
-      tab.textContent = kind === "tutor" ? "AI Tutors" : "Skills";
+      tab.textContent = "Skills";
       tab.addEventListener("click", function () {
         if (payload.kind === kind) return;
         requestDefinitionWorkspace(kind);
@@ -944,17 +945,17 @@
     importButton.className = "ullme-secondary-action";
     importButton.textContent = "Import";
     importButton.addEventListener("click", function () {
-      var input = byId("ullme_definition_import_" + (payload.kind || "tutor"));
+      var input = byId("ullme_definition_import_" + (payload.kind || "skill"));
       if (!input) return;
       input.value = "";
       input.click();
     });
     create.type = "button";
     create.className = "ullme-primary-action";
-    create.textContent = payload.kind === "skill" ? "New Skill" : "New Tutor";
+    create.textContent = "New Skill";
     create.disabled = !payload.can_create;
     create.addEventListener("click", function () {
-      openCreateDefinitionDialog(payload.kind || "tutor");
+      openCreateDefinitionDialog(payload.kind || "skill");
     });
     assistantToggle.type = "button";
     assistantToggle.className = "ullme-secondary-action ullme-definition-assistant-toggle";
@@ -1017,7 +1018,7 @@
     var entries = library.filter(function (item) {
       return item.kind === payload.kind;
     });
-    var sourceOrder = ["course", "personal", "general", "package"];
+    var sourceOrder = ["personal", "general", "package"];
 
     if (!entries.length) {
       var empty = document.createElement("div");
@@ -1113,18 +1114,11 @@
         selected
       ));
     }
-    if (selected.can_customize_course) {
-      definitionActions.appendChild(definitionCopyButton(
-        selected.course_exists ? "Course copy" : "Customize course",
-        "copy-course",
-        selected
-      ));
-    }
     var download = document.createElement("button");
     download.type = "button";
     download.className = "ullme-secondary-action";
     download.textContent = "Download";
-    download.title = selected.kind === "skill" ? "Download Skill ZIP" : "Download AI Tutor YAML";
+    download.title = "Download Skill ZIP";
     download.addEventListener("click", function () {
       sendSidebarEvent("ullme_definition_action_event", {
         action: "download",
@@ -1141,9 +1135,7 @@
       remove.textContent = "Delete";
       remove.title = "Delete this copy";
       remove.addEventListener("click", function () {
-        var detail = selected.source === "course"
-          ? "This removes only the course-local definition copy; the Tutor remains installed and falls back to the next available definition."
-          : "This removes the Personal copy and falls back to a General or Package definition when available.";
+        var detail = "This removes the Personal copy and falls back to a General or Package definition when available.";
         if (!window.confirm("Delete " + (selected.label || selected.id) + "?\n\n" + detail)) return;
         sendSidebarEvent("ullme_definition_action_event", {
           action: "delete",
@@ -1327,7 +1319,6 @@
       state.studioView = state.previousStudioView || "materials";
       var titles = {
         materials: "Materials",
-        organization: "Course organization",
         "ai-tutors": "AI Tutors",
         settings: "Course settings"
       };
@@ -1360,18 +1351,18 @@
     dialog.className = "ullme-definition-create-dialog";
     dialog.setAttribute("role", "dialog");
     dialog.setAttribute("aria-modal", "true");
-    dialog.setAttribute("aria-label", kind === "skill" ? "Create Skill" : "Create AI Tutor");
+    dialog.setAttribute("aria-label", "Create Skill");
     title.className = "ullme-definition-create-title";
-    title.textContent = kind === "skill" ? "New Skill" : "New AI Tutor";
+    title.textContent = "New Skill";
     idLabel.className = "ullme-definition-create-field";
     idText.textContent = "ID";
     idInput.type = "text";
-    idInput.placeholder = kind === "skill" ? "my_skill" : "my_tutor";
+    idInput.placeholder = "my_skill";
     idInput.autocomplete = "off";
     nameLabel.className = "ullme-definition-create-field";
     nameText.textContent = "Label";
     nameInput.type = "text";
-    nameInput.placeholder = kind === "skill" ? "My Skill" : "My AI Tutor";
+    nameInput.placeholder = "My Skill";
     error.className = "ullme-definition-create-error";
     actions.className = "ullme-dialog-actions";
     cancel.type = "button";
@@ -1640,7 +1631,7 @@
     dialog.setAttribute("aria-modal", "true");
     dialog.setAttribute("aria-label", "Import definition");
     title.className = "ullme-definition-create-title";
-    title.textContent = preview.kind === "skill" ? "Import Skill ZIP" : "Import AI Tutor YAML";
+    title.textContent = "Import Skill ZIP";
     summary.className = "ullme-definition-import-summary";
     files.className = "ullme-definition-import-files";
     targetLabel.className = "ullme-definition-create-field";
@@ -1879,7 +1870,6 @@
     if (preserveNavigation === true) return;
     var titles = {
       materials: "Materials",
-      organization: "Course organization",
       "ai-tutors": "AI Tutors",
       settings: "Course settings",
       file: "File editor",
@@ -1946,7 +1936,6 @@
     settings.appendChild(approvalSelect("Copy materials", "copy_materials", approval.copy_materials));
     settings.appendChild(approvalSelect("Rewrite definitions", "rewrite_definitions", approval.rewrite_definitions));
     settings.appendChild(approvalSelect("Rewrite course files", "rewrite_course_files", approval.rewrite_course_files));
-    settings.appendChild(approvalSelect("Write object indexes", "write_object_indexes", approval.write_object_indexes));
     settings.appendChild(approvalSelect("Agent undo", "undo", approval.undo));
 
     historyTitle.className = "ullme-agent-history-title";
@@ -2417,268 +2406,6 @@
     window.alert(message || "The file could not be opened.");
   }
 
-  function objectFiles(object) {
-    var files = Array.isArray(object && object.files) ? object.files : [];
-    return files.map(function (file) {
-      return typeof file === "string" ? file : (file.path || "");
-    }).filter(Boolean);
-  }
-
-  function renderCourseOrganization(organization) {
-    var container = byId("ullme_organization_content");
-    if (!container) return;
-    organization = organization || { types: [], indexes: [], unassigned: [] };
-    if (state.organizationProposal) {
-      renderOrganizationProposal(state.organizationProposal);
-      return;
-    }
-    container.innerHTML = "";
-    var types = Array.isArray(organization.types) ? organization.types : [];
-    var indexes = Array.isArray(organization.indexes) ? organization.indexes : [];
-    if (state.organizationView === "yaml") {
-      if (!indexes.length) {
-        var noYaml = document.createElement("div");
-        noYaml.className = "ullme-object-empty";
-        noYaml.textContent = "No object index YAML files yet. Use Organize with AI or create one in objects/.";
-        container.appendChild(noYaml);
-      }
-      indexes.forEach(function (index) {
-        var card = document.createElement("section");
-        var head = document.createElement("div");
-        var title = document.createElement("div");
-        var edit = document.createElement("button");
-        card.className = "ullme-object-group";
-        head.className = "ullme-object-group-head";
-        title.className = "ullme-object-group-title";
-        title.innerHTML = "<strong>" + escapeHtml(index.oid || "Object") +
-          "</strong><span>" + escapeHtml(index.path || "") + "</span>";
-        edit.type = "button";
-        edit.className = "ullme-secondary-action";
-        edit.textContent = "Edit YAML";
-        edit.addEventListener("click", function () { requestCourseFile(index.path); });
-        head.appendChild(title);
-        head.appendChild(edit);
-        card.appendChild(head);
-        container.appendChild(card);
-      });
-      return;
-    }
-
-    types.forEach(function (type) {
-      var index = indexes.find(function (candidate) { return candidate.oid === type.oid; });
-      if (!index && type.type === "event") return;
-      var card = document.createElement("section");
-      var head = document.createElement("div");
-      var heading = document.createElement("div");
-      var edit = document.createElement("button");
-      var list = document.createElement("div");
-      var objects = index && Array.isArray(index.objects) ? index.objects : [];
-      card.className = "ullme-object-group";
-      head.className = "ullme-object-group-head";
-      heading.className = "ullme-object-group-title";
-      var strong = document.createElement("strong");
-      var sub = document.createElement("span");
-      strong.textContent = type.name || type.oid;
-      sub.textContent = type.oid + (type.linked_to ? " · linked to " + type.linked_to : "");
-      heading.appendChild(strong);
-      heading.appendChild(sub);
-      edit.type = "button";
-      edit.className = "ullme-secondary-action";
-      edit.textContent = index ? "Edit YAML" : "Create YAML";
-      edit.addEventListener("click", function () {
-        if (index) {
-          requestCourseFile(index.path);
-        } else {
-          openCourseFile({
-            path: "objects/" + type.oid + ".yaml",
-            name: type.oid + ".yaml",
-            content: "oid: " + type.oid + "\nobjects: []\n",
-            text: true,
-            editable: true,
-            exists: false,
-            draft: true,
-            base_hash: null
-          });
-        }
-      });
-      head.appendChild(heading);
-      head.appendChild(edit);
-      list.className = "ullme-object-list";
-      if (!objects.length) {
-        var empty = document.createElement("div");
-        empty.className = "ullme-object-empty";
-        empty.textContent = "No organized objects";
-        list.appendChild(empty);
-      } else {
-        objects.forEach(function (object, indexNumber) {
-          var row = document.createElement("div");
-          var order = document.createElement("span");
-          var id = document.createElement("span");
-          var files = document.createElement("span");
-          row.className = "ullme-object-row";
-          order.className = "ullme-object-order";
-          order.textContent = object.order || (indexNumber + 1);
-          id.className = "ullme-object-id";
-          id.textContent = object.id || object.docid || object.eventid || "object";
-          files.className = "ullme-object-files";
-          files.textContent = objectFiles(object).join(", ") || (object.date || "");
-          row.appendChild(order);
-          row.appendChild(id);
-          row.appendChild(files);
-          if (object.linked_to) {
-            var link = document.createElement("span");
-            link.className = "ullme-object-link";
-            link.textContent = "→ " + object.linked_to;
-            row.appendChild(link);
-          } else {
-            row.appendChild(document.createElement("span"));
-          }
-          list.appendChild(row);
-        });
-      }
-      card.appendChild(head);
-      card.appendChild(list);
-      container.appendChild(card);
-    });
-
-    var unassigned = Array.isArray(organization.unassigned) ? organization.unassigned : [];
-    var unassignedCard = document.createElement("section");
-    var unassignedHead = document.createElement("div");
-    var unassignedTitle = document.createElement("div");
-    var unassignedFiles = document.createElement("div");
-    unassignedCard.className = "ullme-unassigned-group";
-    unassignedHead.className = "ullme-object-group-head";
-    unassignedTitle.className = "ullme-object-group-title";
-    unassignedTitle.innerHTML = "<strong>Unassigned materials</strong><span>" +
-      unassigned.length + " file" + (unassigned.length === 1 ? "" : "s") + "</span>";
-    unassignedHead.appendChild(unassignedTitle);
-    unassignedFiles.className = "ullme-unassigned-files";
-    unassigned.forEach(function (path) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "ullme-unassigned-file";
-      button.textContent = path;
-      var materialRecord = courseFileRecord("materials/" + path);
-      button.disabled = !materialRecord || !materialRecord.text;
-      button.title = button.disabled ? "Binary material" : "Open " + path;
-      button.addEventListener("click", function () { requestCourseFile("materials/" + path); });
-      unassignedFiles.appendChild(button);
-    });
-    unassignedCard.appendChild(unassignedHead);
-    unassignedCard.appendChild(unassignedFiles);
-    container.appendChild(unassignedCard);
-  }
-
-  function openOrganizationProposal(proposal) {
-    var button = byId("ullme_organization_propose_btn");
-    if (button) {
-      button.disabled = false;
-      var text = button.querySelector("span");
-      if (text) text.textContent = "Organize with AI";
-    }
-    if (proposal && proposal.error) {
-      window.alert(proposal.error);
-      return;
-    }
-    state.organizationProposal = proposal || null;
-    activateStudioView("organization");
-    renderOrganizationProposal(proposal);
-  }
-
-  function renderOrganizationProposal(proposal) {
-    var container = byId("ullme_organization_content");
-    if (!container) return;
-    container.innerHTML = "";
-    proposal = proposal || {};
-    var banner = document.createElement("section");
-    var head = document.createElement("div");
-    var heading = document.createElement("div");
-    var proposalActions = document.createElement("div");
-    var cancel = document.createElement("button");
-    var apply = document.createElement("button");
-    banner.className = "ullme-organization-proposal";
-    head.className = "ullme-object-group-head";
-    heading.className = "ullme-object-group-title";
-    heading.innerHTML = "<strong>Proposed organization</strong><span>" +
-      (proposal.classified_count || 0) + " files classified · review before applying</span>";
-    proposalActions.className = "ullme-organization-actions";
-    cancel.type = "button";
-    cancel.className = "ullme-secondary-action";
-    cancel.textContent = "Discard";
-    cancel.addEventListener("click", function () {
-      state.organizationProposal = null;
-      renderCourseOrganization(state.organization);
-    });
-    apply.type = "button";
-    apply.className = "ullme-primary-action";
-    apply.textContent = "Apply proposal";
-    apply.disabled = !(Array.isArray(proposal.indexes) && proposal.indexes.length);
-    apply.addEventListener("click", function () {
-      apply.disabled = true;
-      apply.textContent = "Preparing…";
-      sendSidebarEvent("ullme_organization_apply_event", { token: proposal.token });
-    });
-    head.appendChild(heading);
-    proposalActions.appendChild(cancel);
-    proposalActions.appendChild(apply);
-    head.appendChild(proposalActions);
-    banner.appendChild(head);
-    if (proposal.notes) {
-      var notes = document.createElement("p");
-      notes.className = "ullme-agent-settings-note";
-      notes.textContent = proposal.notes;
-      banner.appendChild(notes);
-    }
-    if (Array.isArray(proposal.unclassified) && proposal.unclassified.length) {
-      var unresolved = document.createElement("p");
-      unresolved.className = "ullme-agent-settings-note";
-      unresolved.textContent = "Unclassified: " + proposal.unclassified.join(", ");
-      banner.appendChild(unresolved);
-    }
-    container.appendChild(banner);
-    (Array.isArray(proposal.indexes) ? proposal.indexes : []).forEach(function (index) {
-      var card = document.createElement("section");
-      var cardHead = document.createElement("div");
-      var title = document.createElement("div");
-      var review = document.createElement("button");
-      card.className = "ullme-object-group";
-      cardHead.className = "ullme-object-group-head";
-      title.className = "ullme-object-group-title";
-      title.innerHTML = "<strong>" + escapeHtml(index.oid) + "</strong><span>" +
-        ((index.value && Array.isArray(index.value.objects)) ? index.value.objects.length : 0) +
-        " objects</span>";
-      review.type = "button";
-      review.className = "ullme-secondary-action";
-      review.textContent = "Review YAML";
-      review.addEventListener("click", function () {
-        openCourseFile({
-          path: index.path,
-          name: index.oid + ".yaml",
-          content: index.content || "",
-          text: true,
-          editable: true,
-          exists: Boolean(index.exists),
-          draft: true,
-          base_hash: index.base_hash == null ? null : index.base_hash
-        });
-      });
-      cardHead.appendChild(title);
-      cardHead.appendChild(review);
-      card.appendChild(cardHead);
-      container.appendChild(card);
-    });
-  }
-
-  function organizationApplyComplete(result) {
-    result = result || {};
-    if (result.status === "pending_approval") return;
-    if (!result.ok) {
-      window.alert(result.message || "The organization proposal could not be applied.");
-      return;
-    }
-    state.organizationProposal = null;
-  }
-
   function renderMaterialFiles(material, category) {
     renderMaterialTree();
   }
@@ -3126,7 +2853,7 @@
     }
 
     text.className = "ullme-message-text";
-    text.textContent = message.text || "";
+    setAssistantMessageContent(text, message.text || "", message.html || "");
     bubble.appendChild(text);
 
     if (!message.thinking) {
@@ -3150,6 +2877,16 @@
     }, !canRetry));
     actions.appendChild(miniAction("More", icons.more, function () {}));
     return actions;
+  }
+
+  function setAssistantMessageContent(element, text, html) {
+    var renderHtml = typeof html === "string" && html.length > 0;
+    element.classList.toggle("ullme-message-text-markdown", renderHtml);
+    if (renderHtml) {
+      element.innerHTML = html;
+    } else {
+      element.textContent = text || "";
+    }
   }
 
   function miniAction(label, icon, onClick, disabled) {
@@ -3226,7 +2963,7 @@
     article.classList.add("ullme-thinking");
     if (meta) meta.remove();
     if (actions) actions.remove();
-    if (messageText) messageText.textContent = "Thinking...";
+    if (messageText) setAssistantMessageContent(messageText, "Thinking...", "");
 
     payload.nonce = Math.random();
     sendChatEvent(payload);
@@ -3401,12 +3138,13 @@
     });
   }
 
-  function receiveAssistantMessage(messageId, text) {
+  function receiveAssistantMessage(messageId, text, html) {
     var article = byId(messageId);
     if (!article) {
       appendAssistantMessage({
         id: messageId || nextId("assistant"),
         text: text || "",
+        html: html || "",
         meta: ""
       });
       return;
@@ -3418,7 +3156,7 @@
     var bubble = article.querySelector(".ullme-bubble");
 
     if (meta) meta.remove();
-    if (messageText) messageText.textContent = text || "";
+    if (messageText) setAssistantMessageContent(messageText, text || "", html || "");
     if (bubble && !bubble.querySelector(".ullme-message-actions")) {
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
     }

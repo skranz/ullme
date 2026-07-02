@@ -12,7 +12,6 @@ ullme_default_user_settings = function() {
         copy_materials="ask",
         rewrite_definitions="ask",
         rewrite_course_files="ask",
-        write_object_indexes="ask",
         undo="ask"
       )
     )
@@ -96,7 +95,6 @@ ullme_handle_agent_settings_open = function(app=getApp(), ...) {
 ullme_handle_agent_settings_save = function(default="ask", copy_materials="ask",
                                              rewrite_definitions="ask",
                                              rewrite_course_files="ask",
-                                             write_object_indexes="ask",
                                              undo="ask", app=getApp(), ...) {
   if (!identical(app$role, "teacher")) return(invisible(FALSE))
   settings = ullme_read_user_settings(app=app)
@@ -106,7 +104,6 @@ ullme_handle_agent_settings_save = function(default="ask", copy_materials="ask",
     copy_materials=copy_materials,
     rewrite_definitions=rewrite_definitions,
     rewrite_course_files=rewrite_course_files,
-    write_object_indexes=write_object_indexes,
     undo=undo
   )
   settings$agent_tools$approval = lapply(values, ullme_normalize_approval_policy)

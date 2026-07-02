@@ -20,8 +20,16 @@ dir.create(file.path(root, "teachers", "alice"), recursive=TRUE)
 
 valid_tutor = paste(
   "tutorid: tutor1",
+  "lang: en",
   "label: Tutor One",
   "description: Helps",
+  "system_prompt: |",
+  "  Help with {{personality}}.",
+  "default_personality: Friendly",
+  "docs_per_instance: {}",
+  "docs_per_course: {}",
+  "allowed_tools: []",
+  "allowed_student_customization: [personality]",
   sep="\n"
 )
 stopifnot(ullme_validate_definition_yaml("tutor", "tutor1", valid_tutor)$ok)
@@ -45,7 +53,7 @@ stopifnot(length(history) == 1L)
 undo = ullme_undo_change(history[[1]]$id, origin="ui", app=app)
 stopifnot(undo$ok, identical(readLines(target), "value: before"))
 
-outside = file.path(root, "ai_tutors", "general", "bad.yaml")
+outside = file.path(root, "outside", "bad.yaml")
 dir.create(dirname(outside), recursive=TRUE)
 unauthorized = ullme_new_change(
   action="bad",

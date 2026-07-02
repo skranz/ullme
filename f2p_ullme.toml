@@ -210,5 +210,4 @@ C:/libraries/ullme/ullme/inst/www/*.*
 
 include_files = '''
 C:/libraries/ullme/ullme/inst/activities/*.yml
-C:/libraries/ullme/ullme/inst/objects/*.yml
 '''

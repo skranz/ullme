@@ -39,6 +39,8 @@ student_app = studentApp(
 ```
 
 Roles are fixed by the constructor and cannot be switched inside an app.
+Assistant output is rendered as CommonMark Markdown by default. Pass
+`render_chat_markdown=FALSE` to either constructor for literal plain text.
 
 
 # Code Design

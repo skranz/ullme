@@ -190,8 +190,10 @@
 
     container.appendChild(tutorHeader(tutor));
     container.appendChild(tutorTabs(tutor));
-    if (state.activeTab === "definition") {
-      container.appendChild(definitionForm(tutor));
+    if (state.activeTab === "prompt") {
+      container.appendChild(promptForm(tutor));
+    } else if (state.activeTab === "config") {
+      container.appendChild(configForm(tutor));
     } else if (state.activeTab === "yaml") {
       container.appendChild(yamlEditor(tutor));
     } else {
@@ -253,7 +255,8 @@
     tabs.className = "ullme-tutor-tabs";
     [
       { id: "instances", label: "Instances (" + Number(tutor.instance_count || 0) + ")" },
-      { id: "definition", label: "Definition" },
+      { id: "prompt", label: "Prompt" },
+      { id: "config", label: "Config" },
       { id: "yaml", label: "YAML" }
     ].forEach(function (tab) {
       var button = document.createElement("button");
@@ -272,96 +275,222 @@
 
   function instancePanel(tutor) {
     var panel = document.createElement("section");
-    var matcher = normalizeMatcher(tutor.file_matcher);
     panel.className = "ullme-tutor-tab-panel";
-    if (matcher) panel.appendChild(matcherSummary(matcher));
-
     var instances = Array.isArray(tutor.instances) ? tutor.instances : [];
-    if (!instances.length) {
-      panel.appendChild(emptyState(
-        "No instances found",
-        matcher
-          ? "No course files currently match this Tutor's file patterns."
-          : "This Tutor has no file matcher or explicit instance files."
-      ));
-      return panel;
+    var roles = Array.isArray(tutor.doc_ids_per_instance)
+      ? tutor.doc_ids_per_instance.slice()
+      : [];
+    var courseRoles = Array.isArray(tutor.doc_ids_per_course)
+      ? tutor.doc_ids_per_course.slice()
+      : [];
+
+    if (!tutor.instance_assignments_saved && instances.length) {
+      var suggestion = document.createElement("div");
+      suggestion.className = "ullme-suggestion-summary";
+      suggestion.innerHTML = "<strong>Suggested from course files</strong>" +
+        "<span>Review these document assignments, then save them.</span>";
+      panel.appendChild(suggestion);
     }
 
-    var roles = Array.isArray(tutor.required_material_roles)
-      ? tutor.required_material_roles.slice()
-      : [];
-    instances.forEach(function (instance) {
-      Object.keys(instance.materials || {}).forEach(function (role) {
-        if (roles.indexOf(role) < 0) roles.push(role);
-      });
-    });
+    if (courseRoles.length) {
+      panel.appendChild(documentAssignments(
+        "Course documents",
+        "ullme_course_docs",
+        courseRoles,
+        tutor.course_docs || {}
+      ));
+    }
+
     var wrap = document.createElement("div");
     var table = document.createElement("table");
     var head = document.createElement("thead");
     var headRow = document.createElement("tr");
     var body = document.createElement("tbody");
+    body.id = "ullme_tutor_instance_rows";
     appendCell(headRow, "th", "Instance");
     roles.forEach(function (role) {
       appendCell(headRow, "th", humanize(role));
     });
+    appendCell(headRow, "th", "");
     head.appendChild(headRow);
-
     instances.forEach(function (instance) {
-      var row = document.createElement("tr");
-      appendCell(row, "td", instance.instanceid || "Instance");
-      roles.forEach(function (role) {
-        var cell = document.createElement("td");
-        var paths = instance.materials && instance.materials[role];
-        paths = Array.isArray(paths) ? paths : (paths ? [paths] : []);
-        if (!paths.length) {
-          var missing = document.createElement("span");
-          missing.className = "ullme-instance-missing";
-          missing.textContent = "Missing";
-          cell.appendChild(missing);
-        } else {
-          paths.forEach(function (path) {
-            var file = document.createElement("code");
-            file.textContent = path;
-            cell.appendChild(file);
-          });
-        }
-        row.appendChild(cell);
-      });
-      body.appendChild(row);
+      body.appendChild(instanceEditorRow(instance, roles));
     });
     table.appendChild(head);
     table.appendChild(body);
     wrap.className = "ullme-instance-table-wrap";
     wrap.appendChild(table);
     panel.appendChild(wrap);
+
+    var actions = document.createElement("div");
+    var suggest = document.createElement("button");
+    var add = document.createElement("button");
+    var save = document.createElement("button");
+    actions.className = "ullme-tutor-form-actions ullme-instance-actions";
+    suggest.type = "button";
+    suggest.className = "ullme-secondary-action";
+    suggest.textContent = "Suggest from course files";
+    suggest.addEventListener("click", function () {
+      body.innerHTML = "";
+      (Array.isArray(tutor.suggested_instances) ? tutor.suggested_instances : [])
+        .forEach(function (instance) {
+          body.appendChild(instanceEditorRow(instance, roles));
+        });
+    });
+    add.type = "button";
+    add.className = "ullme-secondary-action";
+    add.textContent = "Add instance";
+    add.addEventListener("click", function () {
+      body.appendChild(instanceEditorRow({ instanceid: "", docs: {} }, roles));
+    });
+    save.type = "button";
+    save.className = "ullme-primary-action ullme-tutor-save-button";
+    save.textContent = "Save assignments";
+    save.addEventListener("click", function () {
+      save.disabled = true;
+      sendEvent("ullme_ai_tutor_instances_save_event", {
+        tutorid: tutor.tutorid,
+        instances: collectInstanceRows(roles),
+        course_docs: collectCourseDocs(courseRoles)
+      });
+    });
+    actions.appendChild(suggest);
+    actions.appendChild(add);
+    actions.appendChild(save);
+    panel.appendChild(actions);
+    if (!instances.length) {
+      panel.insertBefore(emptyState(
+        "No instances found",
+        "Add an instance manually. Document suggestions appear automatically when matching course files are found."
+      ), wrap);
+    }
     return panel;
   }
 
-  function matcherSummary(matcher) {
-    var card = document.createElement("div");
-    var title = document.createElement("strong");
-    var text = document.createElement("span");
-    card.className = "ullme-matcher-summary";
-    title.textContent = "Instances generated from file patterns";
-    text.textContent = "Scan " + (matcher.directory || "materials") +
-      " with " + (matcher.primary_pattern || "the configured pattern") +
-      ". Edit matching rules in Definition.";
-    card.appendChild(title);
-    card.appendChild(text);
-    return card;
+  function instanceEditorRow(instance, roles) {
+    var row = document.createElement("tr");
+    var idCell = document.createElement("td");
+    var idInput = document.createElement("input");
+    var removeCell = document.createElement("td");
+    var remove = document.createElement("button");
+    row.className = "ullme-instance-editor-row";
+    idInput.className = "ullme-instance-input ullme-instance-id";
+    idInput.value = instance.instanceid || "";
+    idInput.placeholder = "ps1";
+    idCell.appendChild(idInput);
+    row.appendChild(idCell);
+    roles.forEach(function (role) {
+      var cell = document.createElement("td");
+      var input = document.createElement("input");
+      var paths = instance.docs && instance.docs[role];
+      input.className = "ullme-instance-input ullme-instance-docs";
+      input.setAttribute("data-docid", role);
+      input.value = (Array.isArray(paths) ? paths : (paths ? [paths] : [])).join(", ");
+      input.placeholder = "Relative material path";
+      cell.appendChild(input);
+      row.appendChild(cell);
+    });
+    remove.type = "button";
+    remove.className = "ullme-text-action";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () { row.remove(); });
+    removeCell.appendChild(remove);
+    row.appendChild(removeCell);
+    return row;
   }
 
-  function definitionForm(tutor) {
+  function collectInstanceRows(roles) {
+    var body = byId("ullme_tutor_instance_rows");
+    if (!body) return [];
+    return Array.prototype.map.call(body.querySelectorAll("tr"), function (row) {
+      var docs = {};
+      roles.forEach(function (role) {
+        var input = row.querySelector('[data-docid="' + role + '"]');
+        docs[role] = splitList(input ? input.value : "");
+      });
+      return {
+        instanceid: (row.querySelector(".ullme-instance-id") || {}).value || "",
+        docs: docs
+      };
+    }).filter(function (instance) { return instance.instanceid.trim(); });
+  }
+
+  function documentAssignments(titleText, id, roles, values) {
+    var section = document.createElement("div");
+    var title = document.createElement("h3");
+    var grid = document.createElement("div");
+    section.className = "ullme-tutor-form-section ullme-course-docs";
+    title.textContent = titleText;
+    grid.id = id;
+    grid.className = "ullme-course-doc-grid";
+    roles.forEach(function (role) {
+      var paths = values && values[role];
+      grid.appendChild(field(
+        humanize(role),
+        id + "_" + role,
+        "input",
+        (Array.isArray(paths) ? paths : (paths ? [paths] : [])).join(", "),
+        "Comma-separated relative material paths"
+      ));
+    });
+    section.appendChild(title);
+    section.appendChild(grid);
+    return section;
+  }
+
+  function collectCourseDocs(roles) {
+    var result = {};
+    roles.forEach(function (role) {
+      result[role] = splitList(valueOf("ullme_course_docs_" + role));
+    });
+    return result;
+  }
+
+  function promptForm(tutor) {
+    var form = document.createElement("section");
+    var prompt = document.createElement("div");
+    var actions = document.createElement("div");
+    var save = document.createElement("button");
+
+    form.className = "ullme-tutor-tab-panel ullme-tutor-prompt-form";
+    prompt.className = "ullme-tutor-form-section ullme-tutor-prompt-section";
+    prompt.appendChild(field(
+      "System prompt",
+      "ullme_tutor_system_prompt",
+      "textarea",
+      tutor.system_prompt || ""
+    ));
+    actions.className = "ullme-tutor-form-actions";
+    save.type = "button";
+    save.className = "ullme-primary-action ullme-tutor-save-button";
+    save.textContent = "Save prompt";
+    save.addEventListener("click", function () {
+      save.disabled = true;
+      sendEvent("ullme_ai_tutor_save_event", {
+        tutorid: tutor.tutorid,
+        mode: "ui",
+        fields: {
+          system_prompt: valueOf("ullme_tutor_system_prompt")
+        }
+      });
+    });
+    actions.appendChild(save);
+    form.appendChild(prompt);
+    form.appendChild(actions);
+    return form;
+  }
+
+  function configForm(tutor) {
     var form = document.createElement("section");
     var basics = document.createElement("div");
-    var teaching = document.createElement("div");
-    var matcher = normalizeMatcher(tutor.file_matcher);
+    var customization = document.createElement("div");
     var actions = document.createElement("div");
     var save = document.createElement("button");
 
     form.className = "ullme-tutor-tab-panel ullme-tutor-definition-form";
     basics.className = "ullme-tutor-form-section";
     basics.appendChild(sectionTitle("Basics"));
+    basics.appendChild(field("Language", "ullme_tutor_lang", "input", tutor.lang || ""));
     basics.appendChild(field("Label", "ullme_tutor_label", "input", tutor.label || ""));
     basics.appendChild(field(
       "Description",
@@ -369,73 +498,60 @@
       "textarea",
       tutor.description || ""
     ));
-    basics.appendChild(field(
-      "Required material roles",
-      "ullme_tutor_roles",
-      "input",
-      (tutor.required_material_roles || []).join(", "),
-      "Comma-separated, for example problem_set, solution"
-    ));
-    teaching.className = "ullme-tutor-form-section";
-    teaching.appendChild(sectionTitle("Teaching behavior"));
-    teaching.appendChild(field(
-      "Pedagogical instructions",
-      "ullme_tutor_instructions",
+    customization.className = "ullme-tutor-form-section";
+    customization.appendChild(sectionTitle("Customization and tools"));
+    customization.appendChild(field(
+      "Default personality",
+      "ullme_tutor_default_personality",
       "textarea",
-      tutor.pedagogical_instructions || ""
+      tutor.default_personality || ""
     ));
-    teaching.appendChild(field(
+    customization.appendChild(field(
       "Allowed tools",
       "ullme_tutor_tools",
       "input",
       (tutor.allowed_tools || []).join(", "),
       "Comma-separated tool IDs"
     ));
-    teaching.appendChild(field(
+    customization.appendChild(field(
       "Student customization",
       "ullme_tutor_customization",
       "input",
-      (tutor.student_customization || []).join(", "),
+      (tutor.allowed_student_customization || []).join(", "),
       "Comma-separated customization fields"
     ));
     form.appendChild(basics);
-    form.appendChild(teaching);
-    if (matcher) form.appendChild(matcherForm(matcher));
+    form.appendChild(customization);
+    form.appendChild(documentSpecsEditor(
+      "Documents per instance",
+      "ullme_docs_per_instance",
+      tutor.docs_per_instance || []
+    ));
+    form.appendChild(documentSpecsEditor(
+      "Documents per course",
+      "ullme_docs_per_course",
+      tutor.docs_per_course || []
+    ));
 
     actions.className = "ullme-tutor-form-actions";
     save.type = "button";
     save.className = "ullme-primary-action ullme-tutor-save-button";
-    save.textContent = "Save definition";
+    save.textContent = "Save config";
     save.addEventListener("click", function () {
       save.disabled = true;
       sendEvent("ullme_ai_tutor_save_event", {
         tutorid: tutor.tutorid,
         mode: "ui",
         fields: {
+          lang: valueOf("ullme_tutor_lang"),
           label: valueOf("ullme_tutor_label"),
           description: valueOf("ullme_tutor_description"),
-          pedagogical_instructions: valueOf("ullme_tutor_instructions"),
-          required_material_roles: valueOf("ullme_tutor_roles")
-            .split(",")
-            .map(function (role) { return role.trim(); })
-            .filter(Boolean),
-          allowed_tools: valueOf("ullme_tutor_tools")
-            .split(",")
-            .map(function (tool) { return tool.trim(); })
-            .filter(Boolean),
-          student_customization: valueOf("ullme_tutor_customization")
-            .split(",")
-            .map(function (fieldName) { return fieldName.trim(); })
-            .filter(Boolean)
-        },
-        matcher: matcher ? {
-          directory: valueOf("ullme_matcher_directory"),
-          primary_role: valueOf("ullme_matcher_primary_role"),
-          primary_pattern: valueOf("ullme_matcher_primary_pattern"),
-          exclude_pattern: valueOf("ullme_matcher_exclude_pattern"),
-          id_group: Number(valueOf("ullme_matcher_id_group") || 1),
-          solution_pattern: valueOf("ullme_matcher_solution_pattern")
-        } : null
+          default_personality: valueOf("ullme_tutor_default_personality"),
+          allowed_tools: splitList(valueOf("ullme_tutor_tools")),
+          allowed_student_customization: splitList(valueOf("ullme_tutor_customization")),
+          docs_per_instance: collectDocSpecs("ullme_docs_per_instance"),
+          docs_per_course: collectDocSpecs("ullme_docs_per_course")
+        }
       });
     });
     actions.appendChild(save);
@@ -443,30 +559,97 @@
     return form;
   }
 
-  function matcherForm(matcher) {
+  function documentSpecsEditor(titleText, id, specs) {
     var section = document.createElement("div");
+    var head = document.createElement("div");
+    var title = sectionTitle(titleText);
+    var add = document.createElement("button");
+    var table = document.createElement("table");
+    var tableHead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    var body = document.createElement("tbody");
     section.className = "ullme-tutor-form-section";
-    section.appendChild(sectionTitle("Instance matching"));
-    var intro = document.createElement("p");
-    intro.className = "ullme-tutor-form-help";
-    intro.textContent = "This section is shown because instance_generation.file_matcher is present in the Tutor YAML.";
-    section.appendChild(intro);
-    var grid = document.createElement("div");
-    grid.className = "ullme-matcher-grid";
-    grid.appendChild(field("Material directory", "ullme_matcher_directory", "input", matcher.directory || ""));
-    grid.appendChild(field("Primary role", "ullme_matcher_primary_role", "input", matcher.primary_role || "primary"));
-    grid.appendChild(field("Primary file pattern", "ullme_matcher_primary_pattern", "input", matcher.primary_pattern || ""));
-    grid.appendChild(field("Exclude pattern", "ullme_matcher_exclude_pattern", "input", matcher.exclude_pattern || ""));
-    grid.appendChild(field("ID capture group", "ullme_matcher_id_group", "number", String(matcher.id_group || 1)));
-    grid.appendChild(field(
-      "Solution pattern",
-      "ullme_matcher_solution_pattern",
-      "input",
-      solutionPattern(matcher),
-      "Use {{id}} where the captured instance ID belongs."
-    ));
-    section.appendChild(grid);
+    section.classList.add("ullme-doc-spec-section");
+    head.className = "ullme-doc-spec-head";
+    add.type = "button";
+    add.className = "ullme-secondary-action";
+    add.textContent = "Add document";
+    add.addEventListener("click", function () {
+      body.appendChild(docSpecRow({}));
+    });
+    head.appendChild(title);
+    head.appendChild(add);
+    ["ID", "Description", "Preferred formats", "Convert", "Directory", "Images", ""]
+      .forEach(function (label) { appendCell(headRow, "th", label); });
+    tableHead.appendChild(headRow);
+    body.id = id;
+    (Array.isArray(specs) ? specs : []).forEach(function (spec) {
+      body.appendChild(docSpecRow(spec));
+    });
+    table.appendChild(tableHead);
+    table.appendChild(body);
+    section.appendChild(head);
+    var wrap = document.createElement("div");
+    wrap.className = "ullme-doc-spec-table-wrap";
+    wrap.appendChild(table);
+    section.appendChild(wrap);
     return section;
+  }
+
+  function docSpecRow(spec) {
+    var row = document.createElement("tr");
+    [
+      { name: "docid", value: spec.docid || "", placeholder: "ps" },
+      { name: "descr", value: spec.descr || "", placeholder: "Problem set" },
+      { name: "pref_format", value: (spec.pref_format || []).join(", "), placeholder: "md, tex, pdf" },
+      { name: "auto_convert", value: (spec.auto_convert || []).join(", "), placeholder: "pdf" },
+      { name: "pref_doc_dir", value: spec.pref_doc_dir || "", placeholder: "ps" }
+    ].forEach(function (fieldSpec) {
+      var cell = document.createElement("td");
+      var input = document.createElement("input");
+      input.className = "ullme-doc-spec-input";
+      input.setAttribute("data-field", fieldSpec.name);
+      input.value = fieldSpec.value;
+      input.placeholder = fieldSpec.placeholder;
+      cell.appendChild(input);
+      row.appendChild(cell);
+    });
+    var imageCell = document.createElement("td");
+    var images = document.createElement("input");
+    images.type = "checkbox";
+    images.checked = Boolean(spec.add_images);
+    images.setAttribute("data-field", "add_images");
+    imageCell.appendChild(images);
+    row.appendChild(imageCell);
+    var removeCell = document.createElement("td");
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ullme-text-action";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () { row.remove(); });
+    removeCell.appendChild(remove);
+    row.appendChild(removeCell);
+    return row;
+  }
+
+  function collectDocSpecs(id) {
+    var body = byId(id);
+    if (!body) return [];
+    return Array.prototype.map.call(body.querySelectorAll("tr"), function (row) {
+      function fieldValue(name) {
+        var input = row.querySelector('[data-field="' + name + '"]');
+        return input ? input.value : "";
+      }
+      var images = row.querySelector('[data-field="add_images"]');
+      return {
+        docid: fieldValue("docid").trim(),
+        descr: fieldValue("descr"),
+        pref_format: splitList(fieldValue("pref_format")),
+        auto_convert: splitList(fieldValue("auto_convert")),
+        pref_doc_dir: fieldValue("pref_doc_dir").trim(),
+        add_images: Boolean(images && images.checked)
+      };
+    }).filter(function (spec) { return spec.docid; });
   }
 
   function yamlEditor(tutor) {
@@ -501,14 +684,11 @@
     return panel;
   }
 
-  function normalizeMatcher(matcher) {
-    return matcher && typeof matcher === "object" ? matcher : null;
-  }
-
-  function solutionPattern(matcher) {
-    var associated = matcher.associated || {};
-    var solution = associated.solution || {};
-    return typeof solution === "string" ? solution : (solution.pattern || "");
+  function splitList(value) {
+    return String(value || "")
+      .split(",")
+      .map(function (item) { return item.trim(); })
+      .filter(Boolean);
   }
 
   function field(labelText, id, type, value, helpText) {
@@ -583,6 +763,7 @@
   };
   window.ullme = window.ullme || {};
   window.ullme.aiTutorSaveComplete = saveComplete;
+  window.ullme.aiTutorInstancesSaveComplete = saveComplete;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

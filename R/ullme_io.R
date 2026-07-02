@@ -6,8 +6,15 @@
 ullme_safe_relative_material_path = function(path) {
   restore.point("ullme_safe_relative_material_path")
   path = gsub("\\\\", "/", paste0(path)[1])
-  !is.na(path) && nzchar(path) &&
-    !grepl("^/|^[A-Za-z]:|(^|/)\\.\\.(/|$)", path)
+  if (is.na(path) || !nzchar(path) ||
+      grepl("^/|^[A-Za-z]:|//|/$", path)) {
+    return(FALSE)
+  }
+  parts = strsplit(path, "/", fixed=TRUE)[[1]]
+  length(parts) > 0 &&
+    all(nzchar(parts)) &&
+    !any(parts %in% c(".", "..")) &&
+    !any(grepl("[[:cntrl:]]", parts))
 }
 
 

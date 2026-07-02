@@ -105,7 +105,7 @@ ullme_definition_ai_rewrite = function(kind, definitionid, source, file,
 }
 
 
-ullme_handle_definition_chat = function(kind="tutor", definitionid=NULL,
+ullme_handle_definition_chat = function(kind="skill", definitionid=NULL,
                                          source=NULL, file=NULL, content=NULL,
                                          message=NULL, requestid=NULL, model=NULL,
                                          app=getApp(), ...) {
@@ -114,6 +114,9 @@ ullme_handle_definition_chat = function(kind="tutor", definitionid=NULL,
   response = tryCatch({
     if (!identical(app$role, "teacher")) stop("Only teachers can use the Definition Assistant.")
     kind = ullme_definition_kind(kind)
+    if (!identical(kind, "skill")) {
+      stop("The Definition Assistant edits Skills only.")
+    }
     definitionid = ullme_clean_definition_id(definitionid)
     source = paste0(source)[1]
     file = gsub("\\\\", "/", paste0(file)[1])
@@ -123,7 +126,7 @@ ullme_handle_definition_chat = function(kind="tutor", definitionid=NULL,
     if (nchar(message, type="bytes") > 16000) stop("The assistant instruction is too long.")
     if (nchar(content, type="bytes") > 2 * 1024^2) stop("The current file is too large.")
     if (!ullme_definition_is_editable(kind=kind, source=source, app=app)) {
-      stop("Make a Personal or course-local copy before applying AI rewrites.")
+      stop("Make a Personal Skill copy before applying AI rewrites.")
     }
     if (is.null(ullme_definition_metadata_at(
       kind=kind,
