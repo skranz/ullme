@@ -77,12 +77,13 @@ ullme_preferred_conversion_format = function(pref_format=NULL,
 }
 
 ullme_conversion_media_name = function(path) {
-  stem = tools::file_path_sans_ext(basename(paste0(path)[1]))
-  stem = ullme_transliterate_german(stem)
-  stem = gsub("[<>:\"/\\\\|?*[:cntrl:]]+", "_", stem)
-  stem = sub("[. ]+$", "", stem)
-  if (!nzchar(stem)) stem = "document"
-  paste0("figures--", stem)
+  name = basename(paste0(path)[1])
+  name = ullme_transliterate_german(name)
+  name = gsub("\\.", "_", name)
+  name = gsub("[<>:\"/\\\\|?*[:cntrl:]]+", "_", name)
+  name = sub("[ ]+$", "", name)
+  if (!nzchar(name)) name = "document"
+  paste0("figures--", name)
 }
 
 ullme_rewrite_extracted_media_paths = function(output, absolute_media,
@@ -161,19 +162,99 @@ ullme_tutor_doc_spec_for_path = function(definition, path) {
 
 ullme_material_conversion_paths = function(paths) {
   paths = paste0(unlist(paths %||% list(), use.names=FALSE))
-  if (length(paths) == 1L) paths = unlist(strsplit(paths, "[,\\r\\n]+"))
+  if (length(paths) == 1L) paths = unlist(strsplit(paths, "[,\r\n]+"))
   unique(trimws(paths[nzchar(trimws(paths))]))
 }
+
+ullme_material_conversion_paths_for_mode = function(
+    paths, mode=c(
+      "docx-md", "tex-md", "all-md", "pdf-txt",
+      "all-md-txt", "all-overwrite"
+    )) {
+  mode = match.arg(
+    paste0(mode %||% "")[1],
+    c(
+      "docx-md", "tex-md", "all-md", "pdf-txt",
+      "all-md-txt", "all-overwrite"
+    )
+  )
+  paths = ullme_material_conversion_paths(paths)
+  formats = tolower(tools::file_ext(paths))
+  mixed_formats = c("docx", "pdf")
+  keep = switch(
+    mode,
+    "docx-md"=formats == "docx",
+    "tex-md"=formats == "tex",
+    "all-md"=formats %in% setdiff(ullme_document_input_formats(), "md"),
+    "pdf-txt"=formats == "pdf",
+    "all-md-txt"=formats %in% mixed_formats,
+    "all-overwrite"=formats %in% mixed_formats
+  )
+  selected = paths[keep]
+  if (!length(selected)) {
+    label = switch(
+      mode,
+      "docx-md"="DOCX",
+      "tex-md"="TeX",
+      "all-md"="Pandoc-readable",
+      "pdf-txt"="PDF",
+      "all-md-txt"="DOCX or PDF",
+      "all-overwrite"="DOCX or PDF"
+    )
+    target = if (identical(mode, "pdf-txt")) {
+      "plain text"
+    } else if (mode %in% c("all-md-txt", "all-overwrite")) {
+      "Markdown or plain text"
+    } else {
+      "Markdown"
+    }
+    stop("None of the selected files are ", label,
+         " documents that can be converted to ", target, ".")
+  }
+  selected
+}
+
+
+ullme_resolve_material_conversion_paths = function(material_dir, paths) {
+  requested = ullme_material_conversion_paths(paths)
+  requested = gsub("\\\\", "/", requested)
+  requested = sub("^materials/", "", requested, ignore.case=TRUE)
+  available = ullme_material_tree(material_dir)
+  available = vapply(
+    available[vapply(
+      available,
+      function(record) identical(record$type, "file"),
+      logical(1)
+    )],
+    function(record) paste0(record$path)[1],
+    character(1)
+  )
+  requested_keys = if (identical(.Platform$OS.type, "windows")) {
+    tolower(requested)
+  } else requested
+  available_keys = if (identical(.Platform$OS.type, "windows")) {
+    tolower(available)
+  } else available
+  matched = match(requested_keys, available_keys)
+  if (anyNA(matched)) {
+    missing = requested[which(is.na(matched))[[1]]]
+    stop("The selected material file no longer exists: ", missing,
+         ". Refresh the Materials pane and try again.")
+  }
+  unique(available[matched])
+}
+
 
 ullme_convert_material_files = function(paths, to="", from="", tutorid="",
                                          overwrite=FALSE, origin="ui",
                                          course_dir=NULL, app=getApp(),
-                                         converter=NULL) {
+                                         converter=NULL, pdf_converter=NULL,
+                                         skip_existing=FALSE) {
   if (!identical(app$role, "teacher")) stop("Only teachers can convert course materials.")
   if (is.null(course_dir)) course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) stop("Select a course first.")
   material_dir = .ullme_material_root(file.path(course_dir, "materials"))
-  paths = ullme_material_conversion_paths(paths)
+  paths = ullme_resolve_material_conversion_paths(material_dir, paths)
   if (!length(paths)) stop("Select at least one material document.")
   definition = NULL
   if (nzchar(paste0(tutorid %||% "")[1])) {
@@ -189,6 +270,7 @@ ullme_convert_material_files = function(paths, to="", from="", tutorid="",
   }, add=TRUE)
   changes = list()
   converted = list()
+  skipped = list()
   targets = character(0)
   for (i in seq_along(paths)) {
     path = .ullme_material_relative_path(paths[[i]])
@@ -198,7 +280,10 @@ ullme_convert_material_files = function(paths, to="", from="", tutorid="",
       ullme_tutor_doc_spec_for_path(definition, path)
     } else NULL
     target_format = paste0(to %||% "")[1]
-    if (!nzchar(target_format) || identical(tolower(target_format), "preferred")) {
+    if (identical(tolower(target_format), "md-txt")) {
+      target_format = if (identical(source_format, "pdf")) "txt" else "md"
+    } else if (!nzchar(target_format) ||
+               identical(tolower(target_format), "preferred")) {
       target_format = ullme_preferred_conversion_format(
         spec$pref_format %||% list(), source_format
       )
@@ -206,22 +291,44 @@ ullme_convert_material_files = function(paths, to="", from="", tutorid="",
     target_format = ullme_normalize_document_format(target_format, "output")$extension
     relative_output = paste0(tools::file_path_sans_ext(path), ".", target_format)
     target = .ullme_material_path(material_dir, relative_output)
-    if ((file.exists(target) || dir.exists(target)) && !isTRUE(overwrite)) {
+    if (dir.exists(target)) {
+      stop("The converted document path is an existing directory: ", relative_output)
+    }
+    if (file.exists(target) && !isTRUE(overwrite)) {
+      if (isTRUE(skip_existing)) {
+        skipped[[length(skipped) + 1L]] = list(
+          source=path,
+          output=relative_output,
+          reason="destination_exists"
+        )
+        next
+      }
       stop("Converted document already exists: ", relative_output)
     }
     stage_dir = file.path(stage, sprintf("%04d", i))
     dir.create(stage_dir, recursive=TRUE, showWarnings=FALSE)
     stage_output = file.path(stage_dir, basename(relative_output))
-    media_name = ullme_conversion_media_name(path)
+    media_name = ullme_conversion_media_name(relative_output)
     stage_media = file.path(stage_dir, media_name)
-    conversion = ullme_convert_document(
-      source=source,
-      from=if (nzchar(paste0(from %||% "")[1])) from else NULL,
-      to=target_format,
-      output=stage_output,
-      media_dir=stage_media,
-      converter=converter
-    )
+    if (identical(source_format, "pdf")) {
+      if (!identical(target_format, "txt")) {
+        stop("PDF documents can currently only be converted to plain text.")
+      }
+      conversion = if (is.null(pdf_converter)) {
+        ullme_convert_pdf_to_text(source=source, output=stage_output)
+      } else {
+        pdf_converter(source=source, output=stage_output)
+      }
+    } else {
+      conversion = ullme_convert_document(
+        source=source,
+        from=if (nzchar(paste0(from %||% "")[1])) from else NULL,
+        to=target_format,
+        output=stage_output,
+        media_dir=stage_media,
+        converter=converter
+      )
+    }
     changes[[length(changes) + 1L]] = ullme_change_copy(
       stage_output, target, overwrite=isTRUE(overwrite)
     )
@@ -251,12 +358,27 @@ ullme_convert_material_files = function(paths, to="", from="", tutorid="",
   if (anyDuplicated(keys)) {
     stop("The requested conversions would write the same output more than once.")
   }
+  if (!length(converted)) {
+    return(list(
+      ok=TRUE,
+      status="committed",
+      operation_id="",
+      message="No documents needed conversion.",
+      converted=converted,
+      skipped=skipped
+    ))
+  }
   operation = ullme_new_change(
     action="convert_materials",
     summary=paste0("Convert ", length(converted), " material document",
                    if (length(converted) == 1L) "" else "s"),
     origin=origin,
-    details=list(courseid=app$courseid, tutorid=tutorid, converted=converted),
+    details=list(
+      courseid=app$courseid,
+      tutorid=tutorid,
+      converted=converted,
+      skipped=skipped
+    ),
     changes=changes,
     app=app
   )
@@ -267,5 +389,8 @@ ullme_convert_material_files = function(paths, to="", from="", tutorid="",
     app$pending_changes[[result$id]] = pending
     keep_stage = TRUE
   }
-  c(ullme_tool_change_result(result), list(converted=converted))
+  c(ullme_tool_change_result(result), list(
+    converted=converted,
+    skipped=skipped
+  ))
 }

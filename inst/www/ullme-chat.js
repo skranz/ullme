@@ -6,6 +6,7 @@
     chatBusy: false,
     activeAssistantMessageId: "",
     chatWatchdog: null,
+    chatWatchdogPaused: false,
     submitButtonHtml: "",
     cancelledAssistantRequests: {},
     assistantRequests: {},
@@ -27,6 +28,7 @@
     materialExpanded: {},
     materialSort: "name",
     materialSortDirection: "asc",
+    materialConversionBusy: false,
     materialUploadDestination: "general",
     pendingMaterialDrop: null,
     studioView: "materials",
@@ -182,6 +184,7 @@
     var materialSelectAll = byId("ullme_material_select_all");
     var materialClearSelection = byId("ullme_material_clear_selection");
     var materialApplyOperation = byId("ullme_material_apply_operation");
+    var materialConvert = byId("ullme_material_convert");
     var materialDeleteSelected = byId("ullme_material_delete_selected");
     var materialCreateDirectory = byId("ullme_material_create_directory");
     var userSettingsButton = byId("ullme_user_settings_btn");
@@ -496,6 +499,13 @@
     if (materialApplyOperation) {
       materialApplyOperation.addEventListener("click", applySelectedMaterialOperation);
     }
+    if (materialConvert) {
+      materialConvert.addEventListener("click", function (event) {
+        event.stopPropagation();
+        if (state.materialConversionBusy || materialConvert.disabled) return;
+        toggleSidebarMenu(materialConvert, convertSelectedMaterials);
+      });
+    }
     if (materialDeleteSelected) {
       materialDeleteSelected.addEventListener("click", deleteSelectedMaterials);
     }
@@ -625,7 +635,7 @@
     var modelSelect = byId("ullme_model_select");
     var clientMessageId = nextId("user");
     var assistantMessageId = nextId("assistant");
-    var displayText = "Make instances for " +
+    var displayText = "Preparing the complete instance-builder prompt for " +
       String(options.label || tutorid) +
       (guidance ? "\n\n" + guidance : "");
     var payload = {
@@ -654,7 +664,7 @@
     appendUserMessage({ id: clientMessageId, text: displayText, uploads: [] });
     appendAssistantMessage({
       id: assistantMessageId,
-      text: "Thinking...",
+      text: "Preparing the instance-builder prompt…",
       thinking: true
     });
     state.assistantRequests[assistantMessageId] = payload;
@@ -682,18 +692,27 @@
         messageId !== state.activeAssistantMessageId) return;
     if (state.chatWatchdog) window.clearTimeout(state.chatWatchdog);
     state.chatWatchdog = null;
+    state.chatWatchdogPaused = false;
     state.activeAssistantMessageId = "";
   }
 
   function startChatWatchdog(messageId) {
     if (state.chatWatchdog) window.clearTimeout(state.chatWatchdog);
     state.activeAssistantMessageId = messageId;
+    state.chatWatchdogPaused = false;
     state.chatWatchdog = window.setTimeout(function () {
       finishClientChatError(
         messageId,
         "The model did not respond within three minutes. Please check the connection and try again."
       );
     }, 180000);
+  }
+
+  function pauseChatWatchdog(messageId) {
+    if (state.chatWatchdog) window.clearTimeout(state.chatWatchdog);
+    state.chatWatchdog = null;
+    state.chatWatchdogPaused = true;
+    state.activeAssistantMessageId = messageId;
   }
 
   function finishClientChatError(messageId, message) {
@@ -2668,10 +2687,12 @@
     var selected = selectedMaterialPaths();
     var count = byId("ullme_material_selection_count");
     var apply = byId("ullme_material_apply_operation");
+    var convert = byId("ullme_material_convert");
     var remove = byId("ullme_material_delete_selected");
     var batch = byId("ullme_material_batch_bar");
     if (count) count.textContent = selected.length + " selected";
     if (apply) apply.disabled = selected.length === 0;
+    if (convert) convert.disabled = selected.length === 0 || state.materialConversionBusy;
     if (remove) remove.disabled = selected.length === 0;
     if (batch) {
       batch.classList.toggle("ullme-material-batch-bar-active", selected.length > 0);
@@ -2872,6 +2893,28 @@
     });
   }
 
+  function setMaterialConversionBusy(busy) {
+    var button = byId("ullme_material_convert");
+    state.materialConversionBusy = Boolean(busy);
+    if (button) {
+      button.innerHTML = busy
+        ? "Converting\u2026"
+        : 'Convert<span class="ullme-sidebar-value-arrow" aria-hidden="true">&#9662;</span>';
+      button.setAttribute("aria-expanded", "false");
+    }
+    updateMaterialBatchControls();
+  }
+
+  function convertSelectedMaterials(mode) {
+    var paths = selectedMaterialPaths();
+    if (!paths.length || state.materialConversionBusy) return;
+    setMaterialConversionBusy(true);
+    sendSidebarEvent("ullme_material_convert_event", {
+      mode: mode,
+      paths: paths
+    });
+  }
+
   function createMaterialDirectory() {
     var destination = byId("ullme_material_destination");
     if (!destination || !destination.value) return;
@@ -2887,6 +2930,17 @@
     result = result || {};
     if (!result.ok) {
       window.alert(result.message || "The material operation failed.");
+      return;
+    }
+    state.materialSelection = {};
+    renderMaterialTree();
+  }
+
+  function materialConversionComplete(result) {
+    result = result || {};
+    setMaterialConversionBusy(false);
+    if (!result.ok) {
+      window.alert(result.message || "The document conversion failed.");
       return;
     }
     state.materialSelection = {};
@@ -2920,7 +2974,9 @@
       item.setAttribute("role", "menuitem");
       item.textContent = sidebarLabel(value, button.getAttribute("data-kind"));
       item.addEventListener("click", function () {
-        setSidebarValue(button, value);
+        if (button.getAttribute("data-action-menu") !== "true") {
+          setSidebarValue(button, value);
+        }
         closeSidebarMenus();
         onSelect(value);
       });
@@ -2929,6 +2985,7 @@
 
     button.parentNode.appendChild(menu);
     button.classList.add("ullme-sidebar-value-open");
+    button.setAttribute("aria-expanded", "true");
   }
 
   function sidebarOptions(button) {
@@ -2952,6 +3009,7 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll(".ullme-sidebar-value-open"), function (button) {
       button.classList.remove("ullme-sidebar-value-open");
+      button.setAttribute("aria-expanded", "false");
     });
   }
 
@@ -2965,6 +3023,16 @@
       return value.charAt(0).toUpperCase() + value.slice(1);
     }
     if (kind === "course") return value || "Course";
+    if (kind === "conversion") {
+      return {
+        "docx-md": "docx -> md",
+        "tex-md": "tex -> md",
+        "all-md": "all -> md",
+        "pdf-txt": "pdf -> txt",
+        "all-md-txt": "all -> md, txt",
+        "all-overwrite": "all -> overwrite"
+      }[value] || value;
+    }
     return value;
   }
 
@@ -2992,6 +3060,20 @@
     }
     article.appendChild(stack);
     messages.appendChild(article);
+    scrollMessagesToBottom();
+  }
+
+  function replaceUserMessage(messageId, text) {
+    var article = byId(messageId);
+    if (!article) return;
+    var stack = article.querySelector(".ullme-user-stack");
+    var bubble = stack && stack.querySelector(".ullme-bubble");
+    if (!stack || !bubble) return;
+    bubble.innerHTML = "";
+    bubble.appendChild(textBlock(text || ""));
+    var actions = stack.querySelector(".ullme-user-actions");
+    if (actions) actions.remove();
+    stack.appendChild(renderUserActions(text || ""));
     scrollMessagesToBottom();
   }
 
@@ -3372,7 +3454,8 @@
   }
 
   function receiveAssistantStream(messageId, text, html, thinking,
-                                  thinkingHtml, done, error) {
+                                  thinkingHtml, done, error, activity,
+                                  waitingForUser) {
     if (state.cancelledAssistantRequests[messageId]) return;
     var messages = byId("ullme_chat_messages");
     var previousScrollTop = messages ? messages.scrollTop : 0;
@@ -3384,13 +3467,15 @@
         html: text ? (html || "") : "",
         thinkingText: thinking || "",
         thinkingHtml: thinkingHtml || "",
-        meta: (error && (text || thinking)) ? error : "",
+        meta: activity || ((error && (text || thinking)) ? error : ""),
         thinking: !done
       });
       if (done) {
         state.chatBusy = false;
         clearChatWatchdog(messageId);
         updateSubmitState();
+      } else if (waitingForUser) {
+        pauseChatWatchdog(messageId);
       } else {
         startChatWatchdog(messageId);
       }
@@ -3401,6 +3486,10 @@
     var bubble = article.querySelector(".ullme-bubble");
     var messageText = article.querySelector(".ullme-message-text");
     var meta = article.querySelector(".ullme-message-meta");
+    if (meta && meta.dataset && meta.dataset.toolActivity === "true" && !activity) {
+      meta.remove();
+      meta = null;
+    }
     if ((text || thinking) && meta && meta.textContent === "Thinking") {
       meta.remove();
       meta = null;
@@ -3428,6 +3517,17 @@
       meta.textContent = error;
     } else if (error && meta) {
       meta.remove();
+      meta = null;
+    }
+    if (activity && bubble) {
+      if (!meta) {
+        meta = document.createElement("div");
+        meta.className = "ullme-message-meta";
+        bubble.insertBefore(meta, bubble.firstChild);
+      }
+      meta.classList.remove("ullme-message-error");
+      meta.dataset.toolActivity = "true";
+      meta.textContent = activity;
     }
     if (done && bubble && !bubble.querySelector(".ullme-message-actions")) {
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
@@ -3436,6 +3536,8 @@
       state.chatBusy = false;
       clearChatWatchdog(messageId);
       updateSubmitState();
+    } else if (waitingForUser) {
+      pauseChatWatchdog(messageId);
     } else {
       startChatWatchdog(messageId);
     }
@@ -3557,10 +3659,12 @@
   window.ullme = window.ullme || {};
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
   window.ullme.receiveAssistantStream = receiveAssistantStream;
+  window.ullme.replaceUserMessage = replaceUserMessage;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
   window.ullme.materialUploadComplete = completePendingMaterialUpload;
   window.ullme.materialUploadDestinationReady = materialUploadDestinationReady;
   window.ullme.materialOperationComplete = materialOperationComplete;
+  window.ullme.materialConversionComplete = materialConversionComplete;
   window.ullme.updateCourseList = updateCourseList;
   window.ullme.openCatalogDialog = openCatalogDialog;
   window.ullme.openDefinitionWorkspace = openDefinitionWorkspace;

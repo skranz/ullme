@@ -6,12 +6,16 @@ course_dir = file.path(
   main, "teachers", "alice", "courses", "SS26", "demo"
 )
 dir.create(file.path(course_dir, "materials", "ps", "week1"), recursive=TRUE)
+dir.create(file.path(course_dir, "materials", "slides"), recursive=TRUE)
 dir.create(file.path(course_dir, "ai_tutors", "pstutor"), recursive=TRUE)
 writeLines("Problem set", file.path(
   course_dir, "materials", "ps", "week1", "sheet.md"
 ))
 writeLines("Solution", file.path(
   course_dir, "materials", "ps", "week1", "sheet_solution.md"
+))
+writeLines("Lecture", file.path(
+  course_dir, "materials", "slides", "lecture.md"
 ))
 writeLines(c(
   "tutorid: pstutor",
@@ -55,9 +59,23 @@ stopifnot(
   ),
   grepl("ps/week1/sheet.md", prompt, fixed=TRUE),
   grepl("ps/week1/sheet_solution.md", prompt, fixed=TRUE),
-  grepl("HEURISTIC CANDIDATE ASSIGNMENTS", prompt, fixed=TRUE),
-  grepl("rewrite_tutor_instances_yaml", prompt, fixed=TRUE),
+  !grepl("slides/lecture.md", prompt, fixed=TRUE),
+  grepl("EXAMPLE YAML", prompt, fixed=TRUE),
+  grepl("example_1_ps.md", prompt, fixed=TRUE),
+  grepl("example_1_ps_sol.md", prompt, fixed=TRUE),
+  grepl("write_rtutor_instances_yaml", prompt, fixed=TRUE),
+  !grepl("convert_material_files", prompt, fixed=TRUE),
+  !grepl("rewrite_tutor_instances_yaml", prompt, fixed=TRUE),
   grepl('Solutions end in "solution".', prompt, fixed=TRUE)
+)
+stopifnot(
+  identical(
+    ullme_tool_prompt_summary("write_rtutor_instances_yaml"),
+    paste0(
+      "- write_rtutor_instances_yaml: ",
+      ullme_tool_registry()$write_rtutor_instances_yaml$description
+    )
+  )
 )
 
 app = new.env(parent=emptyenv())

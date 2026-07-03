@@ -441,6 +441,11 @@ ullme_course_ai_tutors = function(app=getApp()) {
   restore.point("ullme_course_ai_tutors")
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) return(list())
+  instance_builder_inputs = ullme_form_input_choices(
+    "instance_builder",
+    course_dir=course_dir,
+    app=app
+  )
   root = ullme_course_ai_tutors_dir(course_dir)
   ids = ullme_definition_ids(root)
   tutors = lapply(ids, function(tutorid) {
@@ -476,6 +481,7 @@ ullme_course_ai_tutors = function(app=getApp()) {
       instances=instances,
       course_docs=instance_data$course_docs
     )
+    definition$instance_builder_inputs = instance_builder_inputs
     conversion_specs = c(
       ullme_normalize_tutor_doc_specs(value$docs_per_instance),
       ullme_normalize_tutor_doc_specs(value$docs_per_course)

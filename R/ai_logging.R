@@ -58,3 +58,50 @@ ullme_ai_interaction_finish = function(directory, status="completed",
   yaml::write_yaml(metadata, metadata_path)
   invisible(TRUE)
 }
+
+
+ullme_tool_trace_value = function(value, name="", max_chars=2000L) {
+  if (grepl(
+    "(api.?key|access.?token|secret|password|credential)",
+    tolower(paste0(name)[1])
+  )) {
+    return("[redacted]")
+  }
+  if (is.null(value) || is.logical(value) || is.numeric(value)) return(value)
+  if (inherits(value, "condition")) return(conditionMessage(value))
+  if (is.character(value)) {
+    value = paste0(value, collapse="\n")
+    if (nchar(value, type="chars") > max_chars) {
+      value = paste0(substr(value, 1L, max_chars), "\n[truncated]")
+    }
+    return(value)
+  }
+  if (is.list(value)) {
+    result = lapply(seq_along(value), function(i) {
+      item_name = names(value)[i] %||% ""
+      ullme_tool_trace_value(value[[i]], name=item_name, max_chars=max_chars)
+    })
+    names(result) = names(value)
+    return(result)
+  }
+  text = paste(capture.output(str(value, max.level=2)), collapse="\n")
+  ullme_tool_trace_value(text, name=name, max_chars=max_chars)
+}
+
+
+ullme_ai_interaction_tool_event = function(directory, event, request=NULL) {
+  if (is.null(directory) || !dir.exists(directory)) return(invisible(FALSE))
+  events_dir = file.path(directory, "tool_events")
+  dir.create(events_dir, recursive=TRUE, showWarnings=FALSE)
+  if (!is.null(request)) {
+    request$tool_event_seq = as.integer(request$tool_event_seq %||% 0L) + 1L
+    index = request$tool_event_seq
+  } else {
+    existing = list.files(events_dir, pattern="^[0-9]{4}-.*[.]ya?ml$")
+    index = length(existing) + 1L
+  }
+  kind = gsub("[^a-z0-9_-]+", "-", tolower(event$event %||% "event"))
+  path = file.path(events_dir, sprintf("%04d-%s.yml", index, kind))
+  yaml::write_yaml(ullme_tool_trace_value(event), path)
+  invisible(path)
+}

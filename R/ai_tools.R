@@ -63,8 +63,12 @@ ullme_tool_registry = function() {
       description="Validate and replace the complete instances.yml assignments for a course AI Tutor.",
       perm=ullme_tool_perm(mutates=TRUE)
     ),
+    write_rtutor_instances_yaml=list(
+      description="Validate and write the complete instances.yml for the selected course AI Tutor, then return validation and assignment details.",
+      perm=ullme_tool_perm(mutates=TRUE)
+    ),
     convert_material_files=list(
-      description="Convert one or several recursive material documents with Pandoc. Paths are relative to materials and may be comma- or newline-separated; an empty or 'preferred' target uses the AI Tutor definition preference.",
+      description="Convert one or several recursive material documents. Pandoc handles supported document formats; PDF supports only explicit conversion to txt via pdftotext. Paths are relative to materials and may be comma- or newline-separated; an empty or 'preferred' target uses the AI Tutor definition preference.",
       perm=ullme_tool_perm(course_must_exist=TRUE, mutates=TRUE)
     ),
     rewrite_course_text_file=list(
@@ -138,6 +142,10 @@ ullme_execute_tool = function(implementation, args, perm, app=getApp()) {
     do.call(implementation, c(args, list(app=app))),
     error=function(e) list(ok=FALSE, status="error", message=conditionMessage(e))
   )
+  if (is.list(result) &&
+      identical(result$status %||% "", "pending_approval")) {
+    return(ullme_wait_for_change_approval(result, app=app))
+  }
   result
 }
 

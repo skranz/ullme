@@ -77,16 +77,27 @@ The YAML pane exposes the complete course-local `tutor.yml` and `instances.yml`
 as Definition and Instances subtabs. Instance discovery scans preferred material
 directories recursively. Text formats are preferred first, then Pandoc-readable
 DOCX/ODT files, and PDF is the final fallback. `R/convert.R` performs Pandoc
-conversions beside the source document and extracts media into a shared
-`figures--<document-stem>` sibling directory. The Instances YAML subtab and the
-teacher assistant can both invoke these conversions.
+conversions beside the source document and extracts media into a sibling
+`figures--<converted-filename>` directory, replacing dots in the filename with
+underscores (for example, `ps1.md` uses `figures--ps1_md`). The Instances YAML
+subtab and the teacher assistant can both invoke these conversions. The Materials batch bar
+also exposes format-specific actions plus `all -> md, txt` and
+`all -> overwrite`. The mixed actions consider only selected DOCX and PDF
+files, routing DOCX to `.md` and PDF to `.txt`; only the explicit overwrite
+action replaces existing destinations. The material tree refreshes after
+conversion completes.
+`R/convert_pdf.R` implements the PDF path by invoking the system `pdftotext`
+executable.
 
 The Instances tab's **Make Instances** action opens a guidance dialog and sends
 an instance-builder request through the normal assistant pane. The rendered
-`inst/prompts/instance_builder.txt` prompt includes the recursive material
-tree, Tutor definition, current instance YAML, teacher guidance, and available
-tools. The assistant may inspect files, convert Pandoc-readable documents, and
-atomically replace `instances.yml`; committed changes refresh the Tutor UI.
+`inst/prompts/instance_builder.txt` prompt includes a definition-derived
+example YAML, every recursive filename beneath `materials/ps`, and the
+teacher's guidance. The specialized assistant receives only
+`write_rtutor_instances_yaml`; it does not inspect or convert files. That tool
+validates YAML structure, document roles, unique instance IDs, and assigned
+file paths before atomically replacing `instances.yml`, and returns an
+assignment summary. Committed changes refresh the Tutor UI.
 `ullme_test_instance_builder()` exposes the same prompt and tool workflow
 outside Shiny for prompt development.
 
@@ -317,9 +328,21 @@ Chat submission follows this sequence:
 1. JavaScript appends the user message immediately.
 2. JavaScript appends an assistant placeholder with an `assistantMessageId`.
 3. JavaScript sends `ullme_submit_chat_event`.
-4. R starts an asynchronous model request and optional tool loop.
-5. Streaming updates replace the placeholder as text or thinking arrives.
-6. The completed update adds assistant actions and unlocks the composer.
+4. R starts an asynchronous model request; ellmer owns the model/tool loop.
+5. Tool request and result callbacks update a visible activity line and write
+   structured trace records beneath the interaction directory.
+6. Streaming updates replace the placeholder as text or thinking arrives.
+7. The completed update adds assistant actions and unlocks the composer.
+
+uLLMe always consumes ellmer's rich content stream internally, even when
+thinking is hidden. Tool-only model output therefore counts as provider
+activity and cannot be mistaken for a stalled connection.
+
+Mutating tools that require approval return an unresolved promise to ellmer.
+The approval dialog resolves that promise with the committed or rejected
+result, after which ellmer resumes the same model/tool conversation. Model and
+browser response watchdogs pause while user approval is pending. Stopping the
+chat rejects any pending change and settles its tool promise.
 
 Only one pending `Thinking...` placeholder is rendered. Both browser and server
 apply a three-minute response watchdog. Provider errors replace that placeholder
@@ -337,6 +360,9 @@ thinking is disabled through `chat_template_kwargs` and the Nemotron-specific
 When `store_ai_interactions=TRUE` (the default), main chat, instance-builder,
 and Definition Assistant requests write prompt, response, thinking, error, and
 status metadata beneath the active course's `ai_interactions/` directory.
+Main-chat tool activity is stored as ordered YAML records under
+`tool_events/`; sensitive argument names are redacted and long values are
+truncated.
 
 The first assistant message comes from `ullme_intro_msg()` and can later become
 course- or user-specific.

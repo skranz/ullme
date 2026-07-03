@@ -62,14 +62,12 @@ default_personality:
 docs_per_instance:
   ps:
     descr: the problem set
-    pref_format: [md, tex, pdf]
-    auto_convert: [pdf]
+    file_types: [md, tex]
     pref_doc_dir: ps
     add_images: true
   ps_sol:
     descr: the problem set solution
-    pref_format: [md, tex]
-    auto_convert: [pdf]
+    file_types: [md, tex]
     pref_doc_dir: ps
     add_images: true
 

@@ -284,6 +284,90 @@ ullme_submit_change = function(operation, app=getApp()) {
 }
 
 
+ullme_wait_for_change_approval = function(result, app=getApp()) {
+  operation_id = paste0(
+    result$operation_id %||% result$id %||% ""
+  )[1]
+  if (!nzchar(operation_id) ||
+      is.null(app$pending_changes[[operation_id]])) {
+    return(promises::promise_resolve(result))
+  }
+  promises::promise(function(resolve, reject) {
+    if (is.null(app$change_waiters)) app$change_waiters = list()
+    request = app$active_chat_request
+    app$change_waiters[[operation_id]] = list(
+      resolve=resolve,
+      reject=reject,
+      request=request,
+      pending_result=result,
+      message_id=if (is.null(request)) "" else request$message_id %||% "",
+      created_at=Sys.time()
+    )
+    ullme_set_request_approval_wait(
+      request,
+      waiting=TRUE,
+      operation_id=operation_id,
+      app=app
+    )
+  })
+}
+
+
+ullme_resolve_change_waiter = function(operation_id, result, app=getApp()) {
+  if (is.null(app$change_waiters)) return(invisible(FALSE))
+  waiter = app$change_waiters[[operation_id]]
+  if (is.null(waiter)) return(invisible(FALSE))
+  app$change_waiters[[operation_id]] = NULL
+  ullme_set_request_approval_wait(
+    waiter$request,
+    waiting=FALSE,
+    operation_id=operation_id,
+    app=app
+  )
+  pending_result = waiter$pending_result %||% list()
+  pending_result[c(
+    "ok", "status", "id", "operation_id", "message"
+  )] = NULL
+  result = c(result, pending_result)
+  waiter$resolve(result)
+  invisible(TRUE)
+}
+
+
+ullme_cancel_change_waiters = function(message_id, reason="Request cancelled.",
+                                        app=getApp()) {
+  if (is.null(app$change_waiters) || length(app$change_waiters) == 0) {
+    return(invisible(FALSE))
+  }
+  ids = names(Filter(
+    function(waiter) identical(waiter$message_id %||% "", message_id),
+    app$change_waiters
+  ))
+  for (operation_id in ids) {
+    operation = app$pending_changes[[operation_id]]
+    if (!is.null(operation)) {
+      ullme_handle_change_approval(
+        operation_id=operation_id,
+        approved=FALSE,
+        app=app
+      )
+    } else {
+      ullme_resolve_change_waiter(
+        operation_id,
+        list(
+          ok=FALSE,
+          status="cancelled",
+          operation_id=operation_id,
+          message=reason
+        ),
+        app=app
+      )
+    }
+  }
+  invisible(length(ids) > 0)
+}
+
+
 ullme_backup_change_targets = function(operation, backup_dir, app=getApp()) {
   before_dir = file.path(backup_dir, "before")
   dir.create(before_dir, recursive=TRUE, showWarnings=FALSE)
@@ -549,6 +633,7 @@ ullme_handle_change_approval = function(operation_id=NULL, approved=FALSE,
   if (isTRUE(result$ok)) {
     ullme_send_course_state(app=app)
   }
+  ullme_resolve_change_waiter(operation_id, public_result, app=app)
   invisible(public_result)
 }
 

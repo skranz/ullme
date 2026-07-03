@@ -39,6 +39,7 @@ registry = ullme_tool_registry()
 new_tools = c(
   "read_tutor_instances_yaml",
   "rewrite_tutor_instances_yaml",
+  "write_rtutor_instances_yaml",
   "convert_material_files"
 )
 stopifnot(
@@ -77,6 +78,20 @@ read_instances = utool_read_tutor_instances_yaml("tutor1", app=app)
 stopifnot(
   identical(read_instances$tutorid, "tutor1"),
   grepl("instanceid: problem", read_instances$content, fixed=TRUE)
+)
+app$agent_approval_override = "allow"
+app$headless = TRUE
+tool_written = utool_write_rtutor_instances_yaml(
+  "tutor1",
+  instances_yaml,
+  app=app
+)
+stopifnot(
+  tool_written$ok,
+  identical(tool_written$status, "committed"),
+  isTRUE(tool_written$validation$valid),
+  identical(tool_written$validation$instance_count, 1L),
+  identical(tool_written$validation$instance_ids, list("problem"))
 )
 
 target = file.path(root, "teachers", "alice", "note.yaml")

@@ -56,3 +56,19 @@ stopifnot(
   isTRUE(cancelled),
   grepl("timed out after", conditionMessage(await_error), fixed=TRUE)
 )
+
+status_app = new.env(parent=emptyenv())
+status_app$api_config = list(
+  provider="nvidia",
+  model="google/gemma-4-31b-it",
+  base_url="https://integrate.api.nvidia.com/v1"
+)
+status_app$chat_connect_timeout_seconds = 60
+connection_status = ullme_ai_connection_status(app=status_app)
+waiting_status = ullme_ai_connection_status(waiting=TRUE, app=status_app)
+stopifnot(
+  grepl("google/gemma-4-31b-it", connection_status, fixed=TRUE),
+  grepl("NVIDIA NIM", connection_status, fixed=TRUE),
+  grepl("60 seconds", connection_status, fixed=TRUE),
+  grepl("Still waiting", waiting_status, fixed=TRUE)
+)

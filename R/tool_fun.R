@@ -309,6 +309,54 @@ utool_rewrite_tutor_instances_yaml = function(tutorid, yaml_content,
 }
 
 
+ullme_rtutor_instances_yaml_info = function(tutorid, yaml_content) {
+  parsed = ullme_parse_yaml_text(
+    paste0(yaml_content %||% "", collapse="\n"),
+    "instances.yml"
+  )
+  ullme_validation_stop(parsed)
+  value = parsed$value
+  instances = value$instances %||% list()
+  course_docs = value$course_docs %||% list()
+  instance_ids = vapply(instances, function(instance) {
+    paste0(instance$instanceid %||% "")[1]
+  }, character(1))
+  assigned_files = unique(paste0(unlist(c(
+    course_docs,
+    lapply(instances, function(instance) instance$docs %||% list())
+  ), recursive=TRUE, use.names=FALSE)))
+  assigned_files = assigned_files[nzchar(assigned_files)]
+  list(
+    valid=TRUE,
+    tutorid=tutorid,
+    filename="instances.yml",
+    instance_count=length(instances),
+    instance_ids=as.list(instance_ids),
+    course_document_roles=as.list(names(course_docs)),
+    assigned_file_count=length(assigned_files),
+    assigned_files=as.list(assigned_files)
+  )
+}
+
+
+utool_write_rtutor_instances_yaml = function(tutorid, yaml_content,
+                                               app=getApp()) {
+  tutorid = ullme_clean_definition_id(tutorid)
+  result = ullme_save_course_ai_tutor_instances_yaml(
+    tutorid=tutorid,
+    yaml_content=yaml_content,
+    origin="agent",
+    app=app
+  )
+  info = ullme_rtutor_instances_yaml_info(tutorid, yaml_content)
+  if (isTRUE(result$ok) && identical(result$status, "committed") &&
+      !isTRUE(app$headless)) {
+    ullme_send_course_state(app=app)
+  }
+  c(ullme_tool_change_result(result), list(validation=info))
+}
+
+
 utool_convert_material_files = function(courseid, paths, tutorid,
                                          semester="sel", from="",
                                          to="preferred", overwrite=FALSE,

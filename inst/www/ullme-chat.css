@@ -1268,6 +1268,20 @@ body {
   display: flex;
 }
 
+.ullme-material-convert-control {
+  position: relative;
+}
+
+.ullme-material-convert-control .ullme-sidebar-menu {
+  left: 0 !important;
+  top: calc(100% + 3px) !important;
+}
+
+.ullme-material-convert-control .ullme-sidebar-value-arrow {
+  margin-left: 3px;
+  opacity: 1;
+}
+
 .ullme-material-toolbar button,
 .ullme-material-batch-bar button,
 .ullme-material-toolbar select,
@@ -3445,6 +3459,36 @@ body {
 
 .ullme-instance-builder-dialog :where(h2, p) {
   margin: 0;
+}
+
+.ullme-instance-builder-history {
+  display: grid;
+  gap: 6px;
+  color: #4b5650;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ullme-instance-builder-history select {
+  width: 100%;
+  border: 1px solid #d5dcd8;
+  border-radius: 9px;
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #65716b 50%)
+      calc(100% - 16px) 50% / 5px 5px no-repeat,
+    linear-gradient(135deg, #65716b 50%, transparent 50%)
+      calc(100% - 11px) 50% / 5px 5px no-repeat,
+    #f8faf9;
+  color: #25302a;
+  font: inherit;
+  font-weight: 500;
+  padding: 9px 32px 9px 10px;
+}
+
+.ullme-instance-builder-history select:disabled {
+  color: #8a948f;
+  cursor: default;
 }
 
 .ullme-instance-builder-dialog textarea {

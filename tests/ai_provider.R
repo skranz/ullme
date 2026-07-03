@@ -1,10 +1,7 @@
 library(ullme)
 
 stopifnot(
-  identical(
-    ullme_nvidia_default_model(),
-    "google/gemma-4-31b-it"
-  ),
+  ullme_nvidia_default_model() %in% ullme_nvidia_preferred_models(),
   identical(
     ullme_render_prompt(
       "A {{first}} B {{second}}",

@@ -107,7 +107,9 @@ ullme_teacherid = function(app=getApp()) {
   app$chat_response_active = FALSE
   app$chat_tasks = list()
   app$chat_requests = list()
+  app$active_chat_request = NULL
   app$chat_timeout_seconds = 180
+  app$chat_connect_timeout_seconds = 60
   app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
@@ -120,6 +122,7 @@ ullme_teacherid = function(app=getApp()) {
   app$definition_imports = list()
   app$pending_changes = list()
   app$change_results = list()
+  app$change_waiters = list()
   app$courseids = ullme_user_courseids(
     main_dir=main_dir,
     userid=app$userid,
@@ -259,6 +262,12 @@ ullme_register_handlers = function(app=getApp()) {
     eventId = "ullme_material_operation_event",
     id = NULL,
     fun = ullme_handle_material_operation,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_convert_event",
+    id = NULL,
+    fun = ullme_handle_material_convert,
     app = app
   )
   eventHandler(
@@ -854,6 +863,22 @@ ullme_material_ui = function(app=getApp()) {
             disabled="disabled",
             "Apply"
           ),
+          tags$div(
+            class="ullme-material-convert-control",
+            tags$button(
+              id="ullme_material_convert",
+              class="ullme-secondary-action",
+              type="button",
+              disabled="disabled",
+              `data-options`="docx-md|tex-md|all-md|pdf-txt|all-md-txt|all-overwrite",
+              `data-kind`="conversion",
+              `data-action-menu`="true",
+              `aria-haspopup`="menu",
+              `aria-expanded`="false",
+              "Convert",
+              tags$span(class="ullme-sidebar-value-arrow", HTML("&#9662;"))
+            )
+          ),
           tags$button(
             id="ullme_material_delete_selected",
             class="ullme-danger-action",
@@ -1335,6 +1360,42 @@ ullme_handle_material_operation = function(action=NULL, paths=NULL,
 }
 
 
+ullme_handle_material_convert = function(mode=NULL, paths=NULL,
+                                          app=getApp(), ...) {
+  restore.point("ullme_handle_material_convert")
+  result = tryCatch({
+    selected = ullme_material_conversion_paths_for_mode(paths, mode=mode)
+    target = if (mode %in% c("all-md-txt", "all-overwrite")) {
+      "md-txt"
+    } else if (identical(mode, "pdf-txt")) {
+      "txt"
+    } else {
+      "md"
+    }
+    overwrite = identical(mode, "all-overwrite")
+    ullme_convert_material_files(
+      paths=selected,
+      to=target,
+      overwrite=overwrite,
+      skip_existing=!overwrite,
+      origin="ui",
+      app=app
+    )
+  }, error=function(e) {
+    list(ok=FALSE, status="error", message=conditionMessage(e))
+  })
+  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+    ullme_send_course_state(app=app)
+  }
+  callJS(
+    .fun="window.ullme.materialConversionComplete",
+    .args=list(result),
+    .app=app
+  )
+  invisible(result)
+}
+
+
 ullme_handle_material_create_directory = function(path=NULL, app=getApp(), ...) {
   restore.point("ullme_handle_material_create_directory")
   result = tryCatch({
@@ -1439,7 +1500,10 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   restore.point("ullme_handle_chat_submit")
   text = paste0(text, collapse="\n")
   has_uploads = length(uploads) > 0
-  if (!nzchar(trimws(text)) && !has_uploads) return(invisible(NULL))
+  has_instance_builder = is.list(instance_builder)
+  if (!nzchar(trimws(text)) && !has_uploads && !has_instance_builder) {
+    return(invisible(NULL))
+  }
   if (isTRUE(app$chat_response_active)) {
     callJS(
       .fun="window.ullme.receiveAssistantStream",
@@ -1460,7 +1524,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   ai_input = if (nzchar(trimws(text))) text else "[uploaded image]"
   interaction_kind = "chat"
   task_profile = ""
-  if (is.list(instance_builder)) {
+  if (has_instance_builder) {
     tutorid = paste0(instance_builder$tutorid %||% "")[1]
     guidance = paste0(instance_builder$guidance %||% text, collapse="\n")
     built = tryCatch(
@@ -1479,8 +1543,31 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     ai_input = built
     interaction_kind = "instance_builder"
     task_profile = "instance_builder"
+    course_dir = ullme_active_course_dir(app=app)
+    if (nzchar(trimws(guidance))) {
+      try(
+        ullme_store_form_input(
+          guidance,
+          "instance_builder",
+          course_dir=course_dir,
+          app=app
+        ),
+        silent=TRUE
+      )
+    }
+    try(
+      callJS(
+        .fun="window.ullme.replaceUserMessage",
+        .args=list(clientMessageId, ai_input),
+        .app=app
+      ),
+      silent=TRUE
+    )
   }
   skill = ullme_active_skill(app=app)
+  if (identical(task_profile, "instance_builder")) {
+    skill = NULL
+  }
   requested_skillid = paste0(skillid %||% "")[1]
   if (!is.null(skill) && nzchar(requested_skillid) && !identical(requested_skillid, skill$skillid)) {
     skill = NULL
@@ -1531,6 +1618,9 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     app$chat_response_active = FALSE
     app$chat_tasks[[assistantMessageId]] = NULL
     app$chat_requests[[assistantMessageId]] = NULL
+    if (identical(app$active_chat_request, request)) {
+      app$active_chat_request = NULL
+    }
     ullme_ai_interaction_finish(
       interaction_dir, status=status, text=text,
       thinking=thinking, error=error
@@ -1564,7 +1654,19 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   request$controller = NULL
   request$state = NULL
   request$interaction_dir = interaction_dir
+  request$received_provider_output = FALSE
+  request$waiting_for_approval = FALSE
+  request$message_id = assistantMessageId
+  request$tool_event_seq = 0L
   app$chat_requests[[assistantMessageId]] = request
+  app$active_chat_request = request
+  connection_status = ullme_ai_connection_status(model=model, app=app)
+  ullme_send_chat_stream_update(
+    message_id=assistantMessageId,
+    text=connection_status,
+    done=FALSE,
+    app=app
+  )
 
   if (isTRUE(app$stream_chat)) {
     job = tryCatch(
@@ -1577,6 +1679,9 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         task_profile=task_profile,
         on_update=function(text, thinking, done) {
           if (!isTRUE(request$active)) return(invisible(NULL))
+          if (nzchar(text) || nzchar(thinking)) {
+            request$received_provider_output = TRUE
+          }
           ullme_send_chat_stream_update(
             message_id=assistantMessageId,
             text=text,
@@ -1584,6 +1689,13 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
             done=done,
             app=app
           )
+        },
+        on_event=function(type, content) {
+          if (!isTRUE(request$active)) return(invisible(NULL))
+          if (type %in% c("tool_request", "tool_result")) {
+            request$received_provider_output = TRUE
+          }
+          invisible(NULL)
         },
         app=app
       ),
@@ -1594,10 +1706,45 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     }
     request$controller = job$controller
     request$state = job$state
+    later::later(function() {
+      if (!isTRUE(request$active) ||
+          isTRUE(request$received_provider_output)) {
+        return(invisible(NULL))
+      }
+      ullme_send_chat_stream_update(
+        message_id=assistantMessageId,
+        text=ullme_ai_connection_status(
+          model=model,
+          waiting=TRUE,
+          app=app
+        ),
+        done=FALSE,
+        app=app
+      )
+    }, delay=12)
+    later::later(function() {
+      if (!isTRUE(request$active) ||
+          isTRUE(request$received_provider_output)) {
+        return(invisible(NULL))
+      }
+      seconds = app$chat_connect_timeout_seconds %||% 60
+      try(
+        job$controller$cancel("Model connection timed out"),
+        silent=TRUE
+      )
+      fail(simpleError(paste0(
+        "The provider connection opened, but ",
+        paste0(model %||% app$api_config$model)[1],
+        " did not begin responding within ",
+        format(seconds, trim=TRUE),
+        " seconds."
+      )))
+    }, delay=app$chat_connect_timeout_seconds %||% 60)
     task = promises::then(
       ullme_promise_timeout(
         job$promise,
-        seconds=app$chat_timeout_seconds
+        seconds=app$chat_timeout_seconds,
+        is_paused=function() isTRUE(request$waiting_for_approval)
       ),
       onFulfilled=function(value) {
         if (!isTRUE(request$active)) return(invisible(NULL))
@@ -1634,7 +1781,8 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     task = promises::then(
       ullme_promise_timeout(
         response$promise,
-        seconds=app$chat_timeout_seconds
+        seconds=app$chat_timeout_seconds,
+        is_paused=function() isTRUE(request$waiting_for_approval)
       ),
       onFulfilled=function(answer) {
         if (!isTRUE(request$active)) return(invisible(NULL))
@@ -1674,11 +1822,19 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
   if (!is.null(request$controller)) {
     try(request$controller$cancel("Stopped by user"), silent=TRUE)
   }
+  ullme_cancel_change_waiters(
+    message_id=message_id,
+    reason="The assistant request was stopped.",
+    app=app
+  )
   text = if (is.null(request$state)) "" else request$state$text %||% ""
   thinking = if (is.null(request$state)) "" else request$state$thinking %||% ""
   app$chat_response_active = FALSE
   app$chat_tasks[[message_id]] = NULL
   app$chat_requests[[message_id]] = NULL
+  if (identical(app$active_chat_request, request)) {
+    app$active_chat_request = NULL
+  }
   ullme_ai_interaction_finish(
     request$interaction_dir,
     status="cancelled",
@@ -1697,7 +1853,8 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
 
 
 ullme_send_chat_stream_update = function(message_id, text="", thinking="",
-                                          done=FALSE, error="",
+                                          done=FALSE, error="", activity="",
+                                          waiting_for_user=FALSE,
                                           app=getApp()) {
   restore.point("ullme_send_chat_stream_update")
   text = paste0(text %||% "", collapse="")
@@ -1715,7 +1872,9 @@ ullme_send_chat_stream_update = function(message_id, text="", thinking="",
       thinking,
       ullme_chat_output_html(thinking, app=app),
       isTRUE(done),
-      paste0(error %||% "")[1]
+      paste0(error %||% "")[1],
+      paste0(activity %||% "")[1],
+      isTRUE(waiting_for_user)
     ),
     .app=app
   )

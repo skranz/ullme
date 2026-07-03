@@ -1,20 +1,74 @@
-ullme_instance_builder_material_text = function(course_dir) {
-  root = .ullme_material_root(file.path(course_dir, "materials"))
+ullme_instance_builder_ps_files = function(course_dir) {
+  root = file.path(
+    .ullme_material_root(file.path(course_dir, "materials")),
+    "ps"
+  )
+  if (!dir.exists(root)) return(character(0))
   relative = list.files(
-    root, recursive=TRUE, full.names=FALSE, all.files=TRUE,
+    root, recursive=TRUE, full.names=FALSE, all.files=FALSE,
     no..=TRUE, include.dirs=FALSE
   )
-  relative = sort(gsub("\\\\", "/", relative))
-  if (!length(relative)) return("- No material files found.")
-  paste(vapply(relative, function(path) {
-    info = file.info(file.path(root, path))
-    paste0(
-      "- ", path,
-      " (", tolower(tools::file_ext(path)),
-      ", ", if (is.na(info$size[[1]])) "unknown size" else
-        paste0(info$size[[1]], " bytes"), ")"
-    )
-  }, character(1)), collapse="\n")
+  sort(paste0("ps/", gsub("\\\\", "/", relative)))
+}
+
+
+ullme_instance_builder_ps_text = function(course_dir) {
+  files = ullme_instance_builder_ps_files(course_dir)
+  if (!length(files)) return("- No files found in materials/ps.")
+  paste0("- ", files, collapse="\n")
+}
+
+
+ullme_example_tutor_document_path = function(spec, docid,
+                                              instanceid="example_1") {
+  directory = trimws(paste0(spec$pref_doc_dir %||% "ps")[1])
+  if (!nzchar(directory)) directory = "ps"
+  directory = gsub("^/+|/+$", "", gsub("\\\\", "/", directory))
+  formats = trimws(paste0(unlist(
+    spec$pref_format %||% list(),
+    use.names=FALSE
+  )))
+  formats = formats[nzchar(formats)]
+  extension = if (length(formats)) formats[[1]] else "md"
+  extension = sub("^\\.+", "", tolower(extension))
+  safe_docid = gsub("[^a-z0-9_-]+", "_", tolower(docid))
+  paste0(directory, "/", instanceid, "_", safe_docid, ".", extension)
+}
+
+
+ullme_example_tutor_instances_yaml = function(definition) {
+  if (!is.list(definition)) stop("An AI Tutor definition is required.")
+  instance_specs = ullme_normalize_tutor_doc_specs(
+    definition$docs_per_instance
+  )
+  course_specs = ullme_normalize_tutor_doc_specs(
+    definition$docs_per_course
+  )
+  instance_docs = lapply(names(instance_specs), function(docid) {
+    as.list(ullme_example_tutor_document_path(
+      instance_specs[[docid]],
+      docid=docid,
+      instanceid="example_1"
+    ))
+  })
+  names(instance_docs) = names(instance_specs)
+  course_docs = lapply(names(course_specs), function(docid) {
+    as.list(ullme_example_tutor_document_path(
+      course_specs[[docid]],
+      docid=docid,
+      instanceid="course"
+    ))
+  })
+  names(course_docs) = names(course_specs)
+  instances = if (length(instance_specs)) {
+    list(list(instanceid="example_1", docs=instance_docs))
+  } else {
+    list()
+  }
+  ullme_tutor_instances_yaml(
+    instances=instances,
+    course_docs=course_docs
+  )
 }
 
 
@@ -25,53 +79,21 @@ ullme_instance_builder_prompt = function(course_dir, tutorid,
   if (!file.exists(tutor_path)) stop("The requested course AI Tutor does not exist.")
   definition = yaml::read_yaml(tutor_path, eval.expr=FALSE)
   if (!is.list(definition)) stop("The AI Tutor definition is invalid.")
-  instance_data = ullme_read_course_ai_tutor_instances(course_dir, tutorid)
-  tutor_yaml = paste(readLines(
-    tutor_path, warn=FALSE, encoding="UTF-8"
-  ), collapse="\n")
-  instances_yaml = ullme_course_ai_tutor_instances_yaml(
-    course_dir, tutorid,
-    instances=instance_data$instances,
-    course_docs=instance_data$course_docs
-  )
-  candidates = ullme_suggest_course_ai_tutor_instances(course_dir, definition)
-  candidate_yaml = ullme_course_ai_tutor_instances_yaml(
-    course_dir, tutorid,
-    instances=candidates,
-    course_docs=instance_data$course_docs
-  )
-  summary = paste0(
-    "Label: ", definition$label %||% tutorid, "\n",
-    "Description: ", paste0(definition$description %||% "", collapse="\n"), "\n",
-    "Typical instances: ",
-    paste0(definition$instance_guidance %||%
-      "Infer instances carefully from document roles and filenames.", collapse="\n")
-  )
   semester = basename(dirname(course_dir))
   ullme_prompt_with_literal_values("instance_builder", values=list(
     semester=semester,
     courseid=basename(course_dir),
     tutorid=tutorid,
-    tutor_summary=summary,
-    tutor_yaml=tutor_yaml,
-    instances_yaml=instances_yaml,
-    candidate_yaml=candidate_yaml,
-    material_files=ullme_instance_builder_material_text(course_dir),
-    user_guidance=if (nzchar(trimws(user_guidance))) user_guidance else
-      "No additional guidance was supplied. Infer conservatively.",
-    tools=paste(
-      vapply(
-        c(
-          "list_material_files", "read_definition_yaml",
-          "read_tutor_instances_yaml", "convert_material_files",
-          "rewrite_tutor_instances_yaml", "change_status"
-        ),
-        function(name) paste0("- ", name, ": ",
-          ullme_tool_registry()[[name]]$description),
-        character(1)
-      ),
+    tutor_label=paste0(definition$label %||% tutorid)[1],
+    tutor_guidance=paste0(
+      definition$instance_guidance %||%
+        "Group matching problem and solution filenames.",
       collapse="\n"
-    )
+    ),
+    example_yaml=ullme_example_tutor_instances_yaml(definition),
+    ps_files=ullme_instance_builder_ps_text(course_dir),
+    user_guidance=if (nzchar(trimws(user_guidance))) user_guidance else
+      "No additional instruction."
   ))
 }
 
@@ -130,7 +152,7 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
   thinking = character(0)
   request = prompt
   changed = FALSE
-  max_rounds = if (isTRUE(allow_changes)) 3L else 1L
+  max_rounds = 1L
   deadline = as.numeric(Sys.time()) + as.numeric(timeout_seconds)[1]
   for (round in seq_len(max_rounds)) {
     remaining = deadline - as.numeric(Sys.time())
@@ -188,13 +210,6 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
     }
     changed = !identical(initial_instances, current_instances)
     if (changed || round >= max_rounds) break
-    request = paste(
-      "Continue the instance-builder task now.",
-      "Your preceding turn ended without changing instances.yml.",
-      "Do not repeat the plan or promise a future action.",
-      "Call the required tools in this response, verify the saved YAML,",
-      "and only then give the final summary."
-    )
   }
   combined_answer = paste(answers, collapse="\n\n")
   ullme_ai_interaction_finish(

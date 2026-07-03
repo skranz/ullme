@@ -63,8 +63,15 @@ ullme_prompt_with_literal_values = function(name, values=list()) {
 }
 
 
-ullme_tool_prompt_summary = function() {
+ullme_tool_prompt_summary = function(tool_names=NULL) {
   registry = ullme_tool_registry()
+  if (!is.null(tool_names)) {
+    unknown = setdiff(tool_names, names(registry))
+    if (length(unknown)) {
+      stop("Unknown tool prompt name: ", paste(unknown, collapse=", "))
+    }
+    registry = registry[tool_names]
+  }
   paste(vapply(names(registry), function(name) {
     paste0("- ", name, ": ", registry[[name]]$description)
   }, character(1)), collapse="\n")
@@ -83,7 +90,8 @@ ullme_skill_prompt_summary = function(app=getApp()) {
 }
 
 
-ullme_teacher_prompt_values = function(app=getApp(), context=list()) {
+ullme_teacher_prompt_values = function(app=getApp(), context=list(),
+                                        tool_names=NULL) {
   course = tryCatch(ullme_course_summary(app=app)$course, error=function(e) NULL)
   coursename = paste0(course$coursename %||% app$courseid %||% "")[1]
   active = ullme_active_skill(app=app)
@@ -95,7 +103,7 @@ ullme_teacher_prompt_values = function(app=getApp(), context=list()) {
     coursename=coursename,
     studio_view=paste0(context$studio_view %||% "")[1],
     open_file=open_file,
-    tools=ullme_tool_prompt_summary(),
+    tools=ullme_tool_prompt_summary(tool_names=tool_names),
     skills=ullme_skill_prompt_summary(app=app),
     active_skill=if (is.null(active)) {
       "No Skill is active."
@@ -110,8 +118,13 @@ ullme_teacher_prompt_values = function(app=getApp(), context=list()) {
 }
 
 
-ullme_teacher_system_prompt = function(app=getApp(), context=list()) {
-  values = ullme_teacher_prompt_values(app=app, context=context)
+ullme_teacher_system_prompt = function(app=getApp(), context=list(),
+                                        tool_names=NULL) {
+  values = ullme_teacher_prompt_values(
+    app=app,
+    context=context,
+    tool_names=tool_names
+  )
   fragments = c(
     "teacher_base",
     "teacher_language",

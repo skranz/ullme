@@ -373,6 +373,9 @@
     var dialog = document.createElement("section");
     var title = document.createElement("h2");
     var description = document.createElement("p");
+    var historyWrap = document.createElement("label");
+    var historyLabel = document.createElement("span");
+    var history = document.createElement("select");
     var guidance = document.createElement("textarea");
     var actions = document.createElement("div");
     var cancel = document.createElement("button");
@@ -382,11 +385,50 @@
     dialog.className = "ullme-instance-builder-dialog";
     title.textContent = "Make AI Tutor instances";
     description.textContent =
-      "Describe which materials belong together and any filename conventions. " +
-      "The AI helper will inspect files, convert suitable documents, and update instances.yml.";
+      "Describe filename conventions or which files belong together. " +
+      "The AI helper will use filenames in ps/ to write instances.yml. " +
+      "Convert source files manually before running it.";
+    var savedInputs = tutor.instance_builder_inputs || {};
+    var recentInputs = Array.isArray(savedInputs.recent)
+      ? savedInputs.recent.slice(0, 5)
+      : [];
+    var defaultInput = String(savedInputs.default || "").trim() ||
+      String(tutor.instance_guidance || "").trim();
+    historyWrap.className = "ullme-instance-builder-history";
+    historyLabel.textContent = "Reuse a recent instruction";
+    history.setAttribute("aria-label", "Recent instance-builder instructions");
+    var historyPlaceholder = document.createElement("option");
+    historyPlaceholder.value = "";
+    historyPlaceholder.textContent = recentInputs.length
+      ? "Choose one of the last saved instructions"
+      : "No saved instructions yet";
+    history.appendChild(historyPlaceholder);
+    recentInputs.forEach(function (record, index) {
+      var option = document.createElement("option");
+      var text = String(record.text || "").trim();
+      var scope = record.scope === "course" ? "This course" : "My prompts";
+      var preview = text.replace(/\s+/g, " ");
+      if (preview.length > 82) preview = preview.slice(0, 79) + "…";
+      option.value = String(index);
+      option.textContent = scope + " · " + preview;
+      if (text === defaultInput) option.selected = true;
+      history.appendChild(option);
+    });
+    history.disabled = recentInputs.length === 0;
+    history.addEventListener("change", function () {
+      if (!history.value) return;
+      var record = recentInputs[Number(history.value)];
+      if (record) guidance.value = String(record.text || "");
+    });
     guidance.placeholder =
-      'Example: Create one problem-set instance per DOCX in ps/. Solution files end in "solution".';
-    guidance.value = tutor.instance_guidance || "";
+      'Example: Create one instance per problem set. Solution files end in "solution".';
+    guidance.value = defaultInput;
+    guidance.addEventListener("input", function () {
+      var selected = recentInputs[Number(history.value)];
+      if (!selected || String(selected.text || "") !== guidance.value) {
+        history.value = "";
+      }
+    });
     actions.className = "ullme-dialog-actions";
     cancel.type = "button";
     cancel.className = "ullme-secondary-action";
@@ -400,11 +442,25 @@
         window.alert("The AI helper is not available.");
         return;
       }
+      var submittedGuidance = guidance.value.trim();
+      if (submittedGuidance) {
+        var record = {
+          text: submittedGuidance,
+          scope: "course",
+          saved_at: new Date().toISOString()
+        };
+        recentInputs = [record].concat(recentInputs.filter(function (item) {
+          return String(item.text || "").trim() !== submittedGuidance;
+        })).slice(0, 5);
+        tutor.instance_builder_inputs = tutor.instance_builder_inputs || {};
+        tutor.instance_builder_inputs.recent = recentInputs;
+        tutor.instance_builder_inputs.default = submittedGuidance;
+      }
       backdrop.remove();
       window.ullme.startInstanceBuilder({
         tutorid: tutor.tutorid,
         label: tutor.label || tutor.tutorid,
-        guidance: guidance.value.trim()
+        guidance: submittedGuidance
       });
     });
     backdrop.addEventListener("click", function (event) {
@@ -413,6 +469,9 @@
     [cancel, start].forEach(function (button) { actions.appendChild(button); });
     dialog.appendChild(title);
     dialog.appendChild(description);
+    historyWrap.appendChild(historyLabel);
+    historyWrap.appendChild(history);
+    dialog.appendChild(historyWrap);
     dialog.appendChild(guidance);
     dialog.appendChild(actions);
     backdrop.appendChild(dialog);
