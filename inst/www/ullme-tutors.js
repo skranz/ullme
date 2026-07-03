@@ -6,6 +6,7 @@
     activeSkill: null,
     selectedTutorId: "",
     activeTab: "instances",
+    yamlTab: "definition",
     tutorPaneActive: false,
     initialized: false
   };
@@ -654,34 +655,141 @@
 
   function yamlEditor(tutor) {
     var panel = document.createElement("section");
+    var tabs = document.createElement("nav");
     var note = document.createElement("div");
     var editor = document.createElement("textarea");
     var actions = document.createElement("div");
     var save = document.createElement("button");
     panel.className = "ullme-tutor-tab-panel ullme-tutor-yaml-panel";
+    tabs.className = "ullme-tutor-yaml-tabs";
+    [
+      { id: "definition", label: "Definition" },
+      { id: "instances", label: "Instances" }
+    ].forEach(function (tab) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "ullme-tutor-yaml-tab";
+      if (state.yamlTab === tab.id) {
+        button.classList.add("ullme-tutor-yaml-tab-active");
+      }
+      button.textContent = tab.label;
+      button.addEventListener("click", function () {
+        state.yamlTab = tab.id;
+        renderTutorDetail();
+      });
+      tabs.appendChild(button);
+    });
     note.className = "ullme-tutor-yaml-note";
-    note.textContent = "This is the course-local definition used by the Tutor.";
-    editor.id = "ullme_tutor_yaml";
+    note.textContent = state.yamlTab === "definition"
+      ? "This is the course-local definition used by the Tutor."
+      : "These are the course-local document assignments for Tutor instances.";
+    editor.id = state.yamlTab === "definition"
+      ? "ullme_tutor_yaml"
+      : "ullme_tutor_instances_yaml";
     editor.className = "ullme-tutor-yaml-editor";
     editor.spellcheck = false;
-    editor.value = tutor.yaml_content || "";
+    editor.value = state.yamlTab === "definition"
+      ? (tutor.yaml_content || "")
+      : (tutor.instances_yaml_content || "course_docs: {}\ninstances: []");
     actions.className = "ullme-tutor-form-actions";
     save.type = "button";
     save.className = "ullme-primary-action ullme-tutor-save-button";
-    save.textContent = "Save YAML";
+    save.textContent = state.yamlTab === "definition"
+      ? "Save definition YAML"
+      : "Save instance YAML";
     save.addEventListener("click", function () {
       save.disabled = true;
-      sendEvent("ullme_ai_tutor_save_event", {
-        tutorid: tutor.tutorid,
-        mode: "yaml",
-        yaml_content: editor.value
-      });
+      if (state.yamlTab === "definition") {
+        sendEvent("ullme_ai_tutor_save_event", {
+          tutorid: tutor.tutorid,
+          mode: "yaml",
+          yaml_content: editor.value
+        });
+      } else {
+        sendEvent("ullme_ai_tutor_instances_yaml_save_event", {
+          tutorid: tutor.tutorid,
+          yaml_content: editor.value
+        });
+      }
     });
+    if (state.yamlTab === "instances") {
+      actions.appendChild(conversionMenu(tutor));
+    }
     actions.appendChild(save);
+    panel.appendChild(tabs);
     panel.appendChild(note);
     panel.appendChild(editor);
     panel.appendChild(actions);
     return panel;
+  }
+
+  function conversionMenu(tutor) {
+    var details = document.createElement("details");
+    var summary = document.createElement("summary");
+    var menu = document.createElement("div");
+    var files = document.createElement("select");
+    var from = document.createElement("select");
+    var to = document.createElement("select");
+    var overwrite = document.createElement("label");
+    var overwriteInput = document.createElement("input");
+    var convert = document.createElement("button");
+    details.className = "ullme-conversion-menu";
+    summary.textContent = "Convert file type";
+    menu.className = "ullme-conversion-menu-body";
+    files.multiple = true;
+    files.className = "ullme-conversion-files";
+    files.setAttribute("aria-label", "Documents to convert");
+    (tutor.conversion_files || []).forEach(function (path) {
+      var option = document.createElement("option");
+      option.value = path;
+      option.textContent = path;
+      files.appendChild(option);
+    });
+    appendFormatOption(from, "", "From: automatic");
+    (tutor.conversion_input_formats || []).forEach(function (format) {
+      appendFormatOption(from, format, "From: " + format);
+    });
+    appendFormatOption(to, "preferred", "To: preferred by definition");
+    (tutor.conversion_output_formats || []).forEach(function (format) {
+      appendFormatOption(to, format, "To: " + format);
+    });
+    overwriteInput.type = "checkbox";
+    overwrite.appendChild(overwriteInput);
+    overwrite.appendChild(document.createTextNode(" Replace existing"));
+    convert.type = "button";
+    convert.className = "ullme-secondary-action ullme-tutor-convert-button";
+    convert.textContent = "Convert selected";
+    convert.addEventListener("click", function () {
+      var paths = Array.prototype.map.call(
+        files.selectedOptions || [],
+        function (option) { return option.value; }
+      );
+      if (!paths.length) {
+        window.alert("Select at least one document to convert.");
+        return;
+      }
+      convert.disabled = true;
+      sendEvent("ullme_ai_tutor_convert_event", {
+        tutorid: tutor.tutorid,
+        paths: paths,
+        from: from.value,
+        to: to.value,
+        overwrite: overwriteInput.checked
+      });
+    });
+    [files, from, to, overwrite, convert].forEach(function (item) {
+      menu.appendChild(item);
+    });
+    details.appendChild(summary);
+    details.appendChild(menu);
+    return details;
+  }
+
+  function appendFormatOption(select, value, text) {
+    var option = document.createElement("option");
+    option.value = value;
+    option.textContent = text;
+    select.appendChild(option);
   }
 
   function splitList(value) {
@@ -749,7 +857,9 @@
 
   function saveComplete(result) {
     Array.prototype.forEach.call(
-      document.querySelectorAll(".ullme-tutor-save-button"),
+      document.querySelectorAll(
+        ".ullme-tutor-save-button, .ullme-tutor-convert-button"
+      ),
       function (button) { button.disabled = false; }
     );
     if (!result || result.ok === false) {
@@ -764,6 +874,7 @@
   window.ullme = window.ullme || {};
   window.ullme.aiTutorSaveComplete = saveComplete;
   window.ullme.aiTutorInstancesSaveComplete = saveComplete;
+  window.ullme.aiTutorConversionComplete = saveComplete;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

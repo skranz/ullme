@@ -114,6 +114,26 @@ utool_list_ai_tutors = function(app=getApp()) {
 }
 
 
+utool_read_tutor_instances_yaml = function(tutorid, app=getApp()) {
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) stop("Select a course first.")
+  tutorid = ullme_clean_definition_id(tutorid)
+  tutor_path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
+  if (!file.exists(tutor_path)) stop("The requested course AI Tutor does not exist.")
+  instance_data = ullme_read_course_ai_tutor_instances(course_dir, tutorid)
+  list(
+    tutorid=tutorid,
+    filename="instances.yml",
+    content=ullme_course_ai_tutor_instances_yaml(
+      course_dir=course_dir,
+      tutorid=tutorid,
+      instances=instance_data$instances,
+      course_docs=instance_data$course_docs
+    )
+  )
+}
+
+
 utool_list_skills = function(app=getApp()) {
   lapply(ullme_skill_catalog(app=app), function(skill) {
     list(
@@ -223,7 +243,11 @@ utool_copy_material = function(source_courseid, source_category, source_path,
     changes=list(ullme_change_copy(source, target, overwrite=overwrite)),
     app=app
   )
-  ullme_tool_change_result(ullme_submit_change(operation, app=app))
+  result = ullme_submit_change(operation, app=app)
+  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+    ullme_send_course_state(app=app)
+  }
+  ullme_tool_change_result(result)
 }
 
 
@@ -259,7 +283,48 @@ utool_rewrite_definition_yaml = function(kind, definitionid, source,
     changes=list(ullme_change_write(target, yaml_content)),
     app=app
   )
-  ullme_tool_change_result(ullme_submit_change(operation, app=app))
+  result = ullme_submit_change(operation, app=app)
+  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+    ullme_send_course_state(app=app)
+  }
+  ullme_tool_change_result(result)
+}
+
+
+utool_rewrite_tutor_instances_yaml = function(tutorid, yaml_content,
+                                               app=getApp()) {
+  result = ullme_save_course_ai_tutor_instances_yaml(
+    tutorid=tutorid,
+    yaml_content=yaml_content,
+    origin="agent",
+    app=app
+  )
+  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+    ullme_send_course_state(app=app)
+  }
+  ullme_tool_change_result(result)
+}
+
+
+utool_convert_material_files = function(courseid, paths, tutorid,
+                                         semester="sel", from="",
+                                         to="preferred", overwrite=FALSE,
+                                         app=getApp()) {
+  course_dir = ullme_tool_course_dir(semester, courseid, app=app)
+  result = ullme_convert_material_files(
+    paths=paths,
+    to=to,
+    from=from,
+    tutorid=tutorid,
+    overwrite=overwrite,
+    origin="agent",
+    course_dir=course_dir,
+    app=app
+  )
+  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+    ullme_send_course_state(app=app)
+  }
+  result
 }
 
 

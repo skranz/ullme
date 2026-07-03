@@ -73,6 +73,14 @@ editable definition copied from a flat package template in
 define the required document roles. Reviewed assignments are stored in
 `course/ai_tutors/<tutorid>/instances.yml`.
 
+The YAML pane exposes the complete course-local `tutor.yml` and `instances.yml`
+as Definition and Instances subtabs. Instance discovery scans preferred material
+directories recursively. Text formats are preferred first, then Pandoc-readable
+DOCX/ODT files, and PDF is the final fallback. `R/convert.R` performs Pandoc
+conversions beside the source document and extracts media into a shared
+`figures--<document-stem>` sibling directory. The Instances YAML subtab and the
+teacher assistant can both invoke these conversions.
+
 Skills belong to the teacher assistant rather than the course tab row. A
 composer button opens the resolved Skill catalog. Selecting a Skill displays
 its introduction, starter prompts, and composer placeholder above the composer

@@ -513,6 +513,10 @@ ullme_handle_change_approval = function(operation_id=NULL, approved=FALSE,
   operation = app$pending_changes[[operation_id]]
   if (is.null(operation)) return(invisible(FALSE))
   app$pending_changes[[operation_id]] = NULL
+  cleanup_dir = operation$cleanup_dir %||% NULL
+  on.exit(if (!is.null(cleanup_dir) && dir.exists(cleanup_dir)) {
+    try(ullme_remove_tempdir(cleanup_dir, app=app), silent=TRUE)
+  }, add=TRUE)
   age = suppressWarnings(difftime(
     Sys.time(),
     as.POSIXct(operation$created_at, format="%Y-%m-%dT%H:%M:%OS%z"),

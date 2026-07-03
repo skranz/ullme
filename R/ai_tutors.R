@@ -307,18 +307,21 @@ ullme_tutor_spec_files = function(course_dir, spec) {
     no..=TRUE,
     include.dirs=FALSE
   )
-  formats = tolower(paste0(unlist(spec$pref_format %||% list(), use.names=FALSE)))
-  if (length(formats) > 0) {
-    keep = tolower(tools::file_ext(paths)) %in% formats
-    paths = paths[keep]
-  }
+  keep = tolower(tools::file_ext(paths)) %in% ullme_document_candidate_formats()
+  paths = paths[keep]
   sort(gsub("\\\\", "/", file.path(directory, paths)))
 }
 
 
-ullme_tutor_file_key = function(path, docid) {
+ullme_tutor_file_key = function(path, docid, directory="") {
   restore.point("ullme_tutor_file_key")
-  stem = tolower(tools::file_path_sans_ext(basename(path)))
+  path = gsub("\\\\", "/", paste0(path)[1])
+  directory = gsub("\\\\", "/", paste0(directory %||% "")[1])
+  relative = if (nzchar(directory) && startsWith(path, paste0(directory, "/"))) {
+    substring(path, nchar(directory) + 2L)
+  } else path
+  parent = dirname(relative)
+  stem = tolower(tools::file_path_sans_ext(basename(relative)))
   tokens = unique(c(
     tolower(docid),
     unlist(strsplit(tolower(docid), "[_-]+")),
@@ -327,7 +330,8 @@ ullme_tutor_file_key = function(path, docid) {
   tokens = tokens[nzchar(tokens)]
   suffix = paste0("([_-](", paste(ullme_regex_escape(tokens), collapse="|"), "))+$")
   stem = sub(suffix, "", stem, perl=TRUE)
-  key = gsub("[^a-z0-9]+", "_", stem)
+  key = paste(if (!parent %in% c("", ".")) parent else "", stem, sep="_")
+  key = gsub("[^a-z0-9]+", "_", key)
   gsub("^_+|_+$", "", key)
 }
 
@@ -365,20 +369,28 @@ ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
     anchor_files,
     ullme_tutor_file_key,
     character(1),
-    docid=anchor
+    docid=anchor,
+    directory=specs[[anchor]]$pref_doc_dir
   )
   unique_keys = unique(anchor_keys[nzchar(anchor_keys)])
   lapply(unique_keys, function(key) {
     docs = list()
-    docs[[anchor]] = as.list(anchor_files[anchor_keys == key])
+    docs[[anchor]] = as.list(ullme_preferred_document_file(
+      anchor_files[anchor_keys == key],
+      specs[[anchor]]$pref_format
+    ))
     for (docid in docids[-1]) {
       candidate_keys = vapply(
         files[[docid]],
         ullme_tutor_file_key,
         character(1),
-        docid=docid
+        docid=docid,
+        directory=specs[[docid]]$pref_doc_dir
       )
-      docs[[docid]] = as.list(files[[docid]][candidate_keys == key])
+      docs[[docid]] = as.list(ullme_preferred_document_file(
+        files[[docid]][candidate_keys == key],
+        specs[[docid]]$pref_format
+      ))
     }
     list(instanceid=key, docs=docs, source="suggested")
   })
@@ -418,10 +430,46 @@ ullme_course_ai_tutors = function(app=getApp()) {
     definition$course_docs = instance_data$course_docs
     definition$instance_count = length(instances)
     definition$instance_assignments_saved = isTRUE(instance_data$exists)
+    definition$instances_yaml_content = ullme_course_ai_tutor_instances_yaml(
+      course_dir=course_dir,
+      tutorid=tutorid,
+      instances=instances,
+      course_docs=instance_data$course_docs
+    )
+    conversion_specs = c(
+      ullme_normalize_tutor_doc_specs(value$docs_per_instance),
+      ullme_normalize_tutor_doc_specs(value$docs_per_course)
+    )
+    conversion_files = unique(unlist(lapply(
+      conversion_specs,
+      function(spec) ullme_tutor_spec_files(course_dir, spec)
+    ), use.names=FALSE))
+    definition$conversion_files = as.list(sort(conversion_files))
+    definition$conversion_input_formats = as.list(ullme_document_input_formats())
+    definition$conversion_output_formats = as.list(ullme_document_output_formats())
     definition
   })
   tutors = tutors[!vapply(tutors, is.null, logical(1))]
   tutors[order(vapply(tutors, function(x) x$label, character(1)))]
+}
+
+
+ullme_tutor_instances_yaml = function(instances=list(), course_docs=list()) {
+  trimws(yaml::as.yaml(list(
+    course_docs=course_docs %||% list(),
+    instances=instances %||% list()
+  )))
+}
+
+
+ullme_course_ai_tutor_instances_yaml = function(course_dir, tutorid,
+                                                 instances=list(),
+                                                 course_docs=list()) {
+  path = ullme_course_ai_tutor_instances_path(course_dir, tutorid)
+  if (file.exists(path)) {
+    return(paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n"))
+  }
+  ullme_tutor_instances_yaml(instances=instances, course_docs=course_docs)
 }
 
 
@@ -632,6 +680,7 @@ ullme_validate_tutor_document_assignment = function(path, course_dir) {
 
 ullme_save_course_ai_tutor_instances = function(tutorid, instances,
                                                  course_docs=NULL,
+                                                 origin="ui",
                                                  app=getApp()) {
   restore.point("ullme_save_course_ai_tutor_instances")
   if (!identical(app$role, "teacher")) stop("Only teachers can edit AI Tutors.")
@@ -708,7 +757,7 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
   operation = ullme_new_change(
     action="definition_edit",
     summary=paste0("Save AI Tutor instances for ", tutorid),
-    origin="ui",
+    origin=origin,
     details=list(kind="tutor_instances", tutorid=tutorid),
     changes=list(ullme_change_write(path, content)),
     app=app
@@ -716,6 +765,31 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
   result = ullme_submit_change(operation, app=app)
   if (!isTRUE(result$ok)) stop(result$message %||% "Could not save Tutor instances.")
   result
+}
+
+
+ullme_save_course_ai_tutor_instances_yaml = function(tutorid, yaml_content,
+                                                      origin="ui",
+                                                      app=getApp()) {
+  parsed = ullme_parse_yaml_text(
+    paste0(yaml_content %||% "", collapse="\n"),
+    "instances.yml"
+  )
+  ullme_validation_stop(parsed)
+  value = parsed$value
+  if (!is.list(value)) stop("instances.yml must contain a YAML mapping.")
+  unknown = setdiff(names(value), c("course_docs", "instances"))
+  if (length(unknown)) {
+    stop("Unknown instances.yml field", if (length(unknown) > 1) "s" else "",
+         ": ", paste(unknown, collapse=", "))
+  }
+  ullme_save_course_ai_tutor_instances(
+    tutorid=tutorid,
+    instances=value$instances %||% list(),
+    course_docs=value$course_docs %||% list(),
+    origin=origin,
+    app=app
+  )
 }
 
 
@@ -790,6 +864,54 @@ ullme_handle_ai_tutor_instances_save = function(tutorid=NULL, instances=NULL,
   })
   callJS(
     .fun="window.ullme.aiTutorInstancesSaveComplete",
+    .args=list(result),
+    .app=app
+  )
+  invisible(result)
+}
+
+
+ullme_handle_ai_tutor_instances_yaml_save = function(tutorid=NULL,
+                                                      yaml_content=NULL,
+                                                      app=getApp(), ...) {
+  result = tryCatch({
+    ullme_save_course_ai_tutor_instances_yaml(
+      tutorid=tutorid,
+      yaml_content=yaml_content,
+      app=app
+    )
+    ullme_send_course_state(app=app)
+    list(ok=TRUE, message="Tutor instance YAML saved.")
+  }, error=function(e) list(ok=FALSE, message=conditionMessage(e)))
+  callJS(
+    .fun="window.ullme.aiTutorInstancesSaveComplete",
+    .args=list(result),
+    .app=app
+  )
+  invisible(result)
+}
+
+
+ullme_handle_ai_tutor_convert = function(tutorid=NULL, paths=NULL, to="",
+                                          from="", overwrite=FALSE,
+                                          app=getApp(), ...) {
+  result = tryCatch(
+    ullme_convert_material_files(
+      paths=paths,
+      to=to,
+      from=from,
+      tutorid=tutorid,
+      overwrite=isTRUE(overwrite),
+      origin="ui",
+      app=app
+    ),
+    error=function(e) list(ok=FALSE, status="error", message=conditionMessage(e))
+  )
+  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+    ullme_send_course_state(app=app)
+  }
+  callJS(
+    .fun="window.ullme.aiTutorConversionComplete",
     .args=list(result),
     .app=app
   )

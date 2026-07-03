@@ -3544,6 +3544,55 @@ body {
   font-size: 11px;
 }
 
+.ullme-tutor-yaml-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.ullme-tutor-yaml-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #69716d;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+
+.ullme-tutor-yaml-tab-active {
+  border-bottom-color: #4e8a70;
+  color: #225940;
+}
+
+.ullme-conversion-menu {
+  position: relative;
+  margin-right: auto;
+}
+
+.ullme-conversion-menu > summary {
+  cursor: pointer;
+  color: #225940;
+  padding: 7px 10px;
+}
+
+.ullme-conversion-menu-body {
+  position: absolute;
+  z-index: 8;
+  bottom: calc(100% + 5px);
+  left: 0;
+  display: grid;
+  min-width: 360px;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d9dfdc;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(33, 49, 40, 0.14);
+}
+
+.ullme-conversion-files {
+  min-height: 120px;
+}
+
 .ullme-tutor-yaml-editor {
   box-sizing: border-box;
   width: 100%;

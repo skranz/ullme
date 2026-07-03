@@ -35,6 +35,49 @@ valid_tutor = paste(
 stopifnot(ullme_validate_definition_yaml("tutor", "tutor1", valid_tutor)$ok)
 stopifnot(!ullme_validate_definition_yaml("tutor", "other", valid_tutor)$ok)
 stopifnot(!ullme_parse_yaml_text("a: [", "bad.yaml")$ok)
+registry = ullme_tool_registry()
+new_tools = c(
+  "read_tutor_instances_yaml",
+  "rewrite_tutor_instances_yaml",
+  "convert_material_files"
+)
+stopifnot(
+  all(new_tools %in% names(registry)),
+  all(vapply(
+    paste0("utool_", new_tools),
+    exists,
+    logical(1),
+    mode="function",
+    envir=asNamespace("ullme")
+  ))
+)
+
+course_dir = file.path(
+  root, "teachers", "alice", "courses", "WS2526", "micro"
+)
+dir.create(file.path(course_dir, "materials", "ps"), recursive=TRUE)
+dir.create(file.path(course_dir, "ai_tutors", "tutor1"), recursive=TRUE)
+writeLines(valid_tutor, file.path(course_dir, "ai_tutors", "tutor1", "tutor.yml"))
+writeLines("problem", file.path(course_dir, "materials", "ps", "problem.md"))
+instances_yaml = paste(
+  "course_docs: {}",
+  "instances:",
+  "  - instanceid: problem",
+  "    docs: {}",
+  sep="\n"
+)
+saved_instances = ullme_save_course_ai_tutor_instances_yaml(
+  "tutor1", instances_yaml, origin="ui", app=app
+)
+stopifnot(
+  saved_instances$ok,
+  file.exists(file.path(course_dir, "ai_tutors", "tutor1", "instances.yml"))
+)
+read_instances = utool_read_tutor_instances_yaml("tutor1", app=app)
+stopifnot(
+  identical(read_instances$tutorid, "tutor1"),
+  grepl("instanceid: problem", read_instances$content, fixed=TRUE)
+)
 
 target = file.path(root, "teachers", "alice", "note.yaml")
 writeLines("value: before", target)
@@ -49,7 +92,7 @@ result = ullme_submit_change(operation, app=app)
 stopifnot(result$ok, identical(readLines(target), "value: after"))
 
 history = ullme_change_history(app=app)
-stopifnot(length(history) == 1L)
+stopifnot(length(history) >= 2L)
 undo = ullme_undo_change(history[[1]]$id, origin="ui", app=app)
 stopifnot(undo$ok, identical(readLines(target), "value: before"))
 

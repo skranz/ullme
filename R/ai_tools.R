@@ -30,6 +30,10 @@ ullme_tool_registry = function() {
       description="List the complete course-local AI Tutors in the selected course, including instance counts.",
       perm=ullme_tool_perm()
     ),
+    read_tutor_instances_yaml=list(
+      description="Read the complete instances.yml assignment YAML for a course AI Tutor.",
+      perm=ullme_tool_perm()
+    ),
     list_skills=list(
       description="List the Skill definitions visible to the current teacher, including source and description.",
       perm=ullme_tool_perm()
@@ -54,6 +58,14 @@ ullme_tool_registry = function() {
     rewrite_definition_yaml=list(
       description="Validate and replace YAML for a course AI Tutor or editable personal Skill.",
       perm=ullme_tool_perm(mutates=TRUE)
+    ),
+    rewrite_tutor_instances_yaml=list(
+      description="Validate and replace the complete instances.yml assignments for a course AI Tutor.",
+      perm=ullme_tool_perm(mutates=TRUE)
+    ),
+    convert_material_files=list(
+      description="Convert one or several recursive material documents with Pandoc. Paths are relative to materials and may be comma- or newline-separated; an empty or 'preferred' target uses the AI Tutor definition preference.",
+      perm=ullme_tool_perm(course_must_exist=TRUE, mutates=TRUE)
     ),
     rewrite_course_text_file=list(
       description="Validate and replace a text file in one of the current teacher's courses.",
@@ -226,8 +238,12 @@ ullme_default_tool_arg_spec = function() {
     overwrite=list(type="boolean", description="Whether an existing destination may be replaced.", required=FALSE),
     kind=list(type="string", description="Definition kind: tutor or skill.", required=TRUE),
     definitionid=list(type="string", description="AI Tutor or Skill definition ID.", required=TRUE),
+    tutorid=list(type="string", description="Course AI Tutor ID used for assignments and preferred document formats.", required=TRUE),
     source=list(type="string", description="Definition source: course or package for Tutors; personal, general, or package for Skills.", required=TRUE),
     yaml_content=list(type="string", description="Complete replacement YAML text.", required=TRUE),
+    paths=list(type="string", description="One or more paths relative to the materials directory, separated by commas or newlines.", required=TRUE),
+    from=list(type="string", description="Optional Pandoc input format; empty infers it from each file extension.", required=FALSE),
+    to=list(type="string", description="Target format, or 'preferred' to use the AI Tutor definition.", required=FALSE),
     path=list(type="string", description="Relative path within the course directory.", required=TRUE),
     content=list(type="string", description="Complete replacement text-file content.", required=TRUE),
     operation_id=list(type="string", description="Change operation ID, or 'last' for the most recent committed change.", required=FALSE),

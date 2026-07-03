@@ -284,6 +284,18 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   eventHandler(
+    eventId = "ullme_ai_tutor_instances_yaml_save_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_instances_yaml_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_convert_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_convert,
+    app = app
+  )
+  eventHandler(
     eventId = "ullme_skill_activate_event",
     id = NULL,
     fun = ullme_handle_skill_activate,
