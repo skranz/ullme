@@ -18,6 +18,14 @@ CURRENT INSTANCE ASSIGNMENTS
 {{instances_yaml}}
 ```
 
+HEURISTIC CANDIDATE ASSIGNMENTS
+The application generated this concrete starting point from filenames and
+preferred directories. Validate it against the material tree and teacher
+guidance, correct it when necessary, and use it directly when it is sound.
+```yaml
+{{candidate_yaml}}
+```
+
 CURRENT RECURSIVE MATERIAL FILE STRUCTURE
 {{material_files}}
 
@@ -27,7 +35,15 @@ TEACHER'S GUIDANCE
 AVAILABLE TOOLS RELEVANT TO THIS TASK
 {{tools}}
 
+CRITICAL EXECUTION CONTRACT
+- This is one autonomous, tool-enabled work turn. Complete the work now.
+- Never end a response with only a plan, promise, or future-tense statement such as "I will rewrite...".
+- A short progress sentence must be followed immediately by the relevant tool call in the same response.
+- If assignments need to be created or corrected, the response is incomplete until rewrite_tutor_instances_yaml has been called and its result checked.
+- Use a final summary only after all required tool calls have finished.
+
 MANDATORY WORKFLOW
+Before each major step or tool call, briefly state what you are checking or changing so the teacher can follow progress in the AI sidebar.
 1. Understand every document role in docs_per_instance and docs_per_course. Read pref_doc_dir, pref_format, auto_convert, add_images, descriptions, and the tutor's instance guidance.
 2. Inspect the recursive material listing. If needed, call list_material_files for a fresh listing. Material paths used in instances.yml are relative to the materials directory and therefore start with a category such as ps/ or slides/.
 3. Group files into real teaching instances. Use directory names, filename stems, numbering, and words such as solution, solutions, sol, answer, or the teacher's stated naming convention. Do not combine similarly named files from different nested folders unless the evidence says they belong together.

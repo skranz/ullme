@@ -244,7 +244,8 @@ utool_copy_material = function(source_courseid, source_category, source_path,
     app=app
   )
   result = ullme_submit_change(operation, app=app)
-  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+  if (isTRUE(result$ok) && identical(result$status, "committed") &&
+      !isTRUE(app$headless)) {
     ullme_send_course_state(app=app)
   }
   ullme_tool_change_result(result)
@@ -284,7 +285,8 @@ utool_rewrite_definition_yaml = function(kind, definitionid, source,
     app=app
   )
   result = ullme_submit_change(operation, app=app)
-  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+  if (isTRUE(result$ok) && identical(result$status, "committed") &&
+      !isTRUE(app$headless)) {
     ullme_send_course_state(app=app)
   }
   ullme_tool_change_result(result)
@@ -299,7 +301,8 @@ utool_rewrite_tutor_instances_yaml = function(tutorid, yaml_content,
     origin="agent",
     app=app
   )
-  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+  if (isTRUE(result$ok) && identical(result$status, "committed") &&
+      !isTRUE(app$headless)) {
     ullme_send_course_state(app=app)
   }
   ullme_tool_change_result(result)
@@ -321,7 +324,8 @@ utool_convert_material_files = function(courseid, paths, tutorid,
     course_dir=course_dir,
     app=app
   )
-  if (isTRUE(result$ok) && identical(result$status, "committed")) {
+  if (isTRUE(result$ok) && identical(result$status, "committed") &&
+      !isTRUE(app$headless)) {
     ullme_send_course_state(app=app)
   }
   result

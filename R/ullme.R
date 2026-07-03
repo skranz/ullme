@@ -78,6 +78,11 @@ ullme_teacherid = function(app=getApp()) {
       is.na(show_chat_thinking)) {
     stop("show_chat_thinking must be TRUE or FALSE.")
   }
+  if (!is.logical(store_ai_interactions) ||
+      length(store_ai_interactions) != 1L ||
+      is.na(store_ai_interactions)) {
+    stop("store_ai_interactions must be TRUE or FALSE.")
+  }
   # Shiny's upload limit is process-wide, even though upload state is per app.
   current_upload_limit = getOption("shiny.maxRequestSize", 5 * 1024^2)
   options(shiny.maxRequestSize=max(current_upload_limit, max_upload_mb * 1024^2))
@@ -1454,6 +1459,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
 
   ai_input = if (nzchar(trimws(text))) text else "[uploaded image]"
   interaction_kind = "chat"
+  task_profile = ""
   if (is.list(instance_builder)) {
     tutorid = paste0(instance_builder$tutorid %||% "")[1]
     guidance = paste0(instance_builder$guidance %||% text, collapse="\n")
@@ -1472,6 +1478,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     }
     ai_input = built
     interaction_kind = "instance_builder"
+    task_profile = "instance_builder"
   }
   skill = ullme_active_skill(app=app)
   requested_skillid = paste0(skillid %||% "")[1]
@@ -1567,6 +1574,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         context=context %||% list(),
         system_instructions=system_instructions,
         include_thinking=isTRUE(app$show_chat_thinking),
+        task_profile=task_profile,
         on_update=function(text, thinking, done) {
           if (!isTRUE(request$active)) return(invisible(NULL))
           ullme_send_chat_stream_update(
@@ -1598,6 +1606,13 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       },
       onRejected=function(error) {
         if (!isTRUE(request$active)) return(invisible(NULL))
+        if (grepl(
+          "timed out",
+          tolower(conditionMessage(error)),
+          fixed=TRUE
+        )) {
+          try(job$controller$cancel("Model request timed out"), silent=TRUE)
+        }
         fail(error, text=job$state$text, thinking=job$state$thinking)
       }
     )
@@ -1608,6 +1623,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         model=model,
         context=context %||% list(),
         system_instructions=system_instructions,
+        task_profile=task_profile,
         app=app
       ),
       error=function(e) e

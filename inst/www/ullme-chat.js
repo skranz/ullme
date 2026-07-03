@@ -613,6 +613,56 @@
     sendChatEvent(payload);
   }
 
+  function startInstanceBuilder(options) {
+    options = options || {};
+    if (state.chatBusy) {
+      window.alert("Stop or wait for the current assistant response first.");
+      return;
+    }
+    var tutorid = String(options.tutorid || "");
+    if (!tutorid) return;
+    var guidance = String(options.guidance || "").trim();
+    var modelSelect = byId("ullme_model_select");
+    var clientMessageId = nextId("user");
+    var assistantMessageId = nextId("assistant");
+    var displayText = "Make instances for " +
+      String(options.label || tutorid) +
+      (guidance ? "\n\n" + guidance : "");
+    var payload = {
+      id: "ullme_submit_chat",
+      clientMessageId: clientMessageId,
+      assistantMessageId: assistantMessageId,
+      text: guidance,
+      model: modelSelect ? modelSelect.value : null,
+      skillid: null,
+      context: {
+        studio_view: "ai-tutors",
+        course_file: "",
+        courseid: (byId("ullme_course_select") || {}).getAttribute
+          ? byId("ullme_course_select").getAttribute("data-value")
+          : ""
+      },
+      uploads: [],
+      instance_builder: {
+        tutorid: tutorid,
+        guidance: guidance
+      },
+      nonce: Math.random()
+    };
+    state.chatBusy = true;
+    startChatWatchdog(assistantMessageId);
+    appendUserMessage({ id: clientMessageId, text: displayText, uploads: [] });
+    appendAssistantMessage({
+      id: assistantMessageId,
+      text: "Thinking...",
+      thinking: true
+    });
+    state.assistantRequests[assistantMessageId] = payload;
+    updateSubmitState();
+    scrollMessagesToBottom();
+    sendChatEvent(payload);
+  }
+
   function sendChatEvent(payload) {
     if (window.Shiny && Shiny.setInputValue) {
       Shiny.setInputValue("ullme_submit_chat_event", payload, { priority: "event" });
@@ -3526,6 +3576,7 @@
   window.ullme.courseFileSaveComplete = courseFileSaveComplete;
   window.ullme.courseFileError = courseFileError;
   window.ullme.updateModelCatalog = updateModelCatalog;
+  window.ullme.startInstanceBuilder = startInstanceBuilder;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

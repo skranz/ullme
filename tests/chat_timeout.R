@@ -37,3 +37,22 @@ stopifnot(
   controller$cancelled,
   identical(controller$reason, "Stopped by test")
 )
+
+resolved = promises::promise_resolve("ready")
+stopifnot(identical(ullme_await_promise(resolved, seconds=1), "ready"))
+
+cancelled = FALSE
+never = promises::promise(function(resolve, reject) NULL)
+await_error = tryCatch(
+  ullme_await_promise(
+    never,
+    seconds=0.02,
+    on_timeout=function() cancelled <<- TRUE
+  ),
+  error=identity
+)
+stopifnot(
+  inherits(await_error, "error"),
+  isTRUE(cancelled),
+  grepl("timed out after", conditionMessage(await_error), fixed=TRUE)
+)

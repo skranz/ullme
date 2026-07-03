@@ -89,14 +89,54 @@ ullme_definition_ai_rewrite = function(kind, definitionid, source, file,
     "\n\nCurrent selected file:\nFILE: ", file, "\n", content,
     "\n\nOther definition files and context:\n", context
   )
-  result = chat$chat_structured(
-    request,
-    type=ullme_definition_rewrite_type(),
-    echo="none"
+  interaction = ullme_ai_interaction_start(
+    input=paste(system_prompt, request, sep="\n\n"),
+    visible_text=instruction,
+    model=model %||% app$api_config$model,
+    kind="definition_assistant",
+    app=app
+  )
+  result = tryCatch(
+    chat$chat_structured(
+      request,
+      type=ullme_definition_rewrite_type(),
+      echo="none"
+    ),
+    error=function(e) {
+      ullme_ai_interaction_finish(
+        interaction,
+        status="error",
+        error=conditionMessage(e)
+      )
+      stop(e)
+    }
   )
   draft = paste0(result$content %||% "")[1]
-  if (!nzchar(draft)) stop("The model returned an empty draft.")
-  ullme_validate_definition_content(kind, definitionid, file, draft)
+  if (!nzchar(draft)) {
+    error = "The model returned an empty draft."
+    ullme_ai_interaction_finish(interaction, status="error", error=error)
+    stop(error)
+  }
+  tryCatch(
+    ullme_validate_definition_content(kind, definitionid, file, draft),
+    error=function(e) {
+      ullme_ai_interaction_finish(
+        interaction,
+        status="error",
+        text=draft,
+        error=conditionMessage(e)
+      )
+      stop(e)
+    }
+  )
+  ullme_ai_interaction_finish(
+    interaction,
+    text=paste0(
+      result$explanation %||% "Draft created.",
+      "\n\n",
+      draft
+    )
+  )
   list(
     content=draft,
     explanation=paste0(result$explanation %||% "Draft created.")[1],

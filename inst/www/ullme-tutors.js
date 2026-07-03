@@ -13,6 +13,7 @@
 
   var tutorIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>';
   var skillIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>';
+  var robotIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="3"></rect><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"></path></svg>';
 
   function byId(id) {
     return document.getElementById(id);
@@ -330,13 +331,10 @@
     actions.className = "ullme-tutor-form-actions ullme-instance-actions";
     suggest.type = "button";
     suggest.className = "ullme-secondary-action";
-    suggest.textContent = "Suggest from course files";
+    suggest.classList.add("ullme-instance-builder-button");
+    suggest.innerHTML = robotIcon + "<span>Make Instances</span>";
     suggest.addEventListener("click", function () {
-      body.innerHTML = "";
-      (Array.isArray(tutor.suggested_instances) ? tutor.suggested_instances : [])
-        .forEach(function (instance) {
-          body.appendChild(instanceEditorRow(instance, roles));
-        });
+      openInstanceBuilderDialog(tutor);
     });
     add.type = "button";
     add.className = "ullme-secondary-action";
@@ -366,6 +364,60 @@
       ), wrap);
     }
     return panel;
+  }
+
+  function openInstanceBuilderDialog(tutor) {
+    var existing = byId("ullme_instance_builder_dialog");
+    if (existing) existing.remove();
+    var backdrop = document.createElement("div");
+    var dialog = document.createElement("section");
+    var title = document.createElement("h2");
+    var description = document.createElement("p");
+    var guidance = document.createElement("textarea");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var start = document.createElement("button");
+    backdrop.id = "ullme_instance_builder_dialog";
+    backdrop.className = "ullme-instance-builder-backdrop";
+    dialog.className = "ullme-instance-builder-dialog";
+    title.textContent = "Make AI Tutor instances";
+    description.textContent =
+      "Describe which materials belong together and any filename conventions. " +
+      "The AI helper will inspect files, convert suitable documents, and update instances.yml.";
+    guidance.placeholder =
+      'Example: Create one problem-set instance per DOCX in ps/. Solution files end in "solution".';
+    guidance.value = tutor.instance_guidance || "";
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Cancel";
+    start.type = "button";
+    start.className = "ullme-primary-action";
+    start.innerHTML = robotIcon + "<span>Start AI helper</span>";
+    cancel.addEventListener("click", function () { backdrop.remove(); });
+    start.addEventListener("click", function () {
+      if (!window.ullme || !window.ullme.startInstanceBuilder) {
+        window.alert("The AI helper is not available.");
+        return;
+      }
+      backdrop.remove();
+      window.ullme.startInstanceBuilder({
+        tutorid: tutor.tutorid,
+        label: tutor.label || tutor.tutorid,
+        guidance: guidance.value.trim()
+      });
+    });
+    backdrop.addEventListener("click", function (event) {
+      if (event.target === backdrop) backdrop.remove();
+    });
+    [cancel, start].forEach(function (button) { actions.appendChild(button); });
+    dialog.appendChild(title);
+    dialog.appendChild(description);
+    dialog.appendChild(guidance);
+    dialog.appendChild(actions);
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    guidance.focus();
   }
 
   function instanceEditorRow(instance, roles) {
@@ -499,6 +551,13 @@
       "textarea",
       tutor.description || ""
     ));
+    basics.appendChild(field(
+      "Typical instances for the AI helper",
+      "ullme_tutor_instance_guidance",
+      "textarea",
+      tutor.instance_guidance || "",
+      "Explain filename conventions, solution matching, and what normally forms one instance."
+    ));
     customization.className = "ullme-tutor-form-section";
     customization.appendChild(sectionTitle("Customization and tools"));
     customization.appendChild(field(
@@ -547,6 +606,7 @@
           lang: valueOf("ullme_tutor_lang"),
           label: valueOf("ullme_tutor_label"),
           description: valueOf("ullme_tutor_description"),
+          instance_guidance: valueOf("ullme_tutor_instance_guidance"),
           default_personality: valueOf("ullme_tutor_default_personality"),
           allowed_tools: splitList(valueOf("ullme_tutor_tools")),
           allowed_student_customization: splitList(valueOf("ullme_tutor_customization")),

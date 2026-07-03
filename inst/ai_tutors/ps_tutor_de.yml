@@ -2,6 +2,12 @@ tutorid: ps_tutor_de
 label: Übungsblatt Tutor
 description: Hilft didaktisch sinnvoll Studis dabei ein Übungsblatt zu bearbeiten.
 
+instance_guidance: >
+  Erzeuge normalerweise eine Instanz pro Aufgabenblatt. Ordne eine
+  Lösungsdatei mit demselben Dateistamm zu, wenn ihr Name auf solution,
+  solutions, sol oder answer endet. Dateien aus verschiedenen Unterordnern
+  bleiben getrennte Instanzen.
+
 lang: de
 
 system_prompt: |

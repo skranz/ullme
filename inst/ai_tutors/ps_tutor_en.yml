@@ -2,6 +2,10 @@ tutorid: ps_tutor_en
 lang: en
 label: Problem Set Tutor
 description: Helps students work through a problem set without revealing its solution prematurely.
+instance_guidance: >
+  Usually create one instance per problem-set document. Match a solution file
+  with the same filename stem when its name ends in solution, solutions, sol,
+  or answer. Keep files from different nested folders as separate instances.
 
 system_prompt: |
 

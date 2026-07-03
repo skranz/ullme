@@ -45,6 +45,8 @@ The Tutor work surface has:
 Package Tutor templates are flat files at
 `inst/ai_tutors/<tutorid>.yml`. Their `docs_per_instance` and
 `docs_per_course` mappings define document IDs, preferred formats, conversion
-preferences, preferred material directories, and image extraction. When no
-saved instance assignment exists, uLLMe suggests assignments from matching
-course files for review.
+preferences, preferred material directories, and image extraction. The
+**Make Instances** action asks for teacher guidance, then runs the AI helper in
+the right sidebar. It recursively inspects course materials, performs supported
+conversions, rewrites the instance YAML through the normal approval-safe tool,
+and refreshes the Tutor UI.

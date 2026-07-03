@@ -121,8 +121,19 @@ ullme_local_base_url = function() {
 }
 
 
-ullme_nvidia_chat_profile = function(model) {
+ullme_nvidia_chat_profile = function(model, task_profile="") {
   model = tolower(paste0(model)[1])
+  task_profile = tolower(paste0(task_profile %||% "")[1])
+  if (identical(task_profile, "instance_builder") &&
+      grepl("nemotron", model, fixed=TRUE)) {
+    return(list(
+      max_tokens=8192,
+      api_args=list(
+        chat_template_kwargs=list(enable_thinking=TRUE),
+        reasoning_budget=4096
+      )
+    ))
+  }
   if (ullme_nvidia_model_matches(model, "google/gemma-4-31b-it")) {
     return(list(
       max_tokens=16384,
@@ -147,8 +158,9 @@ ullme_nvidia_chat_profile = function(model) {
 ullme_nvidia_chat = function(model=ullme_nvidia_default_model(),
                               api_key_file,
                               base_url=ullme_nvidia_base_url(),
-                              system_prompt=NULL) {
-  profile = ullme_nvidia_chat_profile(model)
+                              system_prompt=NULL,
+                              task_profile="") {
+  profile = ullme_nvidia_chat_profile(model, task_profile=task_profile)
   ellmer::chat_openai_compatible(
     base_url=sub("/+$", "", base_url),
     name="NVIDIA NIM",
@@ -167,14 +179,16 @@ ullme_nvidia_chat = function(model=ullme_nvidia_default_model(),
 }
 
 
-ullme_api_chat = function(config, model=config$model, system_prompt=NULL) {
+ullme_api_chat = function(config, model=config$model, system_prompt=NULL,
+                           task_profile="") {
   if (identical(config$provider, "fake")) return(NULL)
   if (identical(config$provider, "nvidia")) {
     return(ullme_nvidia_chat(
       model=model,
       api_key_file=config$api_key_file,
       base_url=config$base_url,
-      system_prompt=system_prompt
+      system_prompt=system_prompt,
+      task_profile=task_profile
     ))
   }
   ellmer::chat_openai_compatible(

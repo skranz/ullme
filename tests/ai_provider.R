@@ -72,6 +72,13 @@ stopifnot(
       "nvidia/nemotron-3-ultra-550b-a55b"
     )$api_args$reasoning_budget,
     16384
+  ),
+  identical(
+    ullme_nvidia_chat_profile(
+      "nvidia/nemotron-3-nano-30b-a3b",
+      task_profile="instance_builder"
+    )$api_args$reasoning_budget,
+    4096
   )
 )
 

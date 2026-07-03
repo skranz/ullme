@@ -81,6 +81,15 @@ conversions beside the source document and extracts media into a shared
 `figures--<document-stem>` sibling directory. The Instances YAML subtab and the
 teacher assistant can both invoke these conversions.
 
+The Instances tab's **Make Instances** action opens a guidance dialog and sends
+an instance-builder request through the normal assistant pane. The rendered
+`inst/prompts/instance_builder.txt` prompt includes the recursive material
+tree, Tutor definition, current instance YAML, teacher guidance, and available
+tools. The assistant may inspect files, convert Pandoc-readable documents, and
+atomically replace `instances.yml`; committed changes refresh the Tutor UI.
+`ullme_test_instance_builder()` exposes the same prompt and tool workflow
+outside Shiny for prompt development.
+
 Skills belong to the teacher assistant rather than the course tab row. A
 composer button opens the resolved Skill catalog. Selecting a Skill displays
 its introduction, starter prompts, and composer placeholder above the composer
@@ -94,8 +103,8 @@ The Definition Assistant is an optional adaptive panel. Opening it collapses
 the source library into a definition picker and divides the workspace between
 the editor and chat. Assistant rewrites modify only the browser's unsaved
 editor draft and provide Undo; the existing Save action remains the only path
-to disk. The fake-AI implementation exercises this protocol while structured
-responses from a real model remain to be connected.
+to disk. The fake-AI implementation exercises this protocol; real models
+return a validated structured draft.
 
 The student app builds a chat-first workspace without the Teacher Studio,
 teacher navigation, or pane resizers. It reuses the common chat implementation
@@ -308,9 +317,9 @@ Chat submission follows this sequence:
 1. JavaScript appends the user message immediately.
 2. JavaScript appends an assistant placeholder with an `assistantMessageId`.
 3. JavaScript sends `ullme_submit_chat_event`.
-4. R calls `ullme_ask_ai()`.
-5. R calls `window.ullme.receiveAssistantMessage(...)`.
-6. JavaScript replaces the placeholder and adds assistant actions.
+4. R starts an asynchronous model request and optional tool loop.
+5. Streaming updates replace the placeholder as text or thinking arrives.
+6. The completed update adds assistant actions and unlocks the composer.
 
 Only one pending `Thinking...` placeholder is rendered. Both browser and server
 apply a three-minute response watchdog. Provider errors replace that placeholder
@@ -324,6 +333,10 @@ inactive, cancels transport consumption, preserves any partial answer, and
 immediately unlocks the composer. Gemma 4 uses its own NVIDIA request profile:
 thinking is disabled through `chat_template_kwargs` and the Nemotron-specific
 `reasoning_budget` parameter is omitted.
+
+When `store_ai_interactions=TRUE` (the default), main chat, instance-builder,
+and Definition Assistant requests write prompt, response, thinking, error, and
+status metadata beneath the active course's `ai_interactions/` directory.
 
 The first assistant message comes from `ullme_intro_msg()` and can later become
 course- or user-specific.

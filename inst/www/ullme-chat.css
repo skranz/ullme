@@ -3410,6 +3410,55 @@ body {
   gap: 8px;
 }
 
+.ullme-instance-builder-button,
+.ullme-instance-builder-dialog .ullme-primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ullme-instance-builder-button .ullme-icon,
+.ullme-instance-builder-dialog .ullme-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.ullme-instance-builder-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(26, 31, 28, 0.4);
+}
+
+.ullme-instance-builder-dialog {
+  display: grid;
+  width: min(580px, 100%);
+  gap: 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 60px rgba(20, 30, 25, 0.24);
+  padding: 22px;
+}
+
+.ullme-instance-builder-dialog :where(h2, p) {
+  margin: 0;
+}
+
+.ullme-instance-builder-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 150px;
+  border: 1px solid #d5dcd8;
+  border-radius: 9px;
+  font: inherit;
+  line-height: 1.45;
+  padding: 10px;
+  resize: vertical;
+}
+
 .ullme-course-docs {
   margin-bottom: 2px;
 }

@@ -44,6 +44,9 @@ Assistant output is rendered as CommonMark Markdown by default. Pass
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait
 for complete responses. `teacherApp(show_chat_thinking=TRUE)` also shows
 provider-supplied thinking content in a closed, expandable field when present.
+AI requests and responses are stored below the active course's
+`ai_interactions/` directory by default; pass
+`store_ai_interactions=FALSE` to disable this debugging log.
 
 
 # Code Design

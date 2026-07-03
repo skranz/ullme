@@ -1,12 +1,51 @@
-ullme_chat_key = function(model, app=getApp()) {
+ullme_chat_key = function(model, task_profile="", app=getApp()) {
   paste(
     app$api_config$provider,
     model,
+    task_profile,
     app$userid %||% "",
     app$semester %||% "",
     app$courseid %||% "",
     sep="|"
   )
+}
+
+
+ullme_await_promise = function(promise, seconds=180,
+                                on_timeout=function() NULL) {
+  seconds = suppressWarnings(as.numeric(seconds)[1])
+  if (is.na(seconds) || seconds <= 0) stop("seconds must be positive.")
+  settled = FALSE
+  value = NULL
+  error = NULL
+  promises::then(
+    promise,
+    onFulfilled=function(result) {
+      value <<- result
+      settled <<- TRUE
+      NULL
+    },
+    onRejected=function(condition) {
+      error <<- condition
+      settled <<- TRUE
+      NULL
+    }
+  )
+  deadline = as.numeric(Sys.time()) + seconds
+  while (!settled && as.numeric(Sys.time()) < deadline) {
+    remaining = deadline - as.numeric(Sys.time())
+    later::run_now(timeoutSecs=max(0, min(0.1, remaining)), all=TRUE)
+  }
+  if (!settled) {
+    try(on_timeout(), silent=TRUE)
+    stop(paste0(
+      "The model request timed out after ",
+      format(seconds, trim=TRUE),
+      " seconds."
+    ))
+  }
+  if (!is.null(error)) stop(error)
+  value
 }
 
 
@@ -43,15 +82,32 @@ ullme_promise_timeout = function(promise, seconds=180) {
 }
 
 
-ullme_teacher_chat = function(model=NULL, system_prompt=NULL, app=getApp()) {
+ullme_teacher_chat = function(model=NULL, system_prompt=NULL,
+                               task_profile="", app=getApp()) {
   config = app$api_config
   model = ullme_model_id(model, app=app)
-  key = ullme_chat_key(model, app=app)
+  key = ullme_chat_key(model, task_profile=task_profile, app=app)
   chat = app$teacher_chats[[key]]
   if (is.null(chat)) {
-    chat = ullme_api_chat(config, model=model, system_prompt=system_prompt)
+    chat = ullme_api_chat(
+      config,
+      model=model,
+      system_prompt=system_prompt,
+      task_profile=task_profile
+    )
     if (!is.null(chat)) {
-      chat$register_tools(ullme_tools(app=app))
+      tools = ullme_tools(app=app)
+      if (identical(task_profile, "instance_builder")) {
+        tools = tools[c(
+          "list_material_files",
+          "read_definition_yaml",
+          "read_tutor_instances_yaml",
+          "convert_material_files",
+          "rewrite_tutor_instances_yaml",
+          "change_status"
+        )]
+      }
+      chat$register_tools(tools)
       app$teacher_chats[[key]] = chat
     }
   } else if (!is.null(system_prompt)) {
@@ -79,6 +135,7 @@ ullme_ask_ai = function(input, model=NULL, context=list(),
 
 ullme_ai_request_chat = function(model=NULL, context=list(),
                                   system_instructions=NULL,
+                                  task_profile="",
                                   app=getApp()) {
   restore.point("ullme_ai_request_chat")
   if (!identical(app$role, "teacher")) {
@@ -88,7 +145,12 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
   if (!is.null(system_instructions) && nzchar(system_instructions)) {
     prompt = paste(prompt, system_instructions, sep="\n\n")
   }
-  chat = ullme_teacher_chat(model=model, system_prompt=prompt, app=app)
+  chat = ullme_teacher_chat(
+    model=model,
+    system_prompt=prompt,
+    task_profile=task_profile,
+    app=app
+  )
   if (is.null(chat)) stop("No model is configured.")
   chat
 }
@@ -114,6 +176,7 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 ullme_start_ai_stream = function(input, model=NULL, context=list(),
                                   system_instructions=NULL,
                                   include_thinking=FALSE,
+                                  task_profile="",
                                   on_update=function(...) NULL,
                                   app=getApp()) {
   restore.point("ullme_start_ai_stream")
@@ -121,6 +184,7 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     model=model,
     context=context,
     system_instructions=system_instructions,
+    task_profile=task_profile,
     app=app
   )
   controller = ellmer::stream_controller()
@@ -169,12 +233,14 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
 
 ullme_start_ai_chat = function(input, model=NULL, context=list(),
                                 system_instructions=NULL,
+                                task_profile="",
                                 app=getApp()) {
   restore.point("ullme_start_ai_chat")
   chat = ullme_ai_request_chat(
     model=model,
     context=context,
     system_instructions=system_instructions,
+    task_profile=task_profile,
     app=app
   )
   list(

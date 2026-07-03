@@ -50,6 +50,19 @@ ullme_prompt = function(name, values=list(), strict=TRUE) {
 }
 
 
+ullme_prompt_with_literal_values = function(name, values=list()) {
+  open = "__ULLME_LITERAL_OPEN_BRACES__"
+  close = "__ULLME_LITERAL_CLOSE_BRACES__"
+  escaped = lapply(values, function(value) {
+    value = gsub("{{", open, paste0(value, collapse="\n"), fixed=TRUE)
+    gsub("}}", close, value, fixed=TRUE)
+  })
+  rendered = ullme_prompt(name, values=escaped, strict=TRUE)
+  rendered = gsub(open, "{{", rendered, fixed=TRUE)
+  gsub(close, "}}", rendered, fixed=TRUE)
+}
+
+
 ullme_tool_prompt_summary = function() {
   registry = ullme_tool_registry()
   paste(vapply(names(registry), function(name) {

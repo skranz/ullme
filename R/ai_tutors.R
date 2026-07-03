@@ -166,6 +166,10 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     lang=paste0(definition$lang %||% "")[1],
     label=paste0(definition$label %||% tutorid)[1],
     description=paste0(definition$description %||% "", collapse="\n"),
+    instance_guidance=paste0(
+      definition$instance_guidance %||% "",
+      collapse="\n"
+    ),
     source=source,
     enabled=!identical(definition$enabled, FALSE),
     system_prompt=paste0(definition$system_prompt %||% "", collapse="\n"),
@@ -342,6 +346,40 @@ ullme_regex_escape = function(x) {
 }
 
 
+ullme_tutor_role_tokens = function(docid, spec=list()) {
+  text = tolower(paste(
+    docid,
+    paste0(spec$descr %||% "", collapse=" "),
+    paste0(spec$description %||% "", collapse=" ")
+  ))
+  tokens = unlist(strsplit(tolower(docid), "[_-]+"))
+  if (grepl("solution|solutions|(^|[^a-z])sol([^a-z]|$)|answer|loesung|lösung",
+            text, perl=TRUE)) {
+    tokens = c(
+      tokens,
+      "solution", "solutions", "sol", "answer", "answers",
+      "loesung", "loesungen"
+    )
+  }
+  unique(tokens[nzchar(tokens) & nchar(tokens) > 1L])
+}
+
+
+ullme_tutor_files_with_role = function(files, tokens) {
+  if (!length(files) || !length(tokens)) return(character(0))
+  pattern = paste0(
+    "(^|[_-])(",
+    paste(ullme_regex_escape(tokens), collapse="|"),
+    ")([_-]|$)"
+  )
+  files[grepl(
+    pattern,
+    tolower(tools::file_path_sans_ext(basename(files))),
+    perl=TRUE
+  )]
+}
+
+
 ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
   restore.point("ullme_suggest_course_ai_tutor_instances")
   specs = ullme_normalize_tutor_doc_specs(definition$docs_per_instance)
@@ -352,18 +390,14 @@ ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
   anchor_files = files[[anchor]]
   if (length(anchor_files) == 0) return(list())
 
-  other_tokens = unique(unlist(strsplit(
-    tolower(docids[-1]),
-    "[_-]+"
+  other_tokens = unique(unlist(Map(
+    ullme_tutor_role_tokens,
+    docids[-1],
+    specs[docids[-1]]
   )))
   if (length(other_tokens) > 0) {
-    obvious_secondary = grepl(
-      paste0("(^|[_-])(", paste(ullme_regex_escape(other_tokens), collapse="|"),
-             ")([_-]|$)"),
-      tolower(tools::file_path_sans_ext(basename(anchor_files))),
-      perl=TRUE
-    )
-    anchor_files = anchor_files[!obvious_secondary]
+    secondary_files = ullme_tutor_files_with_role(anchor_files, other_tokens)
+    anchor_files = setdiff(anchor_files, secondary_files)
   }
   anchor_keys = vapply(
     anchor_files,
@@ -380,15 +414,21 @@ ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
       specs[[anchor]]$pref_format
     ))
     for (docid in docids[-1]) {
+      role_files = files[[docid]]
+      marked_files = ullme_tutor_files_with_role(
+        role_files,
+        ullme_tutor_role_tokens(docid, specs[[docid]])
+      )
+      if (length(marked_files)) role_files = marked_files
       candidate_keys = vapply(
-        files[[docid]],
+        role_files,
         ullme_tutor_file_key,
         character(1),
         docid=docid,
         directory=specs[[docid]]$pref_doc_dir
       )
       docs[[docid]] = as.list(ullme_preferred_document_file(
-        files[[docid]][candidate_keys == key],
+        role_files[candidate_keys == key],
         specs[[docid]]$pref_format
       ))
     }
@@ -594,6 +634,12 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     if (has_field("label")) current$label = paste0(fields$label)[1]
     if (has_field("description")) {
       current$description = paste0(fields$description, collapse="\n")
+    }
+    if (has_field("instance_guidance")) {
+      current$instance_guidance = paste0(
+        fields$instance_guidance,
+        collapse="\n"
+      )
     }
     if (has_field("system_prompt")) {
       current$system_prompt = paste0(fields$system_prompt, collapse="\n")
