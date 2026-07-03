@@ -121,7 +121,6 @@ ullme_teacherid = function(app=getApp()) {
   app$material_category = "general"
   app$material_upload_directory = "general"
   app$material_upload_tree = NULL
-  app$material_upload_tree = NULL
   app$active_skillid = ""
 
   ullme_add_resource_paths(app=app)

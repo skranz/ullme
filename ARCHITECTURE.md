@@ -325,9 +325,15 @@ main_dir/users/<userid>/cur_session/images/<session-token>/<upload-id>_<filename
 
 The image root is exposed as the `ullme-uploads` Shiny resource path.
 
-The model selector is included in the chat payload but backend model routing is
-still a placeholder. Copy and redo actions are client-side; redo resends the
-saved submit payload for that assistant message.
+The model selector is included in the chat payload and validated against the
+active provider catalog. For NVIDIA, the live `/models` result is intersected
+with the ordered allowlist in `R/nvidia_api.R`, while preserving NVIDIA's exact
+returned IDs. Gemma 4 31B is the first default; an explicitly configured
+allowlisted model wins when it is live. The selector can also restrict results
+to models known to accept both image and text. Speech-model helpers currently
+advertise Magpie TTS ZeroShot and Nemotron VoiceChat without implementing
+speech inference. Copy and redo actions are client-side; redo resends the saved
+submit payload for that assistant message.
 
 ## Audio Recording
 

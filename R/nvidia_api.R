@@ -4,7 +4,115 @@ ullme_nvidia_base_url = function() {
 
 
 ullme_nvidia_default_model = function() {
-  "nvidia/nemotron-3-ultra-550b-a55b"
+  "google/gemma-4-31b-it"
+}
+
+
+ullme_nvidia_preferred_model_specs = function() {
+  list(
+    list(id="google/gemma-4-31b-it", image_and_text=TRUE),
+    list(id="minimaxai/minimax-m3", image_and_text=TRUE),
+    list(id="z-ai/glm-5.2", image_and_text=FALSE),
+    list(id="qwen/qwen3.5-122b-a10b", image_and_text=TRUE),
+    list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=FALSE),
+    list(id="nvidia/nemotron-3-ultra-550b-a55b", image_and_text=FALSE),
+    list(id="stepfun-ai/step-3.7-flash", image_and_text=TRUE),
+    list(
+      id="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      image_and_text=TRUE
+    ),
+    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=TRUE)
+  )
+}
+
+
+ullme_nvidia_preferred_models = function(image_and_text=FALSE) {
+  specs = ullme_nvidia_preferred_model_specs()
+  if (isTRUE(image_and_text)) {
+    specs = Filter(function(spec) isTRUE(spec$image_and_text), specs)
+  }
+  vapply(specs, `[[`, character(1), "id")
+}
+
+
+ullme_nvidia_model_match_key = function(model, basename_only=FALSE) {
+  model = tolower(trimws(paste0(model)[1]))
+  if (isTRUE(basename_only)) model = sub("^.*/", "", model)
+  gsub("[^a-z0-9]+", "", model)
+}
+
+
+ullme_nvidia_model_matches = function(available, preferred) {
+  full_available = ullme_nvidia_model_match_key(available)
+  base_available = ullme_nvidia_model_match_key(available, basename_only=TRUE)
+  full_preferred = ullme_nvidia_model_match_key(preferred)
+  base_preferred = ullme_nvidia_model_match_key(preferred, basename_only=TRUE)
+  identical(full_available, full_preferred) ||
+    identical(base_available, base_preferred) ||
+    startsWith(base_available, base_preferred)
+}
+
+
+ullme_nvidia_available_models = function(available_models,
+                                          image_and_text=FALSE) {
+  available = unique(paste0(unlist(
+    available_models %||% list(),
+    use.names=FALSE
+  )))
+  available = available[nzchar(available)]
+  preferred = ullme_nvidia_preferred_models(
+    image_and_text=image_and_text
+  )
+  matched = character(0)
+  for (wanted in preferred) {
+    hits = available[vapply(
+      available,
+      ullme_nvidia_model_matches,
+      logical(1),
+      preferred=wanted
+    )]
+    if (length(hits)) matched = c(matched, sort(hits)[[1]])
+  }
+  unique(matched)
+}
+
+
+ullme_nvidia_resolve_model = function(model, available_models) {
+  hits = available_models[vapply(
+    available_models,
+    ullme_nvidia_model_matches,
+    logical(1),
+    preferred=model
+  )]
+  if (length(hits)) hits[[1]] else character(0)
+}
+
+
+ullme_nvidia_text_to_speech_models = function() {
+  "nvidia/magpie-tts-zeroshot"
+}
+
+
+ullme_nvidia_speech_to_text_models = function() {
+  "nvidia/nemotron-voicechat"
+}
+
+
+ullme_text_to_speech_models = function(provider="nvidia") {
+  provider = tolower(trimws(paste0(provider)[1]))
+  if (identical(provider, "nvidia")) {
+    return(ullme_nvidia_text_to_speech_models())
+  }
+  character(0)
+}
+
+
+ullme_speech_to_text_models = function(provider="nvidia") {
+  provider = tolower(trimws(paste0(provider)[1]))
+  if (identical(provider, "nvidia")) {
+    return(ullme_nvidia_speech_to_text_models())
+  }
+  character(0)
 }
 
 

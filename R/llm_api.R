@@ -34,6 +34,12 @@ ullme_api_config = function(api_provider="fake", api_key_file=NULL,
   if (identical(provider, "nvidia")) {
     base_url = paste0(api_base_url %||% ullme_nvidia_base_url())[1]
     model = paste0(api_model %||% ullme_nvidia_default_model())[1]
+    if (!length(ullme_nvidia_resolve_model(
+      model,
+      ullme_nvidia_preferred_models()
+    ))) {
+      stop("api_model is not in the configured NVIDIA model allowlist.")
+    }
     credentials = ullme_api_credentials_file(api_key_file, required=TRUE)
   } else if (identical(provider, "local")) {
     base_url = paste0(api_base_url %||% ullme_local_base_url())[1]
@@ -52,13 +58,14 @@ ullme_api_config = function(api_provider="fake", api_key_file=NULL,
     provider=provider,
     base_url=sub("/+$", "", base_url),
     model=model,
+    model_supplied=!is.null(api_model),
     api_key_file=api_key_file,
     credentials=credentials
   )
 }
 
 
-ullme_api_models = function(config, timeout=15) {
+ullme_api_models = function(config, timeout=15, image_and_text=FALSE) {
   restore.point("ulme_api_models")
   if (identical(config$provider, "fake")) return("fake")
   request = httr2::request(paste0(sub("/+$", "", config$base_url), "/models"))
@@ -75,6 +82,12 @@ ullme_api_models = function(config, timeout=15) {
   records = body$data %||% list()
   ids = vapply(records, function(record) paste0(record$id %||% "")[1], character(1))
   ids = sort(unique(ids[nzchar(ids)]))
+  if (identical(config$provider, "nvidia")) {
+    return(ullme_nvidia_available_models(
+      ids,
+      image_and_text=image_and_text
+    ))
+  }
   unique(c(config$model, ids))
 }
 
@@ -132,7 +145,18 @@ ullme_refresh_model_catalog = function(app=getApp()) {
         app$api_config$model
       }
     )
-    app$api_models = unique(c(app$api_config$model, discovered))
+    if (length(discovered)) {
+      requested = app$api_config$model
+      app$api_models = discovered
+      resolved = if (
+        identical(app$api_config$provider, "nvidia")
+      ) ullme_nvidia_resolve_model(requested, discovered) else
+        discovered[discovered == requested]
+      app$api_config$model = if (
+        isTRUE(app$api_config$model_supplied) &&
+        length(resolved)
+      ) resolved[[1]] else discovered[[1]]
+    }
   }
   ullme_send_model_catalog(app=app)
   invisible(app$api_models)
