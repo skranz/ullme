@@ -328,6 +328,11 @@ ullme_store_material_uploads = function(app, value, category,
     must_exist=TRUE
   )
   if (!dir.exists(target_dir)) stop("The upload destination is not a directory.")
+  upload_tree = app$material_upload_tree
+  tree_files = if (
+    is.list(upload_tree) &&
+    identical(upload_tree$destination, destination)
+  ) upload_tree$files else character(0)
 
   if (identical(app$role, "teacher")) {
     stage = ullme_tempdir(pattern=".ullme-material-upload-", app=app)
@@ -335,8 +340,14 @@ ullme_store_material_uploads = function(app, value, category,
     changes = list()
     stored = character(0)
     for (i in seq_len(NROW(value))) {
-      name = ullme_clean_file_name(value$name[[i]])
+      upload_name = basename(value$name[[i]])
+      name = if (upload_name %in% names(tree_files)) {
+        unname(tree_files[[upload_name]])
+      } else {
+        ullme_clean_file_name(upload_name)
+      }
       source = value$datapath[[i]]
+      relative_target = paste(destination, name, sep="/")
       if (tolower(tools::file_ext(name)) == "zip") {
         extract_dir = file.path(stage, paste0("zip_", i))
         dir.create(extract_dir, recursive=TRUE, showWarnings=FALSE)
@@ -344,14 +355,19 @@ ullme_store_material_uploads = function(app, value, category,
         for (entry in entries) {
           from = file.path(extract_dir, entry)
           if (!file.exists(from) || dir.exists(from)) next
+          entry_target = paste(dirname(relative_target), entry, sep="/")
           changes[[length(changes) + 1L]] = ullme_change_copy(
-            from, file.path(target_dir, entry), overwrite=TRUE
+            from,
+            .ullme_material_path(material_dir, entry_target),
+            overwrite=TRUE
           )
-          stored = c(stored, entry)
+          stored = c(stored, sub(paste0("^", destination, "/"), "", entry_target))
         }
       } else {
         changes[[length(changes) + 1L]] = ullme_change_copy(
-          source, file.path(target_dir, name), overwrite=TRUE
+          source,
+          .ullme_material_path(material_dir, relative_target),
+          overwrite=TRUE
         )
         stored = c(stored, name)
       }
@@ -377,12 +393,20 @@ ullme_store_material_uploads = function(app, value, category,
 
   stored = character(0)
   for (i in seq_len(NROW(value))) {
-    name = ullme_clean_file_name(value$name[[i]])
-    source = value$datapath[[i]]
-    if (tolower(tools::file_ext(name)) == "zip") {
-      stored = c(stored, ullme_unzip_material(source=source, target_dir=target_dir))
+    upload_name = basename(value$name[[i]])
+    name = if (upload_name %in% names(tree_files)) {
+      unname(tree_files[[upload_name]])
     } else {
-      target = file.path(target_dir, name)
+      ullme_clean_file_name(upload_name)
+    }
+    source = value$datapath[[i]]
+    relative_target = paste(destination, name, sep="/")
+    target = .ullme_material_path(material_dir, relative_target)
+    dir.create(dirname(target), recursive=TRUE, showWarnings=FALSE)
+    if (tolower(tools::file_ext(name)) == "zip") {
+      entries = ullme_unzip_material(source=source, target_dir=dirname(target))
+      stored = c(stored, file.path(dirname(name), entries))
+    } else {
       file.copy(source, target, overwrite=TRUE)
       stored = c(stored, name)
     }

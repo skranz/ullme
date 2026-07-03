@@ -17,7 +17,7 @@ state therefore lives directly on `app`, including:
 - `app$semester`
 - `app$courseids` and `app$courseid`
 - user, session, image, and audio paths
-- the current material category
+- the current material category and transient folder-upload path map
 
 `app$glob` is shared across app instances. It is reserved for genuinely shared
 configuration, currently `app$glob$main_dir`. Per-user state must not be stored
@@ -252,8 +252,9 @@ the corresponding new directory when material storage is initialized.
 The Materials tab renders these categories and their subdirectories as a file
 tree. Clicking the Name or Modified heading sorts siblings and toggles the sort
 direction. Folder checkboxes select their descendant files. Selected files can
-be dragged onto another folder to move them, while files dragged from the local
-computer onto a folder are uploaded directly into that directory. Compact
+be dragged onto another folder to move them, while files or complete folder
+trees dragged from the local computer onto a folder are uploaded directly into
+that directory. Folder traversal preserves nested and empty directories. Compact
 move, copy, and delete controls remain available as keyboard-friendly
 alternatives.
 
@@ -278,7 +279,9 @@ the files. After R stores an upload, it refreshes course state and calls
 `window.ullme.materialUploadComplete(...)`; the browser then clears both the
 DOM file input and its Shiny value so later uploads are treated as new input.
 
-Normal files are copied with cleaned filenames. ZIP files are unpacked into the
+Normal files are copied with cleaned filenames. German filename characters are
+transliterated (`Ü` to `Ue`, `ä` to `ae`, `ß` to `ss`, and so on) before the
+ASCII safety filter is applied. ZIP files are unpacked into the
 selected category. ZIP entries with absolute paths or parent-directory
 traversal are rejected.
 

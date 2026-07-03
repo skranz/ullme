@@ -2294,6 +2294,7 @@
     }
     var input = byId(pending.inputId);
     if (!input) return;
+    if (!pending.files.length) return;
     var transfer = new DataTransfer();
     pending.files.forEach(function (file) {
       transfer.items.add(file);

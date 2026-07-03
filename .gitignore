@@ -2,6 +2,8 @@
 .Rhistory
 .Rapp.history
 
+.tmp-r-lib*
+
 # Session Data files
 .RData
 .RDataTmp

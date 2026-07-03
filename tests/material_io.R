@@ -30,6 +30,92 @@ if (!exists("ullme_active_course_dir", mode="function")) {
 create_material_directory("general/week_01", app=app)
 stopifnot(dir.exists(file.path(material_dir, "general", "week_01")))
 
+stopifnot(
+  identical(
+    ullme_transliterate_german(
+      c("Übung", "übung", "Ärger", "größe", "Öl", "ẞ")
+    ),
+    c("Uebung", "uebung", "Aerger", "groesse", "Oel", "SS")
+  ),
+  identical(
+    ullme_clean_file_name("Übung 1 – größere Lösung.pdf"),
+    "Uebung_1_-_groessere_Loesung.pdf"
+  ),
+  identical(
+    ullme_clean_relative_upload_path("Übungen/größer/Äpfel.txt"),
+    "Uebungen/groesser/Aepfel.txt"
+  )
+)
+
+folder_tree = ullme_prepare_material_upload_tree(
+  tree=list(
+    files=list(ullme_folder_1.pdf="Übungsblätter/Woche 1/Übung1.pdf"),
+    directories=c("Übungsblätter", "Übungsblätter/Woche 1", "Leerer Ordner")
+  ),
+  destination="general",
+  material_dir=material_dir
+)
+stopifnot(
+  identical(
+    unname(folder_tree$files[["ullme_folder_1.pdf"]]),
+    "Uebungsblaetter/Woche_1/Uebung1.pdf"
+  ),
+  dir.exists(file.path(material_dir, "general", "Uebungsblaetter", "Woche_1")),
+  dir.exists(file.path(material_dir, "general", "Leerer_Ordner"))
+)
+
+student_course_dir = file.path(
+  root, "students", "alice", "courses", "SS26", "demo"
+)
+student_material_dir = file.path(student_course_dir, "materials")
+dir.create(file.path(student_material_dir, "general"), recursive=TRUE)
+student_app = new.env(parent=emptyenv())
+student_app$glob = list(main_dir=root)
+student_app$userid = "alice"
+student_app$role = "student"
+student_app$semester = "SS26"
+student_app$courseid = "demo"
+student_app$material_upload_tree = ullme_prepare_material_upload_tree(
+  tree=list(
+    files=list(ullme_folder_1.pdf="Übungsblätter/Woche 1/Übung1.pdf"),
+    directories=c("Übungsblätter", "Übungsblätter/Woche 1")
+  ),
+  destination="general",
+  material_dir=student_material_dir
+)
+folder_upload_source = tempfile()
+writeLines("folder upload", folder_upload_source)
+ullme_store_material_uploads(
+  app=student_app,
+  value=data.frame(
+    name="ullme_folder_1.pdf",
+    datapath=folder_upload_source,
+    stringsAsFactors=FALSE
+  ),
+  category="general",
+  destination="general"
+)
+plain_upload_source = tempfile()
+writeLines("plain upload", plain_upload_source)
+student_app$material_upload_tree = NULL
+ullme_store_material_uploads(
+  app=student_app,
+  value=data.frame(
+    name="Übung1.pdf",
+    datapath=plain_upload_source,
+    stringsAsFactors=FALSE
+  ),
+  category="general",
+  destination="general"
+)
+stopifnot(
+  file.exists(file.path(
+    student_material_dir,
+    "general", "Uebungsblaetter", "Woche_1", "Uebung1.pdf"
+  )),
+  file.exists(file.path(student_material_dir, "general", "Uebung1.pdf"))
+)
+
 copy_material_file(
   "general/source.txt",
   "general/week_01/source.txt",

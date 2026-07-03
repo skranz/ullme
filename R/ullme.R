@@ -120,6 +120,8 @@ ullme_teacherid = function(app=getApp()) {
   app$courseid = ullme_selected_courseid(app$courseids)
   app$material_category = "general"
   app$material_upload_directory = "general"
+  app$material_upload_tree = NULL
+  app$material_upload_tree = NULL
   app$active_skillid = ""
 
   ullme_add_resource_paths(app=app)
@@ -1213,6 +1215,9 @@ ullme_handle_material_upload_destination = function(path="general", tree=NULL,
       destination=path,
       material_dir=material_dir
     )
+    if (length(app$material_upload_tree$directories %||% character(0))) {
+      ullme_send_course_state(app=app)
+    }
     list(ok=TRUE, path=path, message="")
   }, error=function(e) {
     list(ok=FALSE, path=original_path, message=conditionMessage(e))
