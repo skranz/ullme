@@ -4,7 +4,7 @@ ullme_nvidia_base_url = function() {
 
 
 ullme_nvidia_default_model = function() {
-  "google/gemma-4-31b-it"
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 }
 
 
