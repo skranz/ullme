@@ -59,6 +59,19 @@ stopifnot(
   identical(
     ullme_speech_to_text_models(),
     "nvidia/nemotron-voicechat"
+  ),
+  identical(
+    ullme_nvidia_chat_profile("google/gemma-4-31b-it")$api_args,
+    list(chat_template_kwargs=list(enable_thinking=FALSE))
+  ),
+  is.null(
+    ullme_nvidia_chat_profile("google/gemma-4-31b-it")$api_args$reasoning_budget
+  ),
+  identical(
+    ullme_nvidia_chat_profile(
+      "nvidia/nemotron-3-ultra-550b-a55b"
+    )$api_args$reasoning_budget,
+    16384
   )
 )
 

@@ -10,6 +10,39 @@ ullme_chat_key = function(model, app=getApp()) {
 }
 
 
+ullme_promise_timeout = function(promise, seconds=180) {
+  seconds = suppressWarnings(as.numeric(seconds)[1])
+  if (is.na(seconds) || seconds <= 0) return(promise)
+  promises::promise(function(resolve, reject) {
+    settled = FALSE
+    timer = later::later(function() {
+      if (settled) return(invisible(NULL))
+      settled <<- TRUE
+      reject(simpleError(paste0(
+        "The model request timed out after ",
+        format(seconds, trim=TRUE),
+        " seconds."
+      )))
+    }, delay=seconds)
+    promises::then(
+      promise,
+      onFulfilled=function(value) {
+        if (settled) return(invisible(NULL))
+        settled <<- TRUE
+        resolve(value)
+        invisible(NULL)
+      },
+      onRejected=function(error) {
+        if (settled) return(invisible(NULL))
+        settled <<- TRUE
+        reject(error)
+        invisible(NULL)
+      }
+    )
+  })
+}
+
+
 ullme_teacher_chat = function(model=NULL, system_prompt=NULL, app=getApp()) {
   config = app$api_config
   model = ullme_model_id(model, app=app)
@@ -90,10 +123,12 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     system_instructions=system_instructions,
     app=app
   )
+  controller = ellmer::stream_controller()
   stream = chat$stream_async(
     input,
     tool_mode="sequential",
-    stream=if (isTRUE(include_thinking)) "content" else "text"
+    stream=if (isTRUE(include_thinking)) "content" else "text",
+    controller=controller
   )
   state = new.env(parent=emptyenv())
   state$text = ""
@@ -128,7 +163,7 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     on_update(state$text, state$thinking, TRUE)
     list(text=state$text, thinking=state$thinking)
   })
-  list(promise=runner(), state=state)
+  list(promise=runner(), state=state, controller=controller)
 }
 
 

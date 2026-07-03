@@ -4,6 +4,10 @@
     messageIndex: 0,
     isRecording: false,
     chatBusy: false,
+    activeAssistantMessageId: "",
+    chatWatchdog: null,
+    submitButtonHtml: "",
+    cancelledAssistantRequests: {},
     assistantRequests: {},
     pendingMaterialInputId: "",
     aiTutors: [],
@@ -45,7 +49,8 @@
     check: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
     retry: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.65"></path><path d="M20 4v6h-6"></path></svg>',
     more: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h.01"></path><path d="M12 12h.01"></path><path d="M18 12h.01"></path></svg>',
-    close: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>'
+    close: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>',
+    stop: '<svg class="ullme-icon ullme-stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>'
   };
 
   function byId(id) {
@@ -193,6 +198,7 @@
     var courseFileEditor = byId("ullme_course_file_editor");
 
     if (!messages || !input || !submitButton) return;
+    state.submitButtonHtml = submitButton.innerHTML;
 
     mountIntro(messages);
     initPaneResizers();
@@ -211,7 +217,13 @@
       }
     });
 
-    submitButton.addEventListener("click", submitChat);
+    submitButton.addEventListener("click", function () {
+      if (state.chatBusy) {
+        stopActiveChat();
+      } else {
+        submitChat();
+      }
+    });
 
     if (uploadButton && fileInput) {
       uploadButton.addEventListener("click", function () {
@@ -224,6 +236,13 @@
     }
 
     document.addEventListener("paste", handlePaste);
+    document.addEventListener("shiny:disconnected", function () {
+      if (!state.chatBusy || !state.activeAssistantMessageId) return;
+      finishClientChatError(
+        state.activeAssistantMessageId,
+        "The connection to the uLLMe server was lost. Please reconnect and try again."
+      );
+    });
 
     if (voiceButton) {
       voiceButton.addEventListener("click", function () {
@@ -520,8 +539,17 @@
     var input = byId("ullme_chat_input");
     var submitButton = byId("ullme_submit_btn");
     if (!input || !submitButton) return;
-    submitButton.disabled = state.chatBusy ||
-      (input.value.trim().length === 0 && state.uploads.length === 0);
+    var stopping = state.chatBusy && Boolean(state.activeAssistantMessageId);
+    submitButton.disabled = stopping
+      ? false
+      : (input.value.trim().length === 0 && state.uploads.length === 0);
+    submitButton.classList.toggle("ullme-submit-stop", stopping);
+    submitButton.setAttribute(
+      "aria-label",
+      stopping ? "Stop response" : "Submit chat"
+    );
+    submitButton.title = stopping ? "Stop response" : "Send message";
+    submitButton.innerHTML = stopping ? icons.stop : state.submitButtonHtml;
   }
 
   function submitChat() {
@@ -563,6 +591,7 @@
     };
 
     state.chatBusy = true;
+    startChatWatchdog(assistantMessageId);
     appendUserMessage({
       id: clientMessageId,
       text: text,
@@ -571,7 +600,6 @@
     appendAssistantMessage({
       id: assistantMessageId,
       text: "Thinking...",
-      meta: "Thinking",
       thinking: true
     });
 
@@ -597,6 +625,55 @@
     window.setTimeout(function () {
       receiveAssistantMessage(payload.assistantMessageId, "Fake AI answer to:\n" + payload.text);
     }, 450);
+  }
+
+  function clearChatWatchdog(messageId) {
+    if (messageId && state.activeAssistantMessageId &&
+        messageId !== state.activeAssistantMessageId) return;
+    if (state.chatWatchdog) window.clearTimeout(state.chatWatchdog);
+    state.chatWatchdog = null;
+    state.activeAssistantMessageId = "";
+  }
+
+  function startChatWatchdog(messageId) {
+    if (state.chatWatchdog) window.clearTimeout(state.chatWatchdog);
+    state.activeAssistantMessageId = messageId;
+    state.chatWatchdog = window.setTimeout(function () {
+      finishClientChatError(
+        messageId,
+        "The model did not respond within three minutes. Please check the connection and try again."
+      );
+    }, 180000);
+  }
+
+  function finishClientChatError(messageId, message) {
+    receiveAssistantStream(messageId, "", "", "", "", true, message);
+  }
+
+  function stopActiveChat() {
+    var messageId = state.activeAssistantMessageId;
+    if (!messageId) return;
+    state.cancelledAssistantRequests[messageId] = true;
+    sendSidebarEvent("ullme_cancel_chat_event", {
+      assistantMessageId: messageId
+    });
+    var article = byId(messageId);
+    var bubble = article && article.querySelector(".ullme-bubble");
+    var messageText = article && article.querySelector(".ullme-message-text");
+    var current = messageText ? messageText.textContent : "";
+    if (current === "Thinking...") current = "";
+    if (article) article.classList.remove("ullme-thinking");
+    if (bubble) updateAssistantThinking(bubble, "", "");
+    if (messageText) {
+      messageText.classList.remove("ullme-message-error");
+      if (!current) setAssistantMessageContent(messageText, "Stopped.", "");
+    }
+    if (bubble && !bubble.querySelector(".ullme-message-actions")) {
+      bubble.appendChild(renderAssistantActions(messageId, current || "Stopped."));
+    }
+    state.chatBusy = false;
+    clearChatWatchdog(messageId);
+    updateSubmitState();
   }
 
   function sendSidebarEvent(inputId, payload) {
@@ -3029,7 +3106,9 @@
     var bubble = article.querySelector(".ullme-bubble");
 
     article.classList.add("ullme-thinking");
+    delete state.cancelledAssistantRequests[messageId];
     state.chatBusy = true;
+    startChatWatchdog(messageId);
     updateSubmitState();
     if (meta) meta.remove();
     if (actions) actions.remove();
@@ -3210,6 +3289,7 @@
   }
 
   function receiveAssistantMessage(messageId, text, html) {
+    if (state.cancelledAssistantRequests[messageId]) return;
     var article = byId(messageId);
     if (!article) {
       appendAssistantMessage({
@@ -3219,6 +3299,7 @@
         meta: ""
       });
       state.chatBusy = false;
+      clearChatWatchdog(messageId);
       updateSubmitState();
       return;
     }
@@ -3235,12 +3316,14 @@
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
     }
     state.chatBusy = false;
+    clearChatWatchdog(messageId);
     updateSubmitState();
     scrollMessagesToBottom();
   }
 
   function receiveAssistantStream(messageId, text, html, thinking,
                                   thinkingHtml, done, error) {
+    if (state.cancelledAssistantRequests[messageId]) return;
     var messages = byId("ullme_chat_messages");
     var previousScrollTop = messages ? messages.scrollTop : 0;
     var article = byId(messageId);
@@ -3251,12 +3334,15 @@
         html: text ? (html || "") : "",
         thinkingText: thinking || "",
         thinkingHtml: thinkingHtml || "",
-        meta: error || "",
+        meta: (error && (text || thinking)) ? error : "",
         thinking: !done
       });
       if (done) {
         state.chatBusy = false;
+        clearChatWatchdog(messageId);
         updateSubmitState();
+      } else {
+        startChatWatchdog(messageId);
       }
       if (messages) messages.scrollTop = previousScrollTop;
       return;
@@ -3271,6 +3357,10 @@
     }
     if (bubble) updateAssistantThinking(bubble, thinking || "", thinkingHtml || "");
     if (messageText) {
+      messageText.classList.toggle(
+        "ullme-message-error",
+        Boolean(error && !text && !thinking)
+      );
       setAssistantMessageContent(
         messageText,
         text || ((!thinking && error) ? error : ""),
@@ -3294,7 +3384,10 @@
     }
     if (done) {
       state.chatBusy = false;
+      clearChatWatchdog(messageId);
       updateSubmitState();
+    } else {
+      startChatWatchdog(messageId);
     }
     if (messages) messages.scrollTop = previousScrollTop;
   }

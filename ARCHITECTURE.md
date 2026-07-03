@@ -312,6 +312,19 @@ Chat submission follows this sequence:
 5. R calls `window.ullme.receiveAssistantMessage(...)`.
 6. JavaScript replaces the placeholder and adds assistant actions.
 
+Only one pending `Thinking...` placeholder is rendered. Both browser and server
+apply a three-minute response watchdog. Provider errors replace that placeholder
+with a visible error, and a Shiny disconnect also finalizes the browser request
+instead of leaving the composer permanently busy. Server cleanup runs even when
+delivery of the final browser callback fails.
+
+While a response is active, the composer send button becomes a stop button.
+Streaming requests use ellmer's stream controller, so stopping marks the request
+inactive, cancels transport consumption, preserves any partial answer, and
+immediately unlocks the composer. Gemma 4 uses its own NVIDIA request profile:
+thinking is disabled through `chat_template_kwargs` and the Nemotron-specific
+`reasoning_budget` parameter is omitted.
+
 The first assistant message comes from `ullme_intro_msg()` and can later become
 course- or user-specific.
 

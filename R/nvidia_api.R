@@ -14,7 +14,7 @@ ullme_nvidia_preferred_model_specs = function() {
     list(id="minimaxai/minimax-m3", image_and_text=TRUE),
     list(id="z-ai/glm-5.2", image_and_text=FALSE),
     list(id="qwen/qwen3.5-122b-a10b", image_and_text=TRUE),
-    list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=FALSE),
+    list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=TRUE),
     list(id="nvidia/nemotron-3-ultra-550b-a55b", image_and_text=FALSE),
     list(id="stepfun-ai/step-3.7-flash", image_and_text=TRUE),
     list(
@@ -121,10 +121,34 @@ ullme_local_base_url = function() {
 }
 
 
+ullme_nvidia_chat_profile = function(model) {
+  model = tolower(paste0(model)[1])
+  if (ullme_nvidia_model_matches(model, "google/gemma-4-31b-it")) {
+    return(list(
+      max_tokens=16384,
+      api_args=list(
+        chat_template_kwargs=list(enable_thinking=FALSE)
+      )
+    ))
+  }
+  if (grepl("nemotron", model, fixed=TRUE)) {
+    return(list(
+      max_tokens=16384,
+      api_args=list(
+        chat_template_kwargs=list(enable_thinking=TRUE),
+        reasoning_budget=16384
+      )
+    ))
+  }
+  list(max_tokens=16384, api_args=list())
+}
+
+
 ullme_nvidia_chat = function(model=ullme_nvidia_default_model(),
                               api_key_file,
                               base_url=ullme_nvidia_base_url(),
                               system_prompt=NULL) {
+  profile = ullme_nvidia_chat_profile(model)
   ellmer::chat_openai_compatible(
     base_url=sub("/+$", "", base_url),
     name="NVIDIA NIM",
@@ -134,12 +158,9 @@ ullme_nvidia_chat = function(model=ullme_nvidia_default_model(),
     params=ellmer::params(
       temperature=1,
       top_p=0.95,
-      max_tokens=16384
+      max_tokens=profile$max_tokens
     ),
-    api_args=list(
-      chat_template_kwargs=list(enable_thinking=TRUE),
-      reasoning_budget=16384
-    ),
+    api_args=profile$api_args,
     preserve_thinking=FALSE,
     echo="none"
   )

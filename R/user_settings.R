@@ -53,6 +53,8 @@ ullme_read_user_settings = function(app=getApp()) {
 
 
 ullme_agent_approval_policy = function(action, app=getApp()) {
+  override = paste0(app$agent_approval_override %||% "")[1]
+  if (override %in% c("allow", "ask", "deny")) return(override)
   settings = ullme_read_user_settings(app=app)
   approval = settings$agent_tools$approval
   action = paste0(action)[1]

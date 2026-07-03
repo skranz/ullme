@@ -164,7 +164,10 @@ ullme_refresh_model_catalog = function(app=getApp()) {
 
 
 ullme_safe_ai_error = function(error, config=NULL) {
-  message = conditionMessage(error)
+  message = tryCatch(
+    conditionMessage(error),
+    error=function(e) paste0(error, collapse=" ")
+  )
   key = tryCatch(
     if (is.null(config) || is.null(config$credentials)) "" else config$credentials(),
     error=function(e) ""

@@ -2805,6 +2805,17 @@ body {
   color: #858585;
 }
 
+.ullme-submit-button.ullme-submit-stop {
+  background: #111111;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.ullme-stop-icon {
+  fill: currentColor;
+  stroke: none;
+}
+
 .ullme-icon {
   width: 21px;
   height: 21px;

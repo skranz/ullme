@@ -13,7 +13,8 @@ teacherApp = function(main_dir, userid="skranz",
                        api_model=NULL, api_base_url=NULL,
                        render_chat_markdown=TRUE,
                        stream_chat=TRUE,
-                       show_chat_thinking=TRUE) {
+                       show_chat_thinking=TRUE,
+                       store_ai_interactions=TRUE) {
   restore.point("teacherApp")
   .ullme_app(
     main_dir=main_dir,
@@ -28,7 +29,8 @@ teacherApp = function(main_dir, userid="skranz",
     api_model=api_model,
     api_base_url=api_base_url,
     stream_chat=stream_chat,
-    show_chat_thinking=show_chat_thinking
+    show_chat_thinking=show_chat_thinking,
+    store_ai_interactions=store_ai_interactions
   )
 }
 
