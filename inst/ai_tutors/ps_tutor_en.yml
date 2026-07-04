@@ -2,10 +2,6 @@ tutorid: ps_tutor_en
 lang: en
 label: Problem Set Tutor
 description: Helps students work through a problem set without revealing its solution prematurely.
-instance_guidance: >
-  Usually create one instance per problem-set document. Match a solution file
-  with the same filename stem when its name ends in solution, solutions, sol,
-  or answer. Keep files from different nested folders as separate instances.
 
 system_prompt: |
 
@@ -53,11 +49,14 @@ system_prompt: |
   {{ps_sol}}
 
 
+# text shown to the user at the beginning of the chat
 shown_text: |
   I am an AI Tutor for a problem set. Try first to solve it yourself. If you get stuck, ask me or also upload a foto of your solution attempt.
 
 default_personality:
   You are a friendly, supportive, and helpful AI.
+
+
 
 # documents that differ for every AI Tutor instance
 docs_per_instance:
@@ -75,7 +74,16 @@ docs_per_instance:
 # documents that will be the same for the course and
 docs_per_course: {}
 
+instance_guidance: >
+  Usually create one instance per problem-set document. Match a solution file
+  with the same filename stem when its name ends in solution, solutions, sol,
+  or answer. Keep files from different nested folders as separate instances.
+
 
 allowed_tools: []
+
+
+# show old chats in left side bar
+chat_history: false
 
 allowed_student_customization: [personality]

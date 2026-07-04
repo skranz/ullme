@@ -240,6 +240,12 @@ ullme_register_handlers = function(app=getApp()) {
       fun=ullme_handle_student_context,
       app=app
     )
+    eventHandler(
+      eventId="ullme_student_chat_clear_event",
+      id=NULL,
+      fun=ullme_handle_student_chat_clear,
+      app=app
+    )
     ullme_register_audio_handlers(app=app)
     return(invisible(TRUE))
   }

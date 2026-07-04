@@ -404,7 +404,6 @@ ullme_student_context_controls_ui = function(app=getApp()) {
   restore.point("ullme_student_context_controls_ui")
   tags$div(
     class="ullme-context-controls ullme-student-context-summary",
-    tags$span(class="ullme-fixed-role", "Student"),
     tags$span(
       id="ullme_student_course_summary",
       class="ullme-student-course-summary",
@@ -428,6 +427,14 @@ ullme_student_context_controls_ui = function(app=getApp()) {
         style="display: none;"
       )
     ),
+    tags$button(
+      id="ullme_student_new_chat_btn",
+      class="ullme-icon-button ullme-new-chat-btn",
+      type="button",
+      `aria-label`="New Chat",
+      title="New Chat",
+      HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M9 10h6"></path><path d="M12 7v6"></path></svg>')
+    ),
     tags$span(
       id="ullme_student_context_error",
       class="ullme-student-context-error",
@@ -450,4 +457,12 @@ ullme_student_workspace_ui = function(app=getApp()) {
     class="ullme-workspace ullme-student-workspace",
     ullme_chat_pane_ui(app=app, show_header=FALSE)
   )
+}
+
+ullme_handle_student_chat_clear = function(app=getApp(), ...) {
+  restore.point("ullme_handle_student_chat_clear")
+  model = ullme_model_id(NULL, app=app)
+  key = ullme_chat_key(model, task_profile="student_tutor", app=app)
+  app$teacher_chats[[key]] = NULL
+  invisible(TRUE)
 }

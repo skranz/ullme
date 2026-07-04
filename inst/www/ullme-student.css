@@ -79,8 +79,6 @@ input {
 .ullme-student-course-summary {
   overflow: hidden;
   max-width: 320px;
-  padding-left: 10px;
-  border-left: 1px solid var(--ullme-border);
   font-size: 14px;
   font-weight: 650;
   text-overflow: ellipsis;

@@ -95,6 +95,17 @@
       });
   }
 
+  function clearChatUI() {
+    var messages = byId("ullme_chat_messages");
+    if (!messages) return;
+    var children = Array.prototype.slice.call(messages.children);
+    children.forEach(function (child) {
+      if (child.id !== "ullme_intro_message") {
+        child.remove();
+      }
+    });
+  }
+
   function init() {
     var messages = byId("ullme_chat_messages");
     var input = byId("ullme_chat_input");
@@ -106,6 +117,7 @@
     var settings = byId("ullme_user_settings");
     var tutorSelect = byId("ullme_student_tutor_select");
     var instanceSelect = byId("ullme_student_instance_select");
+    var newChatBtn = byId("ullme_student_new_chat_btn");
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
@@ -175,6 +187,13 @@
           tutorid: tutorSelect ? tutorSelect.value : null,
           instanceid: instanceSelect.value || null
         });
+      });
+    }
+    if (newChatBtn) {
+      newChatBtn.addEventListener("click", function() {
+        if (!window.confirm("Start a new chat and clear the current history?")) return;
+        clearChatUI();
+        sendEvent("ullme_student_chat_clear_event", {});
       });
     }
 
@@ -621,8 +640,15 @@
 
   function updateStudentContext(payload) {
     payload = payload || {};
+    var previousTutor = state.context ? state.context.tutorid : null;
+    var previousInstance = state.context ? state.context.instanceid : null;
     state.context = payload;
     state.contextReady = !payload.error && Boolean(payload.tutorid);
+
+    // Clear chat when instance or tutor changes from an established state
+    if (previousTutor !== null && (previousTutor !== payload.tutorid || previousInstance !== payload.instanceid)) {
+      clearChatUI();
+    }
 
     var courseSummary = byId("ullme_student_course_summary");
     var tutorSelect = byId("ullme_student_tutor_select");

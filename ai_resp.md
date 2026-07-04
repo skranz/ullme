@@ -1,54 +1,32 @@
-This is an excellent UI improvement. Moving the context selectors to the header will give the student a distraction-free, full-width chat interface, which is perfect for complex math rendering and reading.
+To answer your question about the chat history: **Yes, passing the complete conversation history to the AI is the absolute standard procedure for chat interfaces, and it is exactly how your application currently works.** 
 
-Here are the changes to completely eliminate the student sidebar and integrate the selectors into the top app bar.
+Under the hood, your app uses the `ellmer` package, which maintains a `chat` object in memory (`app$teacher_chats[[key]]`). Every time the student asks a question, their new message is appended to this `chat` object, and the *entire* history is automatically sent to the AI API.
 
-### 1. Update the R UI Functions
-We will modify the R functions in `studentApp.R` to remove the sidebar and place the Course, AI Tutor, and Instance selectors into the header context controls.
+Furthermore, because your backend generates a unique `key` for each combination of `tutorid` and `instanceid`, the backend naturally keeps a separate, clean history for every instance. 
 
-!MODIFICATION ullme_student_sidebar_ui in studentApp.R
-scope = "function"
-file = "C:/libraries/ullme/ullme/R/studentApp.R"
-function_name = "ullme_student_sidebar_ui"
-description = "Deprecate the sidebar UI entirely."
----
-```r
-ullme_student_sidebar_ui = function(app=getApp()) {
-  restore.point("ullme_student_sidebar_ui")
-  # Deprecated: The student app no longer uses a sidebar.
-  NULL
-}
-```
-!END_MODIFICATION ullme_student_sidebar_ui in studentApp.R
+To implement your requests, we just need to:
+1. Make the header slimmer by removing the "Student" text and its left-border.
+2. Add a "New Chat" icon button.
+3. Make the JS visually clear the chat bubbles whenever the instance changes.
+4. Make the "New Chat" button wipe the visual chat *and* tell the R backend to reset the `chat` object for the current instance.
 
-!MODIFICATION ullme_student_workspace_ui in studentApp.R
-scope = "function"
-file = "C:/libraries/ullme/ullme/R/studentApp.R"
-function_name = "ullme_student_workspace_ui"
-description = "Remove the sidebar from the student workspace layout."
----
-```r
-ullme_student_workspace_ui = function(app=getApp()) {
-  restore.point("ullme_student_workspace_ui")
-  tags$div(
-    class="ullme-workspace ullme-student-workspace",
-    ullme_chat_pane_ui(app=app, show_header=FALSE)
-  )
-}
-```
-!END_MODIFICATION ullme_student_workspace_ui in studentApp.R
+Here are the modifications to accomplish this:
+
+### 1. R Backend Updates
+
+First, we update the UI layout in `studentApp.R` and add the backend logic to clear the chat object.
 
 !MODIFICATION ullme_student_context_controls_ui in studentApp.R
 scope = "function"
 file = "C:/libraries/ullme/ullme/R/studentApp.R"
 function_name = "ullme_student_context_controls_ui"
-description = "Move AI Tutor and Instance selection into the top app bar context controls."
+description = "Remove the 'Student' tag and add a New Chat button to the header."
 ---
 ```r
 ullme_student_context_controls_ui = function(app=getApp()) {
   restore.point("ullme_student_context_controls_ui")
   tags$div(
     class="ullme-context-controls ullme-student-context-summary",
-    tags$span(class="ullme-fixed-role", "Student"),
     tags$span(
       id="ullme_student_course_summary",
       class="ullme-student-course-summary",
@@ -72,6 +50,14 @@ ullme_student_context_controls_ui = function(app=getApp()) {
         style="display: none;"
       )
     ),
+    tags$button(
+      id="ullme_student_new_chat_btn",
+      class="ullme-icon-button ullme-new-chat-btn",
+      type="button",
+      `aria-label`="New Chat",
+      title="New Chat",
+      HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M9 10h6"></path><path d="M12 7v6"></path></svg>')
+    ),
     tags$span(
       id="ullme_student_context_error",
       class="ullme-student-context-error",
@@ -82,13 +68,252 @@ ullme_student_context_controls_ui = function(app=getApp()) {
 ```
 !END_MODIFICATION ullme_student_context_controls_ui in studentApp.R
 
-### 2. Rewrite `ullme-student.js`
-We will rewrite the JavaScript file to remove all of the complex sidebar resizing logic. We will also update `updateStudentContext` to toggle the visibility of the new header dropdowns versus plain text spans based on the number of available options.
+!MODIFICATION ullme_handle_student_chat_clear in studentApp.R
+scope = "function"
+file = "C:/libraries/ullme/ullme/R/studentApp.R"
+insert_bottom = true
+description = "Add the handler function that clears the backend chat object for the current instance."
+---
+```r
+
+ullme_handle_student_chat_clear = function(app=getApp(), ...) {
+  restore.point("ullme_handle_student_chat_clear")
+  model = ullme_model_id(NULL, app=app)
+  key = ullme_chat_key(model, task_profile="student_tutor", app=app)
+  app$teacher_chats[[key]] = NULL
+  invisible(TRUE)
+}
+```
+!END_MODIFICATION ullme_handle_student_chat_clear in studentApp.R
+
+Next, we register this new event handler in `ullme.R`.
+
+!MODIFICATION ullme_register_handlers in ullme.R
+scope = "function"
+file = "C:/libraries/ullme/ullme/R/ullme.R"
+function_name = "ullme_register_handlers"
+description = "Register the new student chat clear event."
+---
+```r
+ullme_register_handlers = function(app=getApp()) {
+  restore.point("ullme_register_handlers")
+  eventHandler(
+    eventId = "ullme_submit_chat_event",
+    id = NULL,
+    fun = ullme_handle_chat_submit_safe,
+    app = app
+  )
+  changeHandler(
+    id = "ullme_image_upload",
+    fun = ullme_handle_image_upload,
+    app = app
+  )
+  if (identical(app$role, "student")) {
+    eventHandler(
+      eventId="ullme_cancel_chat_event",
+      id=NULL,
+      fun=ullme_handle_chat_cancel,
+      app=app
+    )
+    eventHandler(
+      eventId="ullme_student_context_event",
+      id=NULL,
+      fun=ullme_handle_student_context,
+      app=app
+    )
+    eventHandler(
+      eventId="ullme_student_chat_clear_event",
+      id=NULL,
+      fun=ullme_handle_student_chat_clear,
+      app=app
+    )
+    ullme_register_audio_handlers(app=app)
+    return(invisible(TRUE))
+  }
+  lapply(ullme_course_material_categories(), function(category) {
+    changeHandler(
+      id = paste0("ullme_material_upload_", category),
+      fun = ullme_handle_material_upload,
+      app = app
+    )
+  })
+  lapply("skill", function(kind) {
+    changeHandler(
+      id = paste0("ullme_definition_import_", kind),
+      fun = ullme_handle_definition_import_upload,
+      app = app
+    )
+  })
+  eventHandler(
+    eventId = "ullme_semester_select_event",
+    id = NULL,
+    fun = ullme_handle_semester_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_select_event",
+    id = NULL,
+    fun = ullme_handle_course_select,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_add_course_event",
+    id = NULL,
+    fun = ullme_handle_add_course,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_settings_save_event",
+    id = NULL,
+    fun = ullme_handle_course_settings_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_category_event",
+    id = NULL,
+    fun = ullme_handle_material_category,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_upload_destination_event",
+    id = NULL,
+    fun = ullme_handle_material_upload_destination,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_delete_event",
+    id = NULL,
+    fun = ullme_handle_material_delete,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_operation_event",
+    id = NULL,
+    fun = ullme_handle_material_operation,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_convert_event",
+    id = NULL,
+    fun = ullme_handle_material_convert,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_material_create_directory_event",
+    id = NULL,
+    fun = ullme_handle_material_create_directory,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_add_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_add,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_delete_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_delete,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_toggle_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_toggle,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_cancel_chat_event",
+    id = NULL,
+    fun = ullme_handle_chat_cancel,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_save_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_instances_save_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_instances_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_instances_yaml_save_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_instances_yaml_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_ai_tutor_convert_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_convert,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_skill_activate_event",
+    id = NULL,
+    fun = ullme_handle_skill_activate,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_skill_clear_event",
+    id = NULL,
+    fun = ullme_handle_skill_clear,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_definition_action_event",
+    id = NULL,
+    fun = ullme_handle_definition_action,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_definition_chat_event",
+    id = NULL,
+    fun = ullme_handle_definition_chat,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_change_approval_event",
+    id = NULL,
+    fun = ullme_handle_change_approval,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_edit_history_event",
+    id = NULL,
+    fun = ullme_handle_edit_history,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_file_open_event",
+    id = NULL,
+    fun = ullme_handle_course_file_open,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_course_file_save_event",
+    id = NULL,
+    fun = ullme_handle_course_file_save,
+    app = app
+  )
+  ullme_register_audio_handlers(app=app)
+  invisible(TRUE)
+}
+```
+!END_MODIFICATION ullme_register_handlers in ullme.R
+
+### 2. Update JavaScript
+
+We will add a `clearChatUI` function, attach it to the new button, and ensure it fires automatically when the student selects a different instance.
 
 !MODIFICATION ullme-student.js
 scope = "file"
 file = "C:/libraries/ullme/ullme/inst/www/ullme-student.js"
-description = "Rewrite student JS to remove sidebar logic and manage header-based context selectors."
+description = "Implement frontend chat clearing logic for New Chat and instance switching."
 ---
 ```javascript
 (function () {
@@ -188,6 +413,17 @@ description = "Rewrite student JS to remove sidebar logic and manage header-base
       });
   }
 
+  function clearChatUI() {
+    var messages = byId("ullme_chat_messages");
+    if (!messages) return;
+    var children = Array.prototype.slice.call(messages.children);
+    children.forEach(function (child) {
+      if (child.id !== "ullme_intro_message") {
+        child.remove();
+      }
+    });
+  }
+
   function init() {
     var messages = byId("ullme_chat_messages");
     var input = byId("ullme_chat_input");
@@ -199,6 +435,7 @@ description = "Rewrite student JS to remove sidebar logic and manage header-base
     var settings = byId("ullme_user_settings");
     var tutorSelect = byId("ullme_student_tutor_select");
     var instanceSelect = byId("ullme_student_instance_select");
+    var newChatBtn = byId("ullme_student_new_chat_btn");
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
@@ -268,6 +505,13 @@ description = "Rewrite student JS to remove sidebar logic and manage header-base
           tutorid: tutorSelect ? tutorSelect.value : null,
           instanceid: instanceSelect.value || null
         });
+      });
+    }
+    if (newChatBtn) {
+      newChatBtn.addEventListener("click", function() {
+        if (!window.confirm("Start a new chat and clear the current history?")) return;
+        clearChatUI();
+        sendEvent("ullme_student_chat_clear_event", {});
       });
     }
 
@@ -714,8 +958,15 @@ description = "Rewrite student JS to remove sidebar logic and manage header-base
 
   function updateStudentContext(payload) {
     payload = payload || {};
+    var previousTutor = state.context ? state.context.tutorid : null;
+    var previousInstance = state.context ? state.context.instanceid : null;
     state.context = payload;
     state.contextReady = !payload.error && Boolean(payload.tutorid);
+    
+    // Clear chat when instance or tutor changes from an established state
+    if (previousTutor !== null && (previousTutor !== payload.tutorid || previousInstance !== payload.instanceid)) {
+      clearChatUI();
+    }
 
     var courseSummary = byId("ullme_student_course_summary");
     var tutorSelect = byId("ullme_student_tutor_select");
@@ -814,13 +1065,14 @@ description = "Rewrite student JS to remove sidebar logic and manage header-base
 ```
 !END_MODIFICATION ullme-student.js
 
-### 3. Rewrite `ullme-student.css`
-We will rewrite the CSS file to remove all sidebar layout rules. We will convert `.ullme-student-workspace` to a single-column layout, and we will style the new header selectors.
+### 3. Update CSS styling
+
+We will remove the `border-left` and `padding-left` from the course summary since it is no longer sitting to the right of the "Student" label.
 
 !MODIFICATION ullme-student.css
 scope = "file"
 file = "C:/libraries/ullme/ullme/inst/www/ullme-student.css"
-description = "Remove sidebar layout styles and style the new top-bar context selectors."
+description = "Remove the left border from the course summary in the student header."
 ---
 ```css
 :root {
@@ -904,8 +1156,6 @@ input {
 .ullme-student-course-summary {
   overflow: hidden;
   max-width: 320px;
-  padding-left: 10px;
-  border-left: 1px solid var(--ullme-border);
   font-size: 14px;
   font-weight: 650;
   text-overflow: ellipsis;

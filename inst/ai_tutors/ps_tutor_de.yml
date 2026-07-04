@@ -79,6 +79,7 @@ docs_per_instance:
 # documents that will be the same for the course and
 docs_per_course: {}
 
+chat_history: false
 
 allowed_tools: []
 
