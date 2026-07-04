@@ -18,6 +18,7 @@
     historyPanePreferenceSet: false
   };
   var mathJaxQueue = Promise.resolve();
+  var streamingMathTimers = new WeakMap();
 
   var icons = {
     copy: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M5 15V5h10"></path></svg>',
@@ -97,6 +98,24 @@
           console.warn("MathJax could not typeset a chat message.", error);
         }
       });
+  }
+
+  function scheduleStreamingMath(element) {
+    if (!element) return;
+    var pending = streamingMathTimers.get(element);
+    if (pending) return;
+    streamingMathTimers.set(element, window.setTimeout(function () {
+      streamingMathTimers.delete(element);
+      typesetMath(element);
+    }, 140));
+  }
+
+  function finishStreamingMath(element) {
+    if (!element) return;
+    var pending = streamingMathTimers.get(element);
+    if (pending) window.clearTimeout(pending);
+    streamingMathTimers.delete(element);
+    typesetMath(element);
   }
 
   function clearChatUI() {
@@ -381,7 +400,8 @@
     if (!message.thinking) bubble.appendChild(renderAssistantActions(message.id, message.text || ""));
     article.appendChild(bubble);
     messages.appendChild(article);
-    scrollMessagesToBottom();
+    if (message.thinking && message.text) scheduleStreamingMath(text);
+    else if (!message.thinking) typesetMath(text);
   }
 
   function updateStudentIntro(tutor) {
@@ -536,7 +556,7 @@
     }
     if (done) {
       article.classList.remove("ullme-thinking");
-      typesetMath(messageText);
+      finishStreamingMath(messageText);
       if (bubble && !bubble.querySelector(".ullme-message-actions")) {
         bubble.appendChild(renderAssistantActions(messageId, text || ""));
       }
@@ -546,7 +566,7 @@
     } else if (!waitingForUser) {
       startChatWatchdog(messageId);
     }
-    scrollMessagesToBottom();
+    if (!done && text) scheduleStreamingMath(messageText);
   }
 
   function textBlock(text) {

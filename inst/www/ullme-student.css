@@ -434,7 +434,7 @@ input {
 }
 
 .ullme-thinking .ullme-message-text {
-  color: var(--ullme-muted);
+  color: #4b5565;
 }
 
 .ullme-message-actions {
@@ -661,6 +661,48 @@ input {
   }
 
   .ullme-model-select {
-    display: none;
+    max-width: 120px;
   }
+}
+
+/* Keep the prompt on its own row and all composer controls below it. */
+.ullme-composer:not(.ullme-composer-recording) {
+  display: grid;
+  grid-template-areas:
+    "preview preview preview preview preview"
+    "input input input input input"
+    "upload spacer model voice submit";
+  grid-template-columns: 38px minmax(0, 1fr) auto 38px 38px;
+  align-items: center;
+  gap: 3px 5px;
+  padding: 8px;
+}
+
+.ullme-composer:not(.ullme-composer-recording) .ullme-chat-input {
+  grid-area: input;
+  width: 100%;
+}
+
+.ullme-composer:not(.ullme-composer-recording) #ullme_upload_btn {
+  grid-area: upload;
+}
+
+.ullme-composer:not(.ullme-composer-recording) .ullme-model-select {
+  grid-area: model;
+}
+
+.ullme-composer:not(.ullme-composer-recording) #ullme_voice_btn {
+  grid-area: voice;
+}
+
+.ullme-composer:not(.ullme-composer-recording) #ullme_submit_btn {
+  grid-area: submit;
+}
+
+.ullme-composer:not(.ullme-composer-recording) .ullme-upload-preview {
+  position: static;
+  grid-area: preview;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
 }

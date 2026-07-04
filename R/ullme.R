@@ -449,7 +449,7 @@ ullme_app_ui = function(app=getApp()) {
       ),
       if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),
       tags$script(src="ullme/ullme-audio.js"),
-      if (!is_teacher) tags$script(
+      tags$script(
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
         defer="defer"
       )

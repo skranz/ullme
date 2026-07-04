@@ -37,6 +37,8 @@
     courseFileOriginalContent: "",
     selectedCourseid: ""
   };
+  var mathJaxQueue = Promise.resolve();
+  var streamingMathTimers = new WeakMap();
 
   var materialLabels = {
     general: "General",
@@ -3062,7 +3064,15 @@
 
     article.appendChild(bubble);
     messages.appendChild(article);
-    scrollMessagesToBottom();
+    if (!message.thinking) {
+      typesetMath(text);
+      var completedThinking = bubble.querySelector(".ullme-message-thinking-text");
+      if (completedThinking) typesetMath(completedThinking);
+    } else {
+      if (message.text) scheduleStreamingMath(text);
+      var streamingThinking = bubble.querySelector(".ullme-message-thinking-text");
+      if (streamingThinking) scheduleStreamingMath(streamingThinking);
+    }
   }
 
   function renderAssistantActions(messageId, text) {
@@ -3079,8 +3089,55 @@
     return actions;
   }
 
+  function clearMath(element) {
+    if (!element || !window.MathJax ||
+        typeof window.MathJax.typesetClear !== "function") return;
+    try {
+      window.MathJax.typesetClear([element]);
+    } catch (error) {
+      return;
+    }
+  }
+
+  function typesetMath(element) {
+    if (!element || !window.MathJax ||
+        typeof window.MathJax.typesetPromise !== "function") return;
+    var startup = window.MathJax.startup && window.MathJax.startup.promise
+      ? window.MathJax.startup.promise
+      : Promise.resolve();
+    mathJaxQueue = mathJaxQueue
+      .then(function () { return startup; })
+      .then(function () {
+        return window.MathJax.typesetPromise([element]);
+      })
+      .catch(function (error) {
+        if (window.console && console.warn) {
+          console.warn("MathJax could not typeset a chat message.", error);
+        }
+      });
+  }
+
+  function scheduleStreamingMath(element) {
+    if (!element) return;
+    var pending = streamingMathTimers.get(element);
+    if (pending) return;
+    streamingMathTimers.set(element, window.setTimeout(function () {
+      streamingMathTimers.delete(element);
+      typesetMath(element);
+    }, 140));
+  }
+
+  function finishStreamingMath(element) {
+    if (!element) return;
+    var pending = streamingMathTimers.get(element);
+    if (pending) window.clearTimeout(pending);
+    streamingMathTimers.delete(element);
+    typesetMath(element);
+  }
+
   function setAssistantMessageContent(element, text, html) {
     var renderHtml = typeof html === "string" && html.length > 0;
+    clearMath(element);
     element.classList.toggle("ullme-message-text-markdown", renderHtml);
     if (renderHtml) {
       element.innerHTML = html;
@@ -3393,13 +3450,13 @@
     if (meta) meta.remove();
     if (bubble) updateAssistantThinking(bubble, "", "");
     if (messageText) setAssistantMessageContent(messageText, text || "", html || "");
+    finishStreamingMath(messageText);
     if (bubble && !bubble.querySelector(".ullme-message-actions")) {
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
     }
     state.chatBusy = false;
     clearChatWatchdog(messageId);
     updateSubmitState();
-    scrollMessagesToBottom();
   }
 
   function receiveAssistantStream(messageId, text, html, thinking,
@@ -3444,6 +3501,9 @@
       meta = null;
     }
     if (bubble) updateAssistantThinking(bubble, thinking || "", thinkingHtml || "");
+    var thinkingTextElement = bubble
+      ? bubble.querySelector(".ullme-message-thinking-text")
+      : null;
     if (messageText) {
       messageText.classList.toggle(
         "ullme-message-error",
@@ -3485,10 +3545,16 @@
       state.chatBusy = false;
       clearChatWatchdog(messageId);
       updateSubmitState();
+      finishStreamingMath(messageText);
+      finishStreamingMath(thinkingTextElement);
     } else if (waitingForUser) {
       pauseChatWatchdog(messageId);
     } else {
       startChatWatchdog(messageId);
+    }
+    if (!done) {
+      if (text) scheduleStreamingMath(messageText);
+      if (thinking) scheduleStreamingMath(thinkingTextElement);
     }
     if (messages) messages.scrollTop = previousScrollTop;
   }

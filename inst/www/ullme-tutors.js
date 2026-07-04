@@ -923,17 +923,17 @@
     return section;
   }
 
-  function placeholderDocumentRow(document) {
+  function placeholderDocumentRow(placeholderDocument) {
     var row = document.createElement("tr");
     [
       {
         name: "placeholder",
-        value: document.placeholder || "",
+        value: placeholderDocument.placeholder || "",
         placeholder: "knowledge_start"
       },
       {
         name: "path",
-        value: document.path || "",
+        value: placeholderDocument.path || "",
         placeholder: "knowledge.md"
       }
     ].forEach(function (spec) {

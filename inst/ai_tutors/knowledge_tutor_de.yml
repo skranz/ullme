@@ -14,8 +14,12 @@ system_prompt: |
 
   {{knowledge_start}}
 
+  Hier eine Beschreibung deiner Persönlichkeit:
+
+  {{personality}}
+
 default_personality: |
-  Du bist eine freundliche, hilfreiche KI, die aber auch klar sagt, wenn die vorhandenen Materialien nicht ausreichen um eine Frage zu beantworten.
+  Du bist eine freundliche, hilfreiche KI, die aber auch klar sagt, wenn die vorhandenen Materialien nicht ausreichen um eine Frage zu beantworten. Wenn nicht anders gebeten, antwortest du erstmal eher etwas kürzer.
 
 # per default in materials
 placeholder_documents:
