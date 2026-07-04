@@ -409,45 +409,26 @@ ullme_student_context_controls_ui = function(app=getApp()) {
       id="ullme_student_course_summary",
       class="ullme-student-course-summary",
       app$courseid %||% "Course"
-    )
-  )
-}
-
-
-ullme_student_sidebar_ui = function(app=getApp()) {
-  restore.point("ullme_student_sidebar_ui")
-  tags$aside(
-    class="ullme-student-sidebar",
+    ),
     tags$div(
-      class="ullme-student-sidebar-heading",
-      tags$span(class="ullme-student-sidebar-eyebrow", "Course tutor"),
-      tags$strong(id="ullme_student_sidebar_course", app$courseid %||% "Loading")
-    ),
-    tags$dl(
-      class="ullme-student-course-meta",
-      tags$div(tags$dt("Teacher"), tags$dd(id="ullme_student_teacher", app$teacherid %||% "")),
-      tags$div(tags$dt("Semester"), tags$dd(id="ullme_student_semester", app$semester %||% ""))
-    ),
-    tags$label(
-      class="ullme-student-selector",
-      tags$span("AI Tutor"),
+      class="ullme-student-header-select-wrap",
+      tags$span(id="ullme_student_tutor_text", class="ullme-student-header-text", "Loading..."),
       tags$select(
         id="ullme_student_tutor_select",
-        disabled="disabled",
-        tags$option(value="", "Loading...")
+        class="ullme-student-header-select",
+        style="display: none;"
       )
     ),
-    tags$p(id="ullme_student_tutor_description", class="ullme-student-tutor-description"),
-    tags$label(
-      class="ullme-student-selector",
-      tags$span("Instance"),
+    tags$div(
+      class="ullme-student-header-select-wrap",
+      tags$span(id="ullme_student_instance_text", class="ullme-student-header-text", "Loading..."),
       tags$select(
         id="ullme_student_instance_select",
-        disabled="disabled",
-        tags$option(value="", "Loading...")
+        class="ullme-student-header-select",
+        style="display: none;"
       )
     ),
-    tags$p(
+    tags$span(
       id="ullme_student_context_error",
       class="ullme-student-context-error",
       role="alert"
@@ -456,28 +437,17 @@ ullme_student_sidebar_ui = function(app=getApp()) {
 }
 
 
+ullme_student_sidebar_ui = function(app=getApp()) {
+  restore.point("ullme_student_sidebar_ui")
+  # Deprecated: The student app no longer uses a sidebar.
+  NULL
+}
+
+
 ullme_student_workspace_ui = function(app=getApp()) {
   restore.point("ullme_student_workspace_ui")
   tags$div(
     class="ullme-workspace ullme-student-workspace",
-    ullme_student_sidebar_ui(app=app),
-    tags$div(
-      id="ullme_student_pane_resizer",
-      class="ullme-student-pane-resizer",
-      role="separator",
-      tabindex="0",
-      `aria-orientation`="vertical",
-      `aria-label`="Resize tutor sidebar",
-      title="Drag to resize the tutor sidebar",
-      tags$button(
-        id="ullme_student_sidebar_toggle",
-        class="ullme-student-sidebar-toggle",
-        type="button",
-        `aria-label`="Collapse tutor sidebar",
-        title="Collapse tutor sidebar",
-        tags$span(`aria-hidden`="true", HTML("&#8249;"))
-      )
-    ),
     ullme_chat_pane_ui(app=app, show_header=FALSE)
   )
 }

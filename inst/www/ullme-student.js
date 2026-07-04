@@ -67,137 +67,6 @@
     );
   }
 
-  function studentSidebarIsMobile() {
-    return window.matchMedia("(max-width: 760px)").matches;
-  }
-
-  function initStudentSidebar() {
-    var workspace = document.querySelector(".ullme-student-workspace");
-    var sidebar = document.querySelector(".ullme-student-sidebar");
-    var resizer = byId("ullme_student_pane_resizer");
-    var toggle = byId("ullme_student_sidebar_toggle");
-    if (!workspace || !sidebar || !resizer || !toggle) return;
-
-    var widthKey = "ullme-student-sidebar-width";
-    var collapsedKey = "ullme-student-sidebar-collapsed";
-    var minimum = 220;
-    var maximum = 520;
-
-    function clamp(value) {
-      return Math.max(minimum, Math.min(maximum, value));
-    }
-
-    function currentWidth() {
-      var value = parseFloat(
-        window.getComputedStyle(workspace).getPropertyValue(
-          "--ullme-student-sidebar-width"
-        )
-      );
-      return Number.isFinite(value) ? value : sidebar.getBoundingClientRect().width;
-    }
-
-    function setWidth(value, persist) {
-      value = clamp(value);
-      workspace.style.setProperty(
-        "--ullme-student-sidebar-width",
-        value + "px"
-      );
-      resizer.setAttribute("aria-valuenow", Math.round(value));
-      if (persist) {
-        try {
-          window.localStorage.setItem(widthKey, String(value));
-        } catch (error) {
-          return;
-        }
-      }
-    }
-
-    function setCollapsed(collapsed, persist) {
-      workspace.classList.toggle(
-        "ullme-student-sidebar-collapsed",
-        Boolean(collapsed)
-      );
-      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      toggle.setAttribute(
-        "aria-label",
-        collapsed ? "Expand tutor sidebar" : "Collapse tutor sidebar"
-      );
-      toggle.title = collapsed ? "Expand tutor sidebar" : "Collapse tutor sidebar";
-      if (persist) {
-        try {
-          window.localStorage.setItem(collapsedKey, collapsed ? "true" : "false");
-        } catch (error) {
-          return;
-        }
-      }
-    }
-
-    try {
-      var savedWidth = parseFloat(window.localStorage.getItem(widthKey) || "");
-      setWidth(Number.isFinite(savedWidth) ? savedWidth : 280, false);
-      setCollapsed(
-        window.localStorage.getItem(collapsedKey) === "true",
-        false
-      );
-    } catch (error) {
-      setWidth(280, false);
-      setCollapsed(false, false);
-    }
-
-    toggle.addEventListener("click", function (event) {
-      event.stopPropagation();
-      setCollapsed(
-        !workspace.classList.contains("ullme-student-sidebar-collapsed"),
-        true
-      );
-    });
-
-    resizer.addEventListener("pointerdown", function (event) {
-      if (event.target === toggle || toggle.contains(event.target) ||
-          studentSidebarIsMobile() ||
-          workspace.classList.contains("ullme-student-sidebar-collapsed")) {
-        return;
-      }
-      event.preventDefault();
-      var startX = event.clientX;
-      var startWidth = currentWidth();
-      document.body.classList.add("ullme-student-pane-resizing");
-
-      function move(moveEvent) {
-        setWidth(startWidth + moveEvent.clientX - startX, false);
-      }
-
-      function finish() {
-        document.body.classList.remove("ullme-student-pane-resizing");
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", finish);
-        window.removeEventListener("pointercancel", finish);
-        setWidth(currentWidth(), true);
-      }
-
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", finish);
-      window.addEventListener("pointercancel", finish);
-    });
-
-    resizer.addEventListener("keydown", function (event) {
-      if (event.target === toggle || studentSidebarIsMobile() ||
-          workspace.classList.contains("ullme-student-sidebar-collapsed") ||
-          !["ArrowLeft", "ArrowRight"].includes(event.key)) {
-        return;
-      }
-      event.preventDefault();
-      var direction = event.key === "ArrowRight" ? 1 : -1;
-      setWidth(currentWidth() + direction * (event.shiftKey ? 24 : 8), true);
-    });
-
-    resizer.addEventListener("dblclick", function (event) {
-      if (event.target === toggle || toggle.contains(event.target) ||
-          studentSidebarIsMobile()) return;
-      setWidth(280, true);
-    });
-  }
-
   function clearMath(element) {
     if (!element || !window.MathJax ||
         typeof window.MathJax.typesetClear !== "function") return;
@@ -240,7 +109,7 @@
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
-    initStudentSidebar();
+
     mountIntro(messages);
     resizeInput(input);
     updateSubmitState();
@@ -756,56 +625,62 @@
     state.contextReady = !payload.error && Boolean(payload.tutorid);
 
     var courseSummary = byId("ullme_student_course_summary");
-    var course = byId("ullme_student_sidebar_course");
-    var teacher = byId("ullme_student_teacher");
-    var semester = byId("ullme_student_semester");
     var tutorSelect = byId("ullme_student_tutor_select");
+    var tutorText = byId("ullme_student_tutor_text");
     var instanceSelect = byId("ullme_student_instance_select");
-    var description = byId("ullme_student_tutor_description");
-    var error = byId("ullme_student_context_error");
+    var instanceText = byId("ullme_student_instance_text");
+    var errorLabel = byId("ullme_student_context_error");
     var tutors = Array.isArray(payload.tutors) ? payload.tutors : [];
 
     if (courseSummary) courseSummary.textContent = payload.courseid || "Course";
-    if (course) course.textContent = payload.courseid || "Course";
-    if (teacher) teacher.textContent = payload.teacherid || "";
-    if (semester) semester.textContent = payload.semester || "";
-    if (error) error.textContent = payload.error || "";
-
-    if (tutorSelect) {
-      tutorSelect.innerHTML = "";
-      tutors.forEach(function (tutor) {
-        tutorSelect.appendChild(option(tutor.tutorid, tutor.label || tutor.tutorid));
-      });
-      if (payload.tutorid) tutorSelect.value = payload.tutorid;
-      tutorSelect.disabled = Boolean(payload.error) ||
-        !payload.allow_tutor_switch || tutors.length < 2;
+    if (errorLabel) {
+      errorLabel.textContent = payload.error || "";
+      errorLabel.style.display = payload.error ? "inline-block" : "none";
     }
 
     var selectedTutor = tutors.find(function (tutor) {
       return tutor.tutorid === payload.tutorid;
     }) || null;
-    updateStudentIntro(selectedTutor);
-    if (description) {
-      description.textContent = selectedTutor ? selectedTutor.description || "" : "";
+
+    if (tutorSelect && tutorText) {
+      tutorSelect.innerHTML = "";
+      tutors.forEach(function (tutor) {
+        tutorSelect.appendChild(option(tutor.tutorid, tutor.label || tutor.tutorid));
+      });
+      if (payload.tutorid) tutorSelect.value = payload.tutorid;
+
+      var showTutorSelect = tutors.length > 1 && payload.allow_tutor_switch && !payload.error;
+      tutorSelect.style.display = showTutorSelect ? "" : "none";
+      tutorText.style.display = showTutorSelect ? "none" : "";
+
+      var description = selectedTutor ? (selectedTutor.description || "") : "";
+      tutorText.textContent = selectedTutor ? (selectedTutor.label || selectedTutor.tutorid) : (payload.tutorid || "No Tutor");
+      tutorText.title = description;
+      tutorSelect.title = description;
     }
-    if (instanceSelect) {
-      var instances = selectedTutor && Array.isArray(selectedTutor.instances)
-        ? selectedTutor.instances : [];
+
+    if (instanceSelect && instanceText) {
+      var instances = selectedTutor && Array.isArray(selectedTutor.instances) ? selectedTutor.instances : [];
+
       instanceSelect.innerHTML = "";
       if (!instances.length) {
         instanceSelect.appendChild(option("", "No instances"));
       } else {
         instances.forEach(function (instance) {
-          instanceSelect.appendChild(option(
-            instance.instanceid,
-            instance.label || instance.instanceid
-          ));
+          instanceSelect.appendChild(option(instance.instanceid, instance.label || instance.instanceid));
         });
       }
       if (payload.instanceid) instanceSelect.value = payload.instanceid;
-      instanceSelect.disabled = Boolean(payload.error) ||
-        !payload.allow_instance_switch || instances.length < 2;
+
+      var showInstanceSelect = instances.length > 1 && payload.allow_instance_switch && !payload.error;
+      instanceSelect.style.display = showInstanceSelect ? "" : "none";
+      instanceText.style.display = showInstanceSelect ? "none" : "";
+
+      var selectedInstance = instances.find(function(i) { return i.instanceid === payload.instanceid; });
+      instanceText.textContent = selectedInstance ? (selectedInstance.label || selectedInstance.instanceid) : (payload.instanceid || "No instances");
     }
+
+    updateStudentIntro(selectedTutor);
     updateSubmitState();
   }
 

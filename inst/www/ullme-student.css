@@ -38,17 +38,19 @@ input {
 
 .ullme-app {
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .ullme-appbar {
   position: relative;
   z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
-  padding: 0 22px;
+  min-height: 58px;
+  padding: 8px 22px;
   border-bottom: 1px solid var(--ullme-border);
   background: rgba(255, 255, 255, 0.96);
 }
@@ -62,6 +64,7 @@ input {
 
 .ullme-context-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
   gap: 10px;
@@ -84,8 +87,48 @@ input {
   white-space: nowrap;
 }
 
+.ullme-student-header-select-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ullme-student-header-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: #f0f2f5;
+  cursor: help;
+}
+
+.ullme-student-header-select {
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+  padding: 5px 28px 5px 9px;
+  border: 1px solid #ccd2dc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.ullme-student-header-select:focus {
+  outline: 0;
+  border-color: #98a2b3;
+}
+
+.ullme-student-context-error {
+  display: none;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
 .ullme-appbar-spacer {
   flex: 1;
+  min-width: 12px;
 }
 
 .ullme-icon-button,
@@ -124,7 +167,7 @@ input {
 
 .ullme-user-settings {
   position: absolute;
-  top: 50px;
+  top: 56px;
   right: 18px;
   display: none;
   width: min(300px, calc(100vw - 36px));
@@ -165,198 +208,15 @@ input {
 }
 
 .ullme-student-workspace {
-  --ullme-student-sidebar-width: 280px;
-  display: grid;
-  grid-template-columns: var(--ullme-student-sidebar-width) 10px minmax(0, 1fr);
+  display: block;
   height: calc(100vh - 58px);
   min-height: 0;
-  transition: grid-template-columns 160ms ease;
-}
-
-.ullme-student-workspace.ullme-student-sidebar-collapsed {
-  grid-template-columns: 0 30px minmax(0, 1fr);
-}
-
-.ullme-student-sidebar {
-  min-width: 0;
-  overflow-y: auto;
-  padding: 28px 22px;
-  background: var(--ullme-panel);
-  transition: padding 160ms ease, visibility 160ms ease;
-}
-
-.ullme-student-sidebar-collapsed .ullme-student-sidebar {
-  visibility: hidden;
-  overflow: hidden;
-  padding-right: 0;
-  padding-left: 0;
-}
-
-.ullme-student-pane-resizer {
-  position: relative;
-  z-index: 5;
-  min-width: 0;
-  cursor: col-resize;
-  touch-action: none;
-  background: #fff;
-}
-
-.ullme-student-pane-resizer::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  content: "";
-  background: var(--ullme-border);
-  transform: translateX(-50%);
-}
-
-.ullme-student-pane-resizer:hover::before,
-.ullme-student-pane-resizer:focus::before,
-.ullme-student-pane-resizing .ullme-student-pane-resizer::before {
-  width: 2px;
-  background: #98a2b3;
-}
-
-.ullme-student-sidebar-toggle {
-  position: absolute;
-  top: 22px;
-  left: 50%;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--ullme-border);
-  border-radius: 8px;
-  color: #475467;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(32, 48, 80, 0.08);
-  cursor: pointer;
-  transform: translateX(-50%);
-}
-
-.ullme-student-sidebar-toggle:hover,
-.ullme-student-sidebar-toggle:focus-visible {
-  color: var(--ullme-text);
-  border-color: #b7bfcc;
-  background: #f8f9fb;
-}
-
-.ullme-student-sidebar-toggle span {
-  font-size: 22px;
-  line-height: 1;
-  transition: transform 160ms ease;
-}
-
-.ullme-student-sidebar-collapsed .ullme-student-sidebar-toggle span {
-  transform: rotate(180deg);
-}
-
-.ullme-student-sidebar-collapsed .ullme-student-pane-resizer {
-  cursor: default;
-}
-
-.ullme-student-pane-resizing,
-.ullme-student-pane-resizing * {
-  cursor: col-resize !important;
-  user-select: none !important;
-}
-
-.ullme-student-pane-resizing .ullme-student-workspace {
-  transition: none;
-}
-
-.ullme-student-sidebar-heading {
-  display: grid;
-  gap: 5px;
-  margin-bottom: 22px;
-}
-
-.ullme-student-sidebar-eyebrow {
-  color: var(--ullme-muted);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.ullme-student-sidebar-heading strong {
-  overflow-wrap: anywhere;
-  font-size: 20px;
-  letter-spacing: -0.025em;
-}
-
-.ullme-student-course-meta {
-  display: grid;
-  gap: 8px;
-  margin: 0 0 26px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--ullme-border);
-}
-
-.ullme-student-course-meta div {
-  display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.ullme-student-course-meta dt {
-  color: var(--ullme-muted);
-  font-size: 12px;
-}
-
-.ullme-student-course-meta dd {
-  overflow-wrap: anywhere;
-  margin: 0;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.ullme-student-selector {
-  display: grid;
-  gap: 7px;
-  margin-top: 18px;
-  color: #344054;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.ullme-student-selector select {
-  width: 100%;
-  min-height: 40px;
-  padding: 8px 32px 8px 10px;
-  border: 1px solid #ccd2dc;
-  border-radius: 9px;
-  color: var(--ullme-text);
-  background: #fff;
-}
-
-.ullme-student-selector select:disabled {
-  color: #475467;
-  background: #eef0f4;
-  opacity: 1;
-}
-
-.ullme-student-tutor-description {
-  margin: 9px 0 0;
-  color: var(--ullme-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.ullme-student-context-error {
-  margin-top: 20px;
-  color: #b42318;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .ullme-chat-pane {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   background: #fff;
@@ -641,49 +501,11 @@ input {
 
 @media (max-width: 760px) {
   .ullme-appbar {
-    padding: 0 14px;
+    padding: 8px 14px;
   }
 
-  .ullme-student-workspace,
-  .ullme-student-workspace.ullme-student-sidebar-collapsed {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-    transition: none;
-  }
-
-  .ullme-student-sidebar,
-  .ullme-student-sidebar-collapsed .ullme-student-sidebar {
-    display: grid;
-    visibility: visible;
-    grid-template-columns: minmax(110px, 1fr) minmax(130px, 1fr);
-    gap: 10px 14px;
-    overflow: visible;
-    padding: 12px 14px;
-    border-right: 0;
-    border-bottom: 1px solid var(--ullme-border);
-  }
-
-  .ullme-student-pane-resizer {
-    display: none;
-  }
-
-  .ullme-student-sidebar-heading,
-  .ullme-student-course-meta,
-  .ullme-student-tutor-description {
-    display: none;
-  }
-
-  .ullme-student-selector {
-    margin: 0;
-  }
-
-  .ullme-student-context-error {
-    grid-column: 1 / -1;
-    margin: 0;
-  }
-
-  .ullme-chat-pane {
-    min-height: 0;
+  .ullme-student-course-summary {
+    max-width: 140px;
   }
 
   .ullme-chat-messages {
