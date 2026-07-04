@@ -438,7 +438,7 @@ ullme_app_ui = function(app=getApp()) {
       if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),
       tags$script(src="ullme/ullme-audio.js"),
       if (!is_teacher) tags$script(
-        src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js",
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
         defer="defer"
       )
     ),
@@ -1060,6 +1060,17 @@ ullme_chat_output_html = function(text, app=getApp()) {
   restore.point("ullme_chat_output_html")
   text = paste0(text %||% "", collapse="\n")
   if (!isTRUE(app$render_chat_markdown) || !nzchar(text)) return("")
+
+  # Protect common LaTeX delimiters and escaped braces from CommonMark
+  # so that MathJax can still find \[ \], \( \), \{ \}
+  # In R string literals, "\\" represents a single backslash.
+  text = gsub("\\[", "\\\\[", text, fixed=TRUE)
+  text = gsub("\\]", "\\\\]", text, fixed=TRUE)
+  text = gsub("\\(", "\\\\(", text, fixed=TRUE)
+  text = gsub("\\)", "\\\\)", text, fixed=TRUE)
+  text = gsub("\\{", "\\\\{", text, fixed=TRUE)
+  text = gsub("\\}", "\\\\}", text, fixed=TRUE)
+
   paste0(
     commonmark::markdown_html(text, extensions=TRUE),
     collapse="\n"

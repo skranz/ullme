@@ -55,6 +55,8 @@ system_prompt: |
 
   {{ps_sol}}
 
+
+
 shown_text: |
   Ich bin ein KI Tutor für ein Übungsblatt. Versuche zunächst das Übungsblatt selbst zu lösen. Wenn du stecken bleibst, frage mich etwas oder lade auch ein Foto deines Lösungsversuchs hoch.
 

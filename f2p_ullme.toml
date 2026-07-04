@@ -209,5 +209,5 @@ C:/libraries/ullme/ullme/inst/www/*.*
 [[ullmeSpecs]]
 
 include_files = '''
-C:/libraries/ullme/ullme/inst/activities/*.yml
+C:/libraries/ullme/ullme/inst/ai_tutors/*.yml
 '''

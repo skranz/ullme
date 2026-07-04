@@ -446,7 +446,7 @@
     if (message.text) bubble.appendChild(textBlock(message.text));
     article.appendChild(bubble);
     messages.appendChild(article);
-    if (!message.thinking) typesetMath(text);
+    if (!message.thinking) typesetMath(bubble);
     scrollMessagesToBottom();
   }
 
