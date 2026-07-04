@@ -3607,6 +3607,17 @@ body {
   font-weight: 400;
 }
 
+.ullme-tutor-checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ullme-tutor-field .ullme-tutor-checkbox-line input {
+  width: auto;
+  margin: 0;
+}
+
 .ullme-tutor-form-actions {
   display: flex;
   grid-column: 1 / -1;

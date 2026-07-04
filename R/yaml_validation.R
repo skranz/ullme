@@ -112,7 +112,8 @@ ullme_validate_course_yaml = function(content) {
 }
 
 
-ullme_validate_tutor_doc_specs = function(value, field) {
+ullme_validate_tutor_doc_specs = function(value, field,
+                                           allow_fixed_paths=FALSE) {
   errors = character(0)
   if (is.null(value)) return(errors)
   if (!is.list(value)) {
@@ -127,8 +128,21 @@ ullme_validate_tutor_doc_specs = function(value, field) {
   for (docid in ids) {
     spec = value[[docid]]
     label = paste0(field, ".", docid)
+    if (isTRUE(allow_fixed_paths) &&
+        is.character(spec) && length(spec) == 1L && !is.na(spec)) {
+      if (!ullme_safe_relative_material_path(spec)) {
+        errors = c(errors, paste0(
+          label, " must be a relative path below the materials directory."
+        ))
+      }
+      next
+    }
     if (!is.list(spec)) {
-      errors = c(errors, paste0(label, " must be a mapping."))
+      errors = c(errors, paste0(
+        label, " must be a mapping",
+        if (isTRUE(allow_fixed_paths)) " or a fixed filename" else "",
+        "."
+      ))
       next
     }
     if (!nzchar(trimws(paste0(spec$descr %||% "")[1]))) {
@@ -180,6 +194,59 @@ ullme_validate_tutor_doc_specs = function(value, field) {
 }
 
 
+ullme_validate_tutor_file_permissions = function(value) {
+  errors = character(0)
+  if (is.null(value)) return(errors)
+  if (!is.list(value)) return("file_permissions must be a list.")
+  for (i in seq_along(value)) {
+    permission = value[[i]]
+    label = paste0("file_permissions[", i, "]")
+    if (!is.list(permission)) {
+      errors = c(errors, paste0(label, " must be a mapping."))
+      next
+    }
+    type = paste0(permission$type %||% "")[1]
+    if (!type %in% c("read_only", "write_and_read", "read_and_write")) {
+      errors = c(errors, paste0(
+        label, ".type must be read_only or write_and_read."
+      ))
+    }
+    main_path = paste0(permission$main_path %||% "")[1]
+    if (!ullme_safe_relative_material_path(main_path)) {
+      errors = c(errors, paste0(label, ".main_path must be a relative path."))
+    }
+    directories = paste0(unlist(
+      permission$directories %||% list(),
+      use.names=FALSE
+    ))
+    if (!length(directories)) {
+      errors = c(errors, paste0(label, ".directories must not be empty."))
+    } else if (any(!vapply(
+      directories,
+      ullme_safe_relative_material_path,
+      logical(1)
+    ))) {
+      errors = c(errors, paste0(
+        label, ".directories must contain only relative paths."
+      ))
+    }
+    if (!is.null(permission$recursive) &&
+        (!is.logical(permission$recursive) ||
+         length(permission$recursive) != 1L)) {
+      errors = c(errors, paste0(label, ".recursive must be true or false."))
+    }
+    extensions = paste0(unlist(
+      permission$extensions %||% list(),
+      use.names=FALSE
+    ))
+    if (any(!grepl("^\\.?[A-Za-z0-9][A-Za-z0-9_-]*$", extensions))) {
+      errors = c(errors, paste0(label, ".extensions contains an invalid value."))
+    }
+  }
+  errors
+}
+
+
 ullme_validate_definition_yaml = function(kind, definitionid, content) {
   kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
@@ -212,12 +279,14 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
       }
     }
     for (field in c("docs_per_instance", "docs_per_course")) {
-      if (!field %in% names(value)) {
-        errors = c(errors, paste0(field, " is required, even when empty."))
-      } else {
+      if (field %in% names(value)) {
         errors = c(
           errors,
-          ullme_validate_tutor_doc_specs(value[[field]], field)
+          ullme_validate_tutor_doc_specs(
+            value[[field]],
+            field,
+            allow_fixed_paths=identical(field, "docs_per_course")
+          )
         )
       }
     }
@@ -243,27 +312,39 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
     if (any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", customization))) {
       errors = c(errors, "allowed_student_customization contains an invalid ID.")
     }
-    prompt = paste0(value$system_prompt %||% "", collapse="\n")
-    hits = regmatches(
-      prompt,
-      gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}", prompt, perl=TRUE)
-    )[[1]]
-    placeholders = if (length(hits) == 1 && identical(hits, "")) {
-      character(0)
-    } else {
-      unique(substring(hits, 3, nchar(hits) - 2L))
+    for (field in c("multiple_instances", "chat_history")) {
+      if (!is.null(value[[field]]) &&
+          (!is.logical(value[[field]]) || length(value[[field]]) != 1L)) {
+        errors = c(errors, paste0(field, " must be true or false."))
+      }
     }
+    errors = c(
+      errors,
+      ullme_validate_tutor_file_permissions(value$file_permissions)
+    )
     document_ids = c(
       names(value$docs_per_instance %||% list()),
       names(value$docs_per_course %||% list())
     )
-    unknown = setdiff(placeholders, c(document_ids, customization))
-    if (length(unknown) > 0) {
-      errors = c(
-        errors,
-        paste0("system_prompt contains unknown placeholders: ",
-               paste(unknown, collapse=", "), ".")
-      )
+    for (prompt_field in c("system_prompt", "shown_text")) {
+      prompt = paste0(value[[prompt_field]] %||% "", collapse="\n")
+      hits = regmatches(
+        prompt,
+        gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}", prompt, perl=TRUE)
+      )[[1]]
+      placeholders = if (length(hits) == 1 && identical(hits, "")) {
+        character(0)
+      } else {
+        unique(substring(hits, 3, nchar(hits) - 2L))
+      }
+      unknown = setdiff(placeholders, c(document_ids, customization))
+      if (length(unknown) > 0) {
+        errors = c(
+          errors,
+          paste0(prompt_field, " contains unknown placeholders: ",
+                 paste(unknown, collapse=", "), ".")
+        )
+      }
     }
   }
   ullme_validation_result(length(errors) == 0, errors, warnings, value)

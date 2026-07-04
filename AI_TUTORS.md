@@ -18,6 +18,8 @@ The core fields are:
 - `default_personality`;
 - `docs_per_instance`;
 - `docs_per_course`;
+- `multiple_instances` and `chat_history`;
+- `file_permissions`;
 - `allowed_tools`; and
 - `allowed_student_customization`.
 
@@ -42,13 +44,21 @@ reads the package template directly.
 ## Document specifications
 
 `docs_per_instance` defines documents that differ between Tutor instances.
-`docs_per_course` defines documents shared by every instance. Each entry may
+`docs_per_course` defines documents shared by every instance. It accepts the
+same metadata mappings as `docs_per_instance`. A course-wide Tutor can also
+map a placeholder directly to a file below the course's `materials` folder:
+
+```yaml
+docs_per_course:
+  knowledge_start: knowledge.md
+```
+
+Missing fixed files render as `[content missing]`. Metadata entries may
 contain:
 
 ```yaml
 descr: Human-readable description
-pref_format: [md, tex, pdf]
-auto_convert: [pdf]
+file_types: [md, tex, pdf]
 pref_doc_dir: ps
 add_images: true
 ```
@@ -79,8 +89,32 @@ If no saved assignment exists, uLLMe scans each document role's
 `pref_doc_dir`, groups likely matching files, and presents suggestions in the
 Instances tab. The teacher reviews and saves the resulting table.
 
+Set `multiple_instances: false` for one course-wide Tutor. Such Tutors do not
+read or create `instances.yml`, and the teacher and student applications hide
+their instance controls. The default is `true` for backwards compatibility.
+
+## File tools
+
+`file_permissions` defines the course paths exposed through Tutor tools:
+
+```yaml
+file_permissions:
+  - type: read_only
+    main_path: materials
+    directories: [scripts, slides]
+    recursive: true
+    extensions: [md, tex, txt, Rmd, qmd]
+allowed_tools: [read_allowed_files, list_allowed_files]
+```
+
+`list_allowed_files` reports the configured directories and whether each
+permission permits reading or writing. `read_allowed_files` rejects files
+outside those directories, below a non-recursive level, or with an unlisted
+extension. `write_and_read` is supported for future write-capable tools.
+
 ## Sessions
 
 A Tutor session belongs to one student, course Tutor, and Tutor instance.
-Conversation storage and analytics remain separate from the definition and
-document-assignment files.
+With `chat_history: true`, conversations are stored per student, semester,
+course, and Tutor and shown in a left sidebar. The ten most recent chats are
+shown first, with older chats under **More**. The default is `false`.

@@ -206,9 +206,82 @@ input {
 }
 
 .ullme-student-workspace {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   height: calc(100vh - 58px);
   min-height: 0;
+}
+
+.ullme-student-workspace.ullme-student-workspace-with-history {
+  grid-template-columns: 250px minmax(0, 1fr);
+}
+
+.ullme-student-chat-history {
+  display: none;
+  overflow-y: auto;
+  min-width: 0;
+  padding: 14px 10px;
+  border-right: 1px solid var(--ullme-border);
+  background: #f7f8fb;
+}
+
+.ullme-student-workspace-with-history .ullme-student-chat-history {
+  display: block;
+}
+
+.ullme-student-chat-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 6px 8px 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ullme-student-chat-history-head .ullme-icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.ullme-student-chat-history-list {
+  display: grid;
+  gap: 3px;
+}
+
+.ullme-student-chat-history-item {
+  overflow: hidden;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #344054;
+  background: transparent;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ullme-student-chat-history-item:hover {
+  background: #eef1f6;
+}
+
+.ullme-student-chat-history-item-active {
+  color: #173f9b;
+  background: #e8eefc;
+  font-weight: 650;
+}
+
+.ullme-student-chat-history-more {
+  margin-top: 8px;
+  color: var(--ullme-muted);
+  font-size: 13px;
+}
+
+.ullme-student-chat-history-more > summary {
+  padding: 7px 10px;
+  cursor: pointer;
 }
 
 .ullme-chat-pane {
@@ -218,6 +291,22 @@ input {
   min-width: 0;
   min-height: 0;
   background: #fff;
+}
+
+@media (max-width: 760px) {
+  .ullme-student-workspace.ullme-student-workspace-with-history {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .ullme-student-workspace.ullme-student-workspace-with-history {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ullme-student-workspace-with-history .ullme-student-chat-history {
+    display: none;
+  }
 }
 
 .ullme-chat-messages {

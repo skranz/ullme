@@ -191,6 +191,12 @@
       ));
       return;
     }
+    if (tutor.multiple_instances === false && state.activeTab === "instances") {
+      state.activeTab = "prompt";
+    }
+    if (tutor.multiple_instances === false && state.yamlTab === "instances") {
+      state.yamlTab = "definition";
+    }
 
     container.appendChild(tutorHeader(tutor));
     container.appendChild(tutorTabs(tutor));
@@ -280,8 +286,9 @@
     var editHistory = tutor.edit_history || {};
     var scope = "tutor_definition";
     var history = editHistory.definition || {};
-    if (state.activeTab === "instances" ||
-        (state.activeTab === "yaml" && state.yamlTab === "instances")) {
+    if (tutor.multiple_instances !== false && (
+        state.activeTab === "instances" ||
+        (state.activeTab === "yaml" && state.yamlTab === "instances"))) {
       scope = "tutor_instances";
       history = editHistory.instances || {};
     }
@@ -314,12 +321,18 @@
   function tutorTabs(tutor) {
     var tabs = document.createElement("nav");
     tabs.className = "ullme-tutor-tabs";
-    [
-      { id: "instances", label: "Instances (" + Number(tutor.instance_count || 0) + ")" },
+    var tabSpecs = [
       { id: "prompt", label: "Prompt" },
       { id: "config", label: "Config" },
       { id: "yaml", label: "YAML" }
-    ].forEach(function (tab) {
+    ];
+    if (tutor.multiple_instances !== false) {
+      tabSpecs.unshift({
+        id: "instances",
+        label: "Instances (" + Number(tutor.instance_count || 0) + ")"
+      });
+    }
+    tabSpecs.forEach(function (tab) {
       var button = document.createElement("button");
       button.type = "button";
       button.className = "ullme-tutor-tab";
@@ -676,13 +689,27 @@
       tutor.shown_text || "",
       "Displayed as the Tutor's first chat message."
     ));
-    basics.appendChild(field(
-      "Typical instances for the AI helper",
-      "ullme_tutor_instance_guidance",
-      "textarea",
-      tutor.instance_guidance || "",
-      "Explain filename conventions, solution matching, and what normally forms one instance."
+    basics.appendChild(checkboxField(
+      "Use multiple Tutor instances",
+      "ullme_tutor_multiple_instances",
+      tutor.multiple_instances !== false,
+      "Disable this for one course-wide Tutor."
     ));
+    basics.appendChild(checkboxField(
+      "Store and show student chat history",
+      "ullme_tutor_chat_history",
+      Boolean(tutor.chat_history),
+      "Shows course- and Tutor-specific conversations in the student sidebar."
+    ));
+    if (tutor.multiple_instances !== false) {
+      basics.appendChild(field(
+        "Typical instances for the AI helper",
+        "ullme_tutor_instance_guidance",
+        "textarea",
+        tutor.instance_guidance || "",
+        "Explain filename conventions, solution matching, and what normally forms one instance."
+      ));
+    }
     customization.className = "ullme-tutor-form-section";
     customization.appendChild(sectionTitle("Customization and tools"));
     customization.appendChild(field(
@@ -707,16 +734,21 @@
     ));
     form.appendChild(basics);
     form.appendChild(customization);
-    form.appendChild(documentSpecsEditor(
-      "Documents per instance",
-      "ullme_docs_per_instance",
-      tutor.docs_per_instance || []
-    ));
+    if (tutor.multiple_instances !== false) {
+      form.appendChild(documentSpecsEditor(
+        "Documents per instance",
+        "ullme_docs_per_instance",
+        tutor.docs_per_instance || [],
+        false
+      ));
+    }
     form.appendChild(documentSpecsEditor(
       "Documents per course",
       "ullme_docs_per_course",
-      tutor.docs_per_course || []
+      tutor.docs_per_course || [],
+      true
     ));
+    form.appendChild(filePermissionsEditor(tutor.file_permissions || []));
 
     actions.className = "ullme-tutor-form-actions";
     save.type = "button";
@@ -732,12 +764,19 @@
           label: valueOf("ullme_tutor_label"),
           description: valueOf("ullme_tutor_description"),
           shown_text: valueOf("ullme_tutor_shown_text"),
-          instance_guidance: valueOf("ullme_tutor_instance_guidance"),
+          instance_guidance: tutor.multiple_instances === false
+            ? (tutor.instance_guidance || "")
+            : valueOf("ullme_tutor_instance_guidance"),
+          multiple_instances: checkedOf("ullme_tutor_multiple_instances"),
+          chat_history: checkedOf("ullme_tutor_chat_history"),
           default_personality: valueOf("ullme_tutor_default_personality"),
           allowed_tools: splitList(valueOf("ullme_tutor_tools")),
           allowed_student_customization: splitList(valueOf("ullme_tutor_customization")),
-          docs_per_instance: collectDocSpecs("ullme_docs_per_instance"),
-          docs_per_course: collectDocSpecs("ullme_docs_per_course")
+          docs_per_instance: tutor.multiple_instances === false
+            ? (tutor.docs_per_instance || [])
+            : collectDocSpecs("ullme_docs_per_instance"),
+          docs_per_course: collectDocSpecs("ullme_docs_per_course"),
+          file_permissions: collectFilePermissions()
         }
       });
     });
@@ -746,7 +785,7 @@
     return form;
   }
 
-  function documentSpecsEditor(titleText, id, specs) {
+  function documentSpecsEditor(titleText, id, specs, allowFixedPaths) {
     var section = document.createElement("div");
     var head = document.createElement("div");
     var title = sectionTitle(titleText);
@@ -762,16 +801,19 @@
     add.className = "ullme-secondary-action";
     add.textContent = "Add document";
     add.addEventListener("click", function () {
-      body.appendChild(docSpecRow({}));
+      body.appendChild(docSpecRow({}, allowFixedPaths));
     });
     head.appendChild(title);
     head.appendChild(add);
-    ["ID", "Description", "File types", "Directory", "Images", ""]
+    var labels = ["ID"];
+    if (allowFixedPaths) labels.push("Fixed material file");
+    labels = labels.concat(["Description", "File types", "Directory", "Images", ""]);
+    labels
       .forEach(function (label) { appendCell(headRow, "th", label); });
     tableHead.appendChild(headRow);
     body.id = id;
     (Array.isArray(specs) ? specs : []).forEach(function (spec) {
-      body.appendChild(docSpecRow(spec));
+      body.appendChild(docSpecRow(spec, allowFixedPaths));
     });
     table.appendChild(tableHead);
     table.appendChild(body);
@@ -783,14 +825,24 @@
     return section;
   }
 
-  function docSpecRow(spec) {
+  function docSpecRow(spec, allowFixedPaths) {
     var row = document.createElement("tr");
-    [
-      { name: "docid", value: spec.docid || "", placeholder: "ps" },
+    var fields = [
+      { name: "docid", value: spec.docid || "", placeholder: "ps" }
+    ];
+    if (allowFixedPaths) {
+      fields.push({
+        name: "fixed_path",
+        value: spec.fixed_path || "",
+        placeholder: "knowledge.md"
+      });
+    }
+    fields = fields.concat([
       { name: "descr", value: spec.descr || "", placeholder: "Problem set" },
       { name: "file_types", value: (spec.file_types || []).join(", "), placeholder: "md, tex" },
       { name: "pref_doc_dir", value: spec.pref_doc_dir || "", placeholder: "ps" }
-    ].forEach(function (fieldSpec) {
+    ]);
+    fields.forEach(function (fieldSpec) {
       var cell = document.createElement("td");
       var input = document.createElement("input");
       input.className = "ullme-doc-spec-input";
@@ -829,12 +881,131 @@
       var images = row.querySelector('[data-field="add_images"]');
       return {
         docid: fieldValue("docid").trim(),
+        fixed_path: fieldValue("fixed_path").trim(),
         descr: fieldValue("descr"),
         file_types: splitList(fieldValue("file_types")),
         pref_doc_dir: fieldValue("pref_doc_dir").trim(),
         add_images: Boolean(images && images.checked)
       };
     }).filter(function (spec) { return spec.docid; });
+  }
+
+  function filePermissionsEditor(permissions) {
+    var section = document.createElement("div");
+    var head = document.createElement("div");
+    var add = document.createElement("button");
+    var table = document.createElement("table");
+    var tableHead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    var body = document.createElement("tbody");
+    section.className = "ullme-tutor-form-section ullme-doc-spec-section";
+    head.className = "ullme-doc-spec-head";
+    head.appendChild(sectionTitle("Tutor file permissions"));
+    add.type = "button";
+    add.className = "ullme-secondary-action";
+    add.textContent = "Add permission";
+    add.addEventListener("click", function () {
+      body.appendChild(filePermissionRow({}));
+    });
+    head.appendChild(add);
+    ["Access", "Main path", "Directories", "Recursive", "Extensions", ""]
+      .forEach(function (label) { appendCell(headRow, "th", label); });
+    tableHead.appendChild(headRow);
+    body.id = "ullme_tutor_file_permissions";
+    (Array.isArray(permissions) ? permissions : []).forEach(function (permission) {
+      body.appendChild(filePermissionRow(permission));
+    });
+    table.appendChild(tableHead);
+    table.appendChild(body);
+    var wrap = document.createElement("div");
+    wrap.className = "ullme-doc-spec-table-wrap";
+    wrap.appendChild(table);
+    section.appendChild(head);
+    section.appendChild(wrap);
+    return section;
+  }
+
+  function filePermissionRow(permission) {
+    var row = document.createElement("tr");
+    var typeCell = document.createElement("td");
+    var type = document.createElement("select");
+    type.setAttribute("data-field", "type");
+    [
+      { value: "read_only", label: "Read only" },
+      { value: "write_and_read", label: "Write and read" }
+    ].forEach(function (item) {
+      var option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label;
+      type.appendChild(option);
+    });
+    type.value = permission.type || "read_only";
+    typeCell.appendChild(type);
+    row.appendChild(typeCell);
+    [
+      {
+        name: "main_path",
+        value: permission.main_path || "materials",
+        placeholder: "materials"
+      },
+      {
+        name: "directories",
+        value: (permission.directories || []).join(", "),
+        placeholder: "scripts, slides"
+      }
+    ].forEach(function (spec) {
+      var cell = document.createElement("td");
+      var input = document.createElement("input");
+      input.setAttribute("data-field", spec.name);
+      input.className = "ullme-doc-spec-input";
+      input.value = spec.value;
+      input.placeholder = spec.placeholder;
+      cell.appendChild(input);
+      row.appendChild(cell);
+    });
+    var recursiveCell = document.createElement("td");
+    var recursive = document.createElement("input");
+    recursive.type = "checkbox";
+    recursive.setAttribute("data-field", "recursive");
+    recursive.checked = Boolean(permission.recursive);
+    recursiveCell.appendChild(recursive);
+    row.appendChild(recursiveCell);
+    var extensionCell = document.createElement("td");
+    var extensions = document.createElement("input");
+    extensions.setAttribute("data-field", "extensions");
+    extensions.className = "ullme-doc-spec-input";
+    extensions.value = (permission.extensions || []).join(", ");
+    extensions.placeholder = "md, tex, txt";
+    extensionCell.appendChild(extensions);
+    row.appendChild(extensionCell);
+    var removeCell = document.createElement("td");
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ullme-text-action";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () { row.remove(); });
+    removeCell.appendChild(remove);
+    row.appendChild(removeCell);
+    return row;
+  }
+
+  function collectFilePermissions() {
+    var body = byId("ullme_tutor_file_permissions");
+    if (!body) return [];
+    return Array.prototype.map.call(body.querySelectorAll("tr"), function (row) {
+      function value(name) {
+        var input = row.querySelector('[data-field="' + name + '"]');
+        return input ? input.value : "";
+      }
+      var recursive = row.querySelector('[data-field="recursive"]');
+      return {
+        type: value("type"),
+        main_path: value("main_path").trim(),
+        directories: splitList(value("directories")),
+        recursive: Boolean(recursive && recursive.checked),
+        extensions: splitList(value("extensions"))
+      };
+    });
   }
 
   function yamlEditor(tutor) {
@@ -846,10 +1017,11 @@
     var save = document.createElement("button");
     panel.className = "ullme-tutor-tab-panel ullme-tutor-yaml-panel";
     tabs.className = "ullme-tutor-yaml-tabs";
-    [
-      { id: "definition", label: "Definition" },
-      { id: "instances", label: "Instances" }
-    ].forEach(function (tab) {
+    var yamlTabs = [{ id: "definition", label: "Definition" }];
+    if (tutor.multiple_instances !== false) {
+      yamlTabs.push({ id: "instances", label: "Instances" });
+    }
+    yamlTabs.forEach(function (tab) {
       var button = document.createElement("button");
       button.type = "button";
       button.className = "ullme-tutor-yaml-tab";
@@ -1004,6 +1176,28 @@
     return label;
   }
 
+  function checkboxField(labelText, id, checked, helpText) {
+    var label = document.createElement("label");
+    var line = document.createElement("span");
+    var input = document.createElement("input");
+    var text = document.createElement("span");
+    label.className = "ullme-tutor-field";
+    line.className = "ullme-tutor-checkbox-line";
+    input.id = id;
+    input.type = "checkbox";
+    input.checked = Boolean(checked);
+    text.textContent = labelText;
+    line.appendChild(input);
+    line.appendChild(text);
+    label.appendChild(line);
+    if (helpText) {
+      var help = document.createElement("small");
+      help.textContent = helpText;
+      label.appendChild(help);
+    }
+    return label;
+  }
+
   function sectionTitle(text) {
     var title = document.createElement("h3");
     title.textContent = text;
@@ -1013,6 +1207,11 @@
   function valueOf(id) {
     var element = byId(id);
     return element ? element.value : "";
+  }
+
+  function checkedOf(id) {
+    var element = byId(id);
+    return Boolean(element && element.checked);
   }
 
   function appendCell(row, kind, text) {

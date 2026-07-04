@@ -128,13 +128,19 @@ ullme_clean_tutor_instance_id = function(id) {
 }
 
 
-ullme_normalize_tutor_doc_specs = function(value) {
+ullme_normalize_tutor_doc_specs = function(value, allow_fixed_paths=FALSE) {
   restore.point("ullme_normalize_tutor_doc_specs")
   if (is.null(value) || length(value) == 0 || !is.list(value)) return(list())
   ids = names(value)
   if (is.null(ids)) return(list())
   specs = lapply(seq_along(value), function(i) {
     spec = value[[i]]
+    fixed_path = ""
+    if (isTRUE(allow_fixed_paths) &&
+        is.character(spec) && length(spec) == 1L && !is.na(spec)) {
+      fixed_path = gsub("\\\\", "/", trimws(spec))
+      spec = list()
+    }
     if (!is.list(spec)) spec = list()
     file_types = spec$file_types %||% spec$pref_format %||% list()
     list(
@@ -142,7 +148,8 @@ ullme_normalize_tutor_doc_specs = function(value) {
       descr=paste0(spec$descr %||% "")[1],
       file_types=as.list(paste0(unlist(file_types, use.names=FALSE))),
       pref_doc_dir=paste0(spec$pref_doc_dir %||% "")[1],
-      add_images=isTRUE(spec$add_images)
+      add_images=isTRUE(spec$add_images),
+      fixed_path=fixed_path
     )
   })
   names(specs) = ids
@@ -156,11 +163,52 @@ ullme_tutor_doc_specs_for_js = function(specs) {
 }
 
 
+ullme_normalize_tutor_file_permissions = function(value) {
+  restore.point("ullme_normalize_tutor_file_permissions")
+  if (is.null(value) || !is.list(value)) return(list())
+  permissions = lapply(value, function(permission) {
+    if (!is.list(permission)) return(NULL)
+    type = tolower(trimws(paste0(permission$type %||% "")[1]))
+    if (identical(type, "read_and_write")) type = "write_and_read"
+    main_path = gsub(
+      "\\\\", "/",
+      trimws(paste0(permission$main_path %||% "")[1])
+    )
+    directories = unique(gsub(
+      "\\\\", "/",
+      trimws(paste0(unlist(
+        permission$directories %||% list(),
+        use.names=FALSE
+      )))
+    ))
+    directories = gsub("^/+|/+$", "", directories[nzchar(directories)])
+    extensions = unique(tolower(gsub(
+      "^\\.+", "",
+      trimws(paste0(unlist(
+        permission$extensions %||% list(),
+        use.names=FALSE
+      )))
+    )))
+    list(
+      type=type,
+      main_path=gsub("^/+|/+$", "", main_path),
+      directories=as.list(directories),
+      recursive=isTRUE(permission$recursive),
+      extensions=as.list(extensions[nzchar(extensions)])
+    )
+  })
+  Filter(Negate(is.null), permissions)
+}
+
+
 ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
   restore.point("ullme_normalize_ai_tutor_definition")
   if (!is.list(definition)) definition = list()
   per_instance = ullme_normalize_tutor_doc_specs(definition$docs_per_instance)
-  per_course = ullme_normalize_tutor_doc_specs(definition$docs_per_course)
+  per_course = ullme_normalize_tutor_doc_specs(
+    definition$docs_per_course,
+    allow_fixed_paths=TRUE
+  )
   list(
     tutorid=tutorid,
     lang=paste0(definition$lang %||% "")[1],
@@ -172,6 +220,8 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     ),
     source=source,
     enabled=!identical(definition$enabled, FALSE),
+    multiple_instances=!identical(definition$multiple_instances, FALSE),
+    chat_history=isTRUE(definition$chat_history),
     system_prompt=paste0(definition$system_prompt %||% "", collapse="\n"),
     shown_text=paste0(definition$shown_text %||% "", collapse="\n"),
     default_personality=paste0(
@@ -190,6 +240,9 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
       definition$allowed_student_customization %||% list(),
       use.names=FALSE
     ))),
+    file_permissions=ullme_normalize_tutor_file_permissions(
+      definition$file_permissions
+    ),
     yaml_content=ullme_ai_tutor_yaml(definition)
   )
 }
@@ -466,24 +519,37 @@ ullme_course_ai_tutors = function(app=getApp()) {
       tutorid=tutorid,
       source="course"
     )
-    instance_data = ullme_read_course_ai_tutor_instances(course_dir, tutorid)
-    suggestions = ullme_suggest_course_ai_tutor_instances(course_dir, value)
-    instances = instance_data$instances
-    if (!isTRUE(instance_data$exists)) {
-      instances = suggestions
+    has_instances = !identical(value$multiple_instances, FALSE)
+    instance_data = if (has_instances) {
+      ullme_read_course_ai_tutor_instances(course_dir, tutorid)
+    } else {
+      list(instances=list(), course_docs=list(), exists=FALSE)
     }
+    suggestions = if (has_instances) {
+      ullme_suggest_course_ai_tutor_instances(course_dir, value)
+    } else {
+      list()
+    }
+    instances = instance_data$instances
+    if (has_instances && !isTRUE(instance_data$exists)) instances = suggestions
     definition$instances = instances
     definition$suggested_instances = suggestions
     definition$course_docs = instance_data$course_docs
     definition$instance_count = length(instances)
-    definition$instance_assignments_saved = isTRUE(instance_data$exists)
-    definition$instances_yaml_content = ullme_course_ai_tutor_instances_yaml(
-      course_dir=course_dir,
-      tutorid=tutorid,
-      instances=instances,
-      course_docs=instance_data$course_docs
-    )
-    definition$instance_builder_inputs = instance_builder_inputs
+    definition$instance_assignments_saved =
+      has_instances && isTRUE(instance_data$exists)
+    definition$instances_yaml_content = if (has_instances) {
+      ullme_course_ai_tutor_instances_yaml(
+        course_dir=course_dir,
+        tutorid=tutorid,
+        instances=instances,
+        course_docs=instance_data$course_docs
+      )
+    } else {
+      ""
+    }
+    definition$instance_builder_inputs =
+      if (has_instances) instance_builder_inputs else list()
     definition$edit_history = list(
       definition=ullme_edit_history_state(
         scope="tutor_definition",
@@ -498,8 +564,16 @@ ullme_course_ai_tutors = function(app=getApp()) {
     )
     conversion_specs = c(
       ullme_normalize_tutor_doc_specs(value$docs_per_instance),
-      ullme_normalize_tutor_doc_specs(value$docs_per_course)
+      ullme_normalize_tutor_doc_specs(
+        value$docs_per_course,
+        allow_fixed_paths=TRUE
+      )
     )
+    conversion_specs = conversion_specs[vapply(
+      conversion_specs,
+      function(spec) !nzchar(spec$fixed_path %||% ""),
+      logical(1)
+    )]
     conversion_files = unique(unlist(lapply(
       conversion_specs,
       function(spec) ullme_tutor_spec_files(course_dir, spec)
@@ -629,13 +703,24 @@ ullme_set_course_ai_tutor_enabled = function(tutorid, enabled, app=getApp()) {
 }
 
 
-ullme_tutor_doc_specs_from_rows = function(rows) {
+ullme_tutor_doc_specs_from_rows = function(rows, allow_fixed_paths=FALSE) {
   restore.point("ullme_tutor_doc_specs_from_rows")
   if (!is.list(rows)) return(list())
   result = list()
   for (row in rows) {
     if (!is.list(row)) next
     docid = ullme_clean_definition_id(row$docid)
+    fixed_path = gsub(
+      "\\\\", "/",
+      trimws(paste0(row$fixed_path %||% "")[1])
+    )
+    if (isTRUE(allow_fixed_paths) && nzchar(fixed_path)) {
+      if (!ullme_safe_relative_material_path(fixed_path)) {
+        stop("Fixed course document paths must be relative material paths.")
+      }
+      result[[docid]] = fixed_path
+      next
+    }
     file_types = unique(trimws(paste0(unlist(
       row$file_types %||% list(),
       use.names=FALSE
@@ -648,6 +733,21 @@ ullme_tutor_doc_specs_from_rows = function(rows) {
     )
   }
   result
+}
+
+
+ullme_tutor_file_permissions_from_rows = function(rows) {
+  restore.point("ullme_tutor_file_permissions_from_rows")
+  permissions = ullme_normalize_tutor_file_permissions(rows)
+  lapply(permissions, function(permission) {
+    list(
+      type=permission$type,
+      main_path=permission$main_path,
+      directories=permission$directories,
+      recursive=permission$recursive,
+      extensions=permission$extensions
+    )
+  })
 }
 
 
@@ -694,6 +794,17 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
         collapse="\n"
       )
     }
+    if (has_field("multiple_instances")) {
+      current$multiple_instances = isTRUE(fields$multiple_instances)
+    }
+    if (has_field("chat_history")) {
+      current$chat_history = isTRUE(fields$chat_history)
+    }
+    if (has_field("file_permissions")) {
+      current$file_permissions = ullme_tutor_file_permissions_from_rows(
+        fields$file_permissions %||% list()
+      )
+    }
     if (has_field("docs_per_instance")) {
       current$docs_per_instance = ullme_tutor_doc_specs_from_rows(
         fields$docs_per_instance %||% list()
@@ -701,7 +812,8 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     }
     if (has_field("docs_per_course")) {
       current$docs_per_course = ullme_tutor_doc_specs_from_rows(
-        fields$docs_per_course %||% list()
+        fields$docs_per_course %||% list(),
+        allow_fixed_paths=TRUE
       )
     }
     if (has_field("allowed_tools")) {
@@ -781,6 +893,9 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
   if (!file.exists(tutor_path)) stop("This AI Tutor is not part of the course.")
   definition = yaml::read_yaml(tutor_path)
   if (!is.list(definition)) stop("The course AI Tutor YAML is invalid.")
+  if (identical(definition$multiple_instances, FALSE)) {
+    stop("This AI Tutor is course-wide and does not use instances.")
+  }
   instance_docids = names(
     ullme_normalize_tutor_doc_specs(definition$docs_per_instance)
   )

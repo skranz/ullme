@@ -144,9 +144,14 @@ ullme_student_tutor_definition = function(tutorid, app=getApp()) {
     tutorid=tutorid,
     source="course"
   )
-  instance_data = ullme_read_course_ai_tutor_instances(course_dir, tutorid)
+  has_instances = !identical(value$multiple_instances, FALSE)
+  instance_data = if (has_instances) {
+    ullme_read_course_ai_tutor_instances(course_dir, tutorid)
+  } else {
+    list(instances=list(), course_docs=list(), exists=FALSE)
+  }
   instances = instance_data$instances
-  if (!isTRUE(instance_data$exists)) {
+  if (has_instances && !isTRUE(instance_data$exists)) {
     instances = ullme_suggest_course_ai_tutor_instances(course_dir, value)
   }
   definition$instances = instances
@@ -198,13 +203,17 @@ ullme_student_select_context = function(tutorid=app$tutorid,
     stop("AI Tutor '", tutorid, "' is not available in this course.", call.=FALSE)
   }
   tutor = tutors[[match(tutorid, tutorids)]]
+  if (!isTRUE(tutor$multiple_instances)) instanceid = NULL
   instanceids = vapply(
     tutor$instances,
     function(instance) paste0(instance$instanceid %||% "")[1],
     character(1)
   )
   instanceids = instanceids[nzchar(instanceids)]
-  if (is.null(instanceid) && length(instanceids)) instanceid = instanceids[[1]]
+  if (isTRUE(tutor$multiple_instances) &&
+      is.null(instanceid) && length(instanceids)) {
+    instanceid = instanceids[[1]]
+  }
   if (!is.null(instanceid) && !instanceid %in% instanceids) {
     stop(
       "Tutor instance '", instanceid, "' is not available for AI Tutor '",
@@ -231,15 +240,26 @@ ullme_student_context_for_js = function(error="", app=getApp()) {
     allow_tutor_switch=isTRUE(app$allow_tutor_switch),
     allow_instance_switch=isTRUE(app$allow_instance_switch),
     tutors=lapply(tutors, function(tutor) {
+      shown_text = ullme_student_shown_text(
+        tutor=tutor,
+        instanceid=if (identical(tutor$tutorid, app$tutorid)) {
+          app$instanceid
+        } else {
+          NULL
+        },
+        app=app
+      )
       list(
         tutorid=tutor$tutorid,
         label=tutor$label,
         description=tutor$description,
-        shown_text=tutor$shown_text %||% "",
+        shown_text=shown_text,
         shown_html=ullme_chat_output_html(
-          tutor$shown_text %||% "",
+          shown_text,
           app=app
         ),
+        multiple_instances=isTRUE(tutor$multiple_instances),
+        chat_history=isTRUE(tutor$chat_history),
         instances=lapply(tutor$instances, function(instance) {
           list(
             instanceid=instance$instanceid,
@@ -248,6 +268,7 @@ ullme_student_context_for_js = function(error="", app=getApp()) {
         })
       )
     }),
+    chat_history=ullme_student_chat_history_state(app=app),
     error=paste0(error %||% "")[1]
   )
 }
@@ -269,6 +290,7 @@ ullme_init_student_app = function(session, app=getApp()) {
   result = tryCatch({
     ullme_student_resolve_parameters(session=session, app=app)
     ullme_student_select_context(app=app)
+    ullme_student_chat_history_init(app=app)
     list(ok=TRUE, error="")
   }, error=function(e) {
     list(ok=FALSE, error=conditionMessage(e))
@@ -301,6 +323,9 @@ ullme_handle_student_context = function(tutorid=NULL, instanceid=NULL,
       instanceid=instanceid,
       app=app
     )
+    if (!identical(app$tutorid, old_tutorid)) {
+      ullme_student_chat_history_init(app=app)
+    }
     ""
   }, error=function(e) {
     app$tutorid = old_tutorid
@@ -323,10 +348,11 @@ ullme_student_selected_tutor = function(app=getApp()) {
 }
 
 
-ullme_student_document_text = function(paths, course_dir) {
+ullme_student_document_text = function(paths, course_dir,
+                                        missing="[content missing]") {
   restore.point("ullme_student_document_text")
   paths = ullme_tutor_document_paths(paths)
-  if (length(paths) == 0) return("")
+  if (length(paths) == 0) return(missing)
   text = vapply(paths, function(path) {
     if (!ullme_safe_relative_material_path(path)) return("")
     target = file.path(course_dir, "materials", path)
@@ -340,20 +366,39 @@ ullme_student_document_text = function(paths, course_dir) {
     ), collapse="\n")
     paste0("### ", path, "\n\n", content)
   }, character(1))
-  paste(text[nzchar(text)], collapse="\n\n")
+  text = paste(text[nzchar(text)], collapse="\n\n")
+  if (nzchar(text)) text else missing
 }
 
 
-ullme_student_system_prompt = function(app=getApp()) {
-  restore.point("ullme_student_system_prompt")
-  tutor = ullme_student_selected_tutor(app=app)
-  if (is.null(tutor)) stop("No AI Tutor is selected.")
+ullme_student_tutor_values = function(tutor=ullme_student_selected_tutor(app),
+                                       instanceid=app$instanceid,
+                                       app=getApp()) {
+  restore.point("ullme_student_tutor_values")
+  if (is.null(tutor)) return(list())
   course_dir = ullme_student_course_dir(app=app)
   instances = tutor$instances %||% list()
   selected = instances[vapply(instances, function(instance) {
-    identical(paste0(instance$instanceid %||% "")[1], app$instanceid %||% "")
+    identical(paste0(instance$instanceid %||% "")[1], instanceid %||% "")
   }, logical(1))]
   instance_docs = if (length(selected)) selected[[1]]$docs else list()
+  course_specs = ullme_normalize_tutor_doc_specs(
+    setNames(
+      lapply(tutor$docs_per_course %||% list(), function(spec) {
+        if (nzchar(spec$fixed_path %||% "")) {
+          spec$fixed_path
+        } else {
+          spec
+        }
+      }),
+      vapply(
+        tutor$docs_per_course %||% list(),
+        function(spec) spec$docid,
+        character(1)
+      )
+    ),
+    allow_fixed_paths=TRUE
+  )
   docids = unique(c(
     paste0(unlist(tutor$doc_ids_per_course %||% list(), use.names=FALSE)),
     paste0(unlist(tutor$doc_ids_per_instance %||% list(), use.names=FALSE)),
@@ -362,20 +407,66 @@ ullme_student_system_prompt = function(app=getApp()) {
   ))
   docids = docids[nzchar(docids)]
   values = lapply(docids, function(docid) {
+    fixed_path = course_specs[[docid]]$fixed_path %||% ""
+    if (nzchar(fixed_path)) {
+      return(ullme_student_document_text(
+        fixed_path,
+        course_dir=course_dir,
+        missing="[content missing]"
+      ))
+    }
     ullme_student_document_text(
       c(
         tutor$course_docs[[docid]] %||% list(),
         instance_docs[[docid]] %||% list()
       ),
-      course_dir=course_dir
+      course_dir=course_dir,
+      missing=""
     )
   })
   names(values) = docids
-  ullme_render_ai_tutor_system_prompt(
+  values$personality = tutor$default_personality %||% ""
+  customization_ids = paste0(unlist(
+    tutor$allowed_student_customization %||% list(),
+    use.names=FALSE
+  ))
+  for (customization_id in customization_ids[nzchar(customization_ids)]) {
+    if (is.null(values[[customization_id]])) {
+      values[[customization_id]] = ""
+    }
+  }
+  values
+}
+
+
+ullme_student_shown_text = function(tutor=ullme_student_selected_tutor(app),
+                                     instanceid=app$instanceid,
+                                     app=getApp()) {
+  restore.point("ullme_student_shown_text")
+  if (is.null(tutor)) return("")
+  ullme_render_prompt(
+    text=tutor$shown_text %||% "",
+    values=ullme_student_tutor_values(
+      tutor=tutor,
+      instanceid=instanceid,
+      app=app
+    ),
+    strict=FALSE
+  )
+}
+
+
+ullme_student_system_prompt = function(app=getApp()) {
+  restore.point("ullme_student_system_prompt")
+  tutor = ullme_student_selected_tutor(app=app)
+  if (is.null(tutor)) stop("No AI Tutor is selected.")
+  prompt = ullme_render_ai_tutor_system_prompt(
     definition=tutor,
-    documents=values,
+    documents=ullme_student_tutor_values(tutor=tutor, app=app),
     customization=list()
   )
+  transcript = ullme_student_chat_history_transcript(app=app)
+  if (nzchar(transcript)) paste(prompt, transcript, sep="\n\n") else prompt
 }
 
 
@@ -392,6 +483,24 @@ ullme_student_chat = function(model=NULL, app=getApp()) {
       system_prompt=prompt,
       task_profile="student_tutor"
     )
+    if (!is.null(chat)) {
+      tool_names = paste0(unlist(
+        ullme_student_selected_tutor(app=app)$allowed_tools %||% list(),
+        use.names=FALSE
+      ))
+      tool_names = intersect(tool_names, names(ullme_student_tool_registry()))
+      if (length(tool_names)) {
+        tools = lapply(tool_names, ullme_student_tool, app=app)
+        names(tools) = tool_names
+        chat$register_tools(tools)
+        chat$on_tool_request(function(request) {
+          ullme_handle_tool_lifecycle_event("request", request, app=app)
+        })
+        chat$on_tool_result(function(result) {
+          ullme_handle_tool_lifecycle_event("result", result, app=app)
+        })
+      }
+    }
     app$teacher_chats[[key]] = chat
   } else {
     chat$set_system_prompt(prompt)
@@ -446,8 +555,38 @@ ullme_student_context_controls_ui = function(app=getApp()) {
 
 ullme_student_sidebar_ui = function(app=getApp()) {
   restore.point("ullme_student_sidebar_ui")
-  # Deprecated: The student app no longer uses a sidebar.
-  NULL
+  tags$aside(
+    id="ullme_student_chat_history",
+    class="ullme-student-chat-history",
+    `aria-label`="Chat history",
+    tags$div(
+      class="ullme-student-chat-history-head",
+      tags$span("Chats"),
+      tags$button(
+        id="ullme_student_history_new_btn",
+        class="ullme-icon-button",
+        type="button",
+        `aria-label`="New chat",
+        title="New chat",
+        HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>')
+      )
+    ),
+    tags$nav(
+      id="ullme_student_chat_history_recent",
+      class="ullme-student-chat-history-list",
+      `aria-label`="Recent chats"
+    ),
+    tags$details(
+      id="ullme_student_chat_history_more",
+      class="ullme-student-chat-history-more",
+      tags$summary("More"),
+      tags$nav(
+        id="ullme_student_chat_history_older",
+        class="ullme-student-chat-history-list",
+        `aria-label`="Older chats"
+      )
+    )
+  )
 }
 
 
@@ -455,6 +594,7 @@ ullme_student_workspace_ui = function(app=getApp()) {
   restore.point("ullme_student_workspace_ui")
   tags$div(
     class="ullme-workspace ullme-student-workspace",
+    ullme_student_sidebar_ui(app=app),
     ullme_chat_pane_ui(app=app, show_header=FALSE)
   )
 }
@@ -464,5 +604,9 @@ ullme_handle_student_chat_clear = function(app=getApp(), ...) {
   model = ullme_model_id(NULL, app=app)
   key = ullme_chat_key(model, task_profile="student_tutor", app=app)
   app$teacher_chats[[key]] = NULL
+  if (ullme_student_chat_history_enabled(app=app)) {
+    ullme_student_chat_history_new(app=app)
+    ullme_send_student_chat_history(app=app)
+  }
   invisible(TRUE)
 }

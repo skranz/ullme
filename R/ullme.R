@@ -246,6 +246,12 @@ ullme_register_handlers = function(app=getApp()) {
       fun=ullme_handle_student_chat_clear,
       app=app
     )
+    eventHandler(
+      eventId="ullme_student_chat_history_event",
+      id=NULL,
+      fun=ullme_handle_student_chat_history,
+      app=app
+    )
     ullme_register_audio_handlers(app=app)
     return(invisible(TRUE))
   }
@@ -1733,6 +1739,14 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     collapse="\n\n"
   )
   if (!nzchar(system_instructions)) system_instructions = NULL
+  if (identical(app$role, "student")) {
+    ullme_student_chat_history_append(
+      role="user",
+      text=ai_input,
+      message_id=clientMessageId %||% "",
+      app=app
+    )
+  }
   interaction_dir = ullme_ai_interaction_start(
     input=ai_input,
     visible_text=text,
@@ -1752,6 +1766,15 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       .app=app
     )
     ullme_ai_interaction_finish(interaction_dir, text=answer)
+    if (identical(app$role, "student")) {
+      ullme_student_chat_history_append(
+        role="assistant",
+        text=answer,
+        message_id=assistantMessageId,
+        app=app
+      )
+      ullme_send_student_chat_history(app=app)
+    }
     return(invisible(answer))
   }
 
@@ -1768,6 +1791,15 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       interaction_dir, status=status, text=text,
       thinking=thinking, error=error
     )
+    if (identical(app$role, "student") && nzchar(text)) {
+      ullme_student_chat_history_append(
+        role="assistant",
+        text=text,
+        message_id=assistantMessageId,
+        app=app
+      )
+      ullme_send_student_chat_history(app=app)
+    }
   }
   fail = function(error, text="", thinking="") {
     message = paste0(
@@ -1984,6 +2016,15 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
     text=text,
     thinking=thinking
   )
+  if (identical(app$role, "student") && nzchar(text)) {
+    ullme_student_chat_history_append(
+      role="assistant",
+      text=text,
+      message_id=message_id,
+      app=app
+    )
+    ullme_send_student_chat_history(app=app)
+  }
   ullme_send_chat_stream_update(
     message_id=message_id,
     text=if (nzchar(text)) text else "Stopped.",

@@ -11,7 +11,8 @@
     assistantRequests: {},
     cancelledAssistantRequests: {},
     contextReady: false,
-    context: null
+    context: null,
+    historyCurrentId: null
   };
   var mathJaxQueue = Promise.resolve();
 
@@ -118,6 +119,7 @@
     var tutorSelect = byId("ullme_student_tutor_select");
     var instanceSelect = byId("ullme_student_instance_select");
     var newChatBtn = byId("ullme_student_new_chat_btn");
+    var historyNewBtn = byId("ullme_student_history_new_btn");
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
@@ -194,6 +196,11 @@
         if (!window.confirm("Start a new chat and clear the current history?")) return;
         clearChatUI();
         sendEvent("ullme_student_chat_clear_event", {});
+      });
+    }
+    if (historyNewBtn) {
+      historyNewBtn.addEventListener("click", function () {
+        sendEvent("ullme_student_chat_history_event", { new_chat: true });
       });
     }
 
@@ -638,6 +645,81 @@
     return item;
   }
 
+  function historyButton(item, currentId) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "ullme-student-chat-history-item";
+    if (item.id === currentId) {
+      button.classList.add("ullme-student-chat-history-item-active");
+    }
+    button.textContent = item.label || item.id || "Chat";
+    button.title = item.label || item.id || "Chat";
+    button.addEventListener("click", function () {
+      if (item.id === state.historyCurrentId) return;
+      sendEvent("ullme_student_chat_history_event", { chat_id: item.id });
+    });
+    return button;
+  }
+
+  function renderStoredChat(messages) {
+    clearChatUI();
+    (messages || []).forEach(function (message) {
+      if (message.role === "user") {
+        appendUserMessage({
+          id: message.id || nextId("history_user"),
+          text: message.text || ""
+        });
+      } else if (message.role === "assistant") {
+        appendAssistantMessage({
+          id: message.id || nextId("history_assistant"),
+          text: message.text || "",
+          html: message.html || ""
+        });
+      }
+    });
+  }
+
+  function updateStudentChatHistory(payload) {
+    payload = payload || {};
+    var workspace = document.querySelector(".ullme-student-workspace");
+    var recent = byId("ullme_student_chat_history_recent");
+    var older = byId("ullme_student_chat_history_older");
+    var more = byId("ullme_student_chat_history_more");
+    var enabled = Boolean(payload.enabled);
+    if (workspace) {
+      workspace.classList.toggle(
+        "ullme-student-workspace-with-history",
+        enabled
+      );
+    }
+    if (!enabled) {
+      state.historyCurrentId = null;
+      if (recent) recent.innerHTML = "";
+      if (older) older.innerHTML = "";
+      if (more) more.style.display = "none";
+      return;
+    }
+    if (recent) {
+      recent.innerHTML = "";
+      (payload.recent || []).forEach(function (item) {
+        recent.appendChild(historyButton(item, payload.current_id));
+      });
+    }
+    if (older) {
+      older.innerHTML = "";
+      (payload.older || []).forEach(function (item) {
+        older.appendChild(historyButton(item, payload.current_id));
+      });
+    }
+    if (more) {
+      more.style.display = (payload.older || []).length ? "" : "none";
+    }
+    if (state.historyCurrentId !== payload.current_id) {
+      state.historyCurrentId = payload.current_id || "";
+      renderStoredChat(payload.messages || []);
+    }
+  }
+
   function updateStudentContext(payload) {
     payload = payload || {};
     var previousTutor = state.context ? state.context.tutorid : null;
@@ -648,6 +730,7 @@
     // Clear chat when instance or tutor changes from an established state
     if (previousTutor !== null && (previousTutor !== payload.tutorid || previousInstance !== payload.instanceid)) {
       clearChatUI();
+      state.historyCurrentId = null;
     }
 
     var courseSummary = byId("ullme_student_course_summary");
@@ -698,7 +781,11 @@
       }
       if (payload.instanceid) instanceSelect.value = payload.instanceid;
 
-      var showInstanceSelect = instances.length > 1 && payload.allow_instance_switch && !payload.error;
+      var usesInstances = !selectedTutor || selectedTutor.multiple_instances !== false;
+      var instanceWrap = instanceSelect.closest(".ullme-student-header-select-wrap");
+      if (instanceWrap) instanceWrap.style.display = usesInstances ? "" : "none";
+      var showInstanceSelect = usesInstances && instances.length > 1 &&
+        payload.allow_instance_switch && !payload.error;
       instanceSelect.style.display = showInstanceSelect ? "" : "none";
       instanceText.style.display = showInstanceSelect ? "none" : "";
 
@@ -707,6 +794,7 @@
     }
 
     updateStudentIntro(selectedTutor);
+    updateStudentChatHistory(payload.chat_history || { enabled: false });
     updateSubmitState();
   }
 
@@ -736,6 +824,7 @@
   window.ullme.replaceUserMessage = replaceUserMessage;
   window.ullme.receiveStoredUploads = receiveStoredUploads;
   window.ullme.updateStudentContext = updateStudentContext;
+  window.ullme.updateStudentChatHistory = updateStudentChatHistory;
   window.ullme.updateModelCatalog = updateModelCatalog;
 
   if (document.readyState === "loading") {
