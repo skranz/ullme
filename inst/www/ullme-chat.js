@@ -38,7 +38,6 @@
     selectedCourseid: ""
   };
   var mathJaxQueue = Promise.resolve();
-  var streamingMathTimers = new WeakMap();
 
   var materialLabels = {
     general: "General",
@@ -3068,10 +3067,6 @@
       typesetMath(text);
       var completedThinking = bubble.querySelector(".ullme-message-thinking-text");
       if (completedThinking) typesetMath(completedThinking);
-    } else {
-      if (message.text) scheduleStreamingMath(text);
-      var streamingThinking = bubble.querySelector(".ullme-message-thinking-text");
-      if (streamingThinking) scheduleStreamingMath(streamingThinking);
     }
   }
 
@@ -3115,24 +3110,6 @@
           console.warn("MathJax could not typeset a chat message.", error);
         }
       });
-  }
-
-  function scheduleStreamingMath(element) {
-    if (!element) return;
-    var pending = streamingMathTimers.get(element);
-    if (pending) return;
-    streamingMathTimers.set(element, window.setTimeout(function () {
-      streamingMathTimers.delete(element);
-      typesetMath(element);
-    }, 140));
-  }
-
-  function finishStreamingMath(element) {
-    if (!element) return;
-    var pending = streamingMathTimers.get(element);
-    if (pending) window.clearTimeout(pending);
-    streamingMathTimers.delete(element);
-    typesetMath(element);
   }
 
   function setAssistantMessageContent(element, text, html) {
@@ -3450,7 +3427,7 @@
     if (meta) meta.remove();
     if (bubble) updateAssistantThinking(bubble, "", "");
     if (messageText) setAssistantMessageContent(messageText, text || "", html || "");
-    finishStreamingMath(messageText);
+    typesetMath(messageText);
     if (bubble && !bubble.querySelector(".ullme-message-actions")) {
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
     }
@@ -3545,16 +3522,12 @@
       state.chatBusy = false;
       clearChatWatchdog(messageId);
       updateSubmitState();
-      finishStreamingMath(messageText);
-      finishStreamingMath(thinkingTextElement);
+      typesetMath(messageText);
+      typesetMath(thinkingTextElement);
     } else if (waitingForUser) {
       pauseChatWatchdog(messageId);
     } else {
       startChatWatchdog(messageId);
-    }
-    if (!done) {
-      if (text) scheduleStreamingMath(messageText);
-      if (thinking) scheduleStreamingMath(thinkingTextElement);
     }
     if (messages) messages.scrollTop = previousScrollTop;
   }
