@@ -79,11 +79,18 @@ stopifnot(
   identical(read_instances$tutorid, "tutor1"),
   grepl("instanceid: problem", read_instances$content, fixed=TRUE)
 )
-app$agent_approval_override = "allow"
+replacement_instances_yaml = paste(
+  "course_docs: {}",
+  "instances:",
+  "  - instanceid: replacement",
+  "    docs: {}",
+  sep="\n"
+)
+app$agent_approval_override = "ask"
 app$headless = TRUE
 tool_written = utool_write_rtutor_instances_yaml(
   "tutor1",
-  instances_yaml,
+  replacement_instances_yaml,
   app=app
 )
 stopifnot(
@@ -91,7 +98,25 @@ stopifnot(
   identical(tool_written$status, "committed"),
   isTRUE(tool_written$validation$valid),
   identical(tool_written$validation$instance_count, 1L),
-  identical(tool_written$validation$instance_ids, list("problem"))
+  identical(tool_written$validation$instance_ids, list("replacement")),
+  length(app$pending_changes) == 0L,
+  identical(ullme_change_history(app=app)[[1]]$origin, "instance_builder")
+)
+restored_instances = ullme_undo_change(
+  ullme_change_history(app=app)[[1]]$id,
+  origin="ui",
+  app=app
+)
+stopifnot(
+  restored_instances$ok,
+  grepl(
+    "instanceid: problem",
+    paste(readLines(
+      file.path(course_dir, "ai_tutors", "tutor1", "instances.yml"),
+      warn=FALSE
+    ), collapse="\n"),
+    fixed=TRUE
+  )
 )
 
 target = file.path(root, "teachers", "alice", "note.yaml")

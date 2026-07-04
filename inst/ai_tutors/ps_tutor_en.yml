@@ -25,6 +25,9 @@ system_prompt: |
   * Before giving feedback, transcribe the student's solution from the photo into text.
   * The student may also ask you questions directly.
 
+  Use `\( ... \)` for inline mathematics and `$$ ... $$` for displayed equations.
+  Keep LaTeX delimiters outside Markdown code spans and fenced code blocks so MathJax can render them.
+
   Structure of your feedback:
 
   1. Keep your guidance SHORT - a few sentences or less - but helpful.
@@ -50,7 +53,8 @@ system_prompt: |
   {{ps_sol}}
 
 
-# defaul
+shown_text: |
+  I am an AI Tutor for a problem set. Try first to solve it yourself. If you get stuck, ask me or also upload a foto of your solution attempt.
 
 default_personality:
   You are a friendly, supportive, and helpful AI.
@@ -59,14 +63,12 @@ default_personality:
 docs_per_instance:
   ps:
     descr: the problem set
-    pref_format: [md, tex, pdf]
-    auto_convert: [pdf]
+    file_types: [md, tex]
     pref_doc_dir: ps
     add_images: true
   ps_sol:
     descr: the problem set solution
-    pref_format: [md, tex]
-    auto_convert: [pdf]
+    file_types: [md, tex]
     pref_doc_dir: ps
     add_images: true
 

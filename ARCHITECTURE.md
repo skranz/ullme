@@ -70,17 +70,18 @@ Selecting a Tutor opens one course-local Tutor with Instances, Definition, and
 YAML tabs. `course/ai_tutors/<tutorid>/tutor.yml` is always a complete,
 editable definition copied from a flat package template in
 `inst/ai_tutors/<tutorid>.yml`. `docs_per_instance` and `docs_per_course`
-define the required document roles. Reviewed assignments are stored in
+define the required document roles. Each role's ordered `file_types` list
+defines its allowed extensions and preference order. Reviewed assignments are stored in
 `course/ai_tutors/<tutorid>/instances.yml`.
 
 The YAML pane exposes the complete course-local `tutor.yml` and `instances.yml`
 as Definition and Instances subtabs. Instance discovery scans preferred material
-directories recursively. Text formats are preferred first, then Pandoc-readable
-DOCX/ODT files, and PDF is the final fallback. `R/convert.R` performs Pandoc
+directories recursively and considers only the role's ordered `file_types`.
+`R/convert.R` performs manual Pandoc
 conversions beside the source document and extracts media into a sibling
 `figures--<converted-filename>` directory, replacing dots in the filename with
 underscores (for example, `ps1.md` uses `figures--ps1_md`). The Instances YAML
-subtab and the teacher assistant can both invoke these conversions. The Materials batch bar
+subtab can invoke these conversions. The Materials batch bar
 also exposes format-specific actions plus `all -> md, txt` and
 `all -> overwrite`. The mixed actions consider only selected DOCX and PDF
 files, routing DOCX to `.md` and PDF to `.txt`; only the explicit overwrite
@@ -97,9 +98,17 @@ teacher's guidance. The specialized assistant receives only
 `write_rtutor_instances_yaml`; it does not inspect or convert files. That tool
 validates YAML structure, document roles, unique instance IDs, and assigned
 file paths before atomically replacing `instances.yml`, and returns an
-assignment summary. Committed changes refresh the Tutor UI.
+assignment summary. It commits without an approval dialog while still using
+the shared transaction backup and history mechanism. Committed changes refresh
+the Tutor UI.
 `ullme_test_instance_builder()` exposes the same prompt and tool workflow
 outside Shiny for prompt development.
+
+All ULLME-managed Tutor YAML, instance YAML, course settings, Skill assignment,
+and course-file edits use the same transaction history. The **Edits & undo**
+navigation item opens recent changes and restores an earlier version only when
+the target has not changed since that edit. Tutor panes expose the same history
+through their header shortcut.
 
 Skills belong to the teacher assistant rather than the course tab row. A
 composer button opens the resolved Skill catalog. Selecting a Skill displays
@@ -163,8 +172,10 @@ material lists without rebuilding the UI.
 ## Users, Roles, And Semesters
 
 `teacherApp()` accepts a teacher `userid`; `studentApp()` accepts a student
-`userid` and optional `teacherid`. An app's role cannot be changed after
-construction.
+`userid` plus `teacherid`, `courseid`, and optional `tutorid` and
+`instanceid`. The four course-tutor identifiers can also come from URL query
+parameters when the matching constructor argument is `NULL`; constructor
+arguments always win. An app's role cannot be changed after construction.
 
 The role-independent user directory is:
 

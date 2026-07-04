@@ -25,7 +25,7 @@ ullme_example_tutor_document_path = function(spec, docid,
   if (!nzchar(directory)) directory = "ps"
   directory = gsub("^/+|/+$", "", gsub("\\\\", "/", directory))
   formats = trimws(paste0(unlist(
-    spec$pref_format %||% list(),
+    spec$file_types %||% list(),
     use.names=FALSE
   )))
   formats = formats[nzchar(formats)]
@@ -33,6 +33,34 @@ ullme_example_tutor_document_path = function(spec, docid,
   extension = sub("^\\.+", "", tolower(extension))
   safe_docid = gsub("[^a-z0-9_-]+", "_", tolower(docid))
   paste0(directory, "/", instanceid, "_", safe_docid, ".", extension)
+}
+
+
+ullme_instance_builder_doc_roles_text = function(definition) {
+  sections = list(
+    per_instance=ullme_normalize_tutor_doc_specs(
+      definition$docs_per_instance
+    ),
+    per_course=ullme_normalize_tutor_doc_specs(
+      definition$docs_per_course
+    )
+  )
+  lines = unlist(lapply(names(sections), function(scope) {
+    specs = sections[[scope]]
+    if (!length(specs)) return(NULL)
+    vapply(names(specs), function(docid) {
+      spec = specs[[docid]]
+      types = paste0(unlist(spec$file_types, use.names=FALSE))
+      paste0(
+        "- ", docid, " (", gsub("_", " ", scope, fixed=TRUE), "): ",
+        spec$descr, "; directory `", spec$pref_doc_dir,
+        "`; allowed file types in preferred order: ",
+        paste(types, collapse=", ")
+      )
+    }, character(1))
+  }), use.names=FALSE)
+  if (!length(lines)) "- No document roles defined." else
+    paste(lines, collapse="\n")
 }
 
 
@@ -90,6 +118,7 @@ ullme_instance_builder_prompt = function(course_dir, tutorid,
         "Group matching problem and solution filenames.",
       collapse="\n"
     ),
+    document_roles=ullme_instance_builder_doc_roles_text(definition),
     example_yaml=ullme_example_tutor_instances_yaml(definition),
     ps_files=ullme_instance_builder_ps_text(course_dir),
     user_guidance=if (nzchar(trimws(user_guidance))) user_guidance else

@@ -13,13 +13,17 @@ inst/ai_tutors/<tutorid>.yml
 
 The core fields are:
 
-- `tutorid`, `lang`, `label`, and `description`;
+- `tutorid`, `lang`, `label`, `description`, and `shown_text`;
 - `system_prompt`;
 - `default_personality`;
 - `docs_per_instance`;
 - `docs_per_course`;
 - `allowed_tools`; and
 - `allowed_student_customization`.
+
+`shown_text` is rendered as the Tutor's first chat message in the student
+application. It supports the same Markdown and MathJax rendering as other
+assistant messages.
 
 Prompt placeholders refer directly to document IDs and customization IDs. For
 example, `{{ps}}`, `{{ps_sol}}`, and `{{personality}}`.

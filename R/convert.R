@@ -38,42 +38,49 @@ ullme_normalize_document_format = function(format, direction=c("input", "output"
   list(extension=row$extension[[1]], pandoc=row$pandoc[[1]])
 }
 
-ullme_preferred_document_formats = function(pref_format=NULL) {
+ullme_tutor_file_types = function(file_types=NULL) {
   requested = tolower(sub(
     "^\\.", "",
-    trimws(paste0(unlist(pref_format %||% list(), use.names=FALSE)))
+    trimws(paste0(unlist(file_types %||% list(), use.names=FALSE)))
   ))
   requested = unique(requested[nzchar(requested)])
-  table = ullme_pandoc_format_table()
-  free = table$extension[table$free_text]
-  requested_free = requested[requested %in% free]
-  unique(c(
-    requested_free,
-    intersect(c("md", "markdown", "txt", "tex", "html", "rst", "org"), free),
-    "docx", "odt", "epub",
-    requested[!requested %in% c(requested_free, "pdf")],
-    "pdf"
-  ))
+  if (!length(requested)) return(ullme_document_candidate_formats())
+  requested
 }
 
-ullme_preferred_document_file = function(paths, pref_format=NULL) {
+ullme_preferred_document_formats = function(file_types=NULL) {
+  ullme_tutor_file_types(file_types)
+}
+
+ullme_preferred_document_file = function(paths, file_types=NULL) {
   paths = paste0(unlist(paths %||% list(), use.names=FALSE))
   paths = paths[nzchar(paths)]
   if (!length(paths)) return(character(0))
   formats = tolower(tools::file_ext(paths))
-  priorities = ullme_preferred_document_formats(pref_format)
+  priorities = ullme_preferred_document_formats(file_types)
+  requested = paste0(unlist(file_types %||% list(), use.names=FALSE))
+  if (length(requested)) {
+    keep = formats %in% priorities
+    paths = paths[keep]
+    formats = formats[keep]
+    if (!length(paths)) return(character(0))
+  }
   rank = match(formats, priorities)
   rank[is.na(rank)] = length(priorities) + 1L
   paths[order(rank, tolower(paths))][[1]]
 }
 
-ullme_preferred_conversion_format = function(pref_format=NULL,
+ullme_preferred_conversion_format = function(file_types=NULL,
                                               source_format=NULL) {
-  preferred = ullme_preferred_document_formats(pref_format)
+  preferred = ullme_preferred_document_formats(file_types)
   preferred = preferred[preferred %in% ullme_document_output_formats()]
   source_format = tolower(paste0(source_format %||% "")[1])
   preferred = preferred[preferred != source_format]
-  if (length(preferred)) preferred[[1]] else "md"
+  if (length(preferred)) return(preferred[[1]])
+  if (length(unlist(file_types %||% list(), use.names=FALSE))) {
+    stop("The Tutor role has no allowed file type that can be produced by conversion.")
+  }
+  "md"
 }
 
 ullme_conversion_media_name = function(path) {
@@ -285,7 +292,7 @@ ullme_convert_material_files = function(paths, to="", from="", tutorid="",
     } else if (!nzchar(target_format) ||
                identical(tolower(target_format), "preferred")) {
       target_format = ullme_preferred_conversion_format(
-        spec$pref_format %||% list(), source_format
+        spec$file_types %||% list(), source_format
       )
     }
     target_format = ullme_normalize_document_format(target_format, "output")$extension

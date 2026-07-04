@@ -1,0 +1,10 @@
+Warning messages:
+1: package 'ellmer' was built under R version 4.5.3 
+2: package 'commonmark' was built under R version 4.5.3 
+3: package 'coro' was built under R version 4.5.3 
+
+Listening on http://127.0.0.1:8766
+createTcpServer: address already in use
+Error in initialize(...) : Failed to create server
+Calls: viewApp ... startApp -> startServer -> <Anonymous> -> initialize
+Execution halted

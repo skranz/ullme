@@ -10,6 +10,7 @@ ullme_nvidia_default_model = function() {
 
 ullme_nvidia_preferred_model_specs = function() {
   list(
+    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=TRUE),
     list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=TRUE),
     list(id="nvidia/nemotron-3-ultra-550b-a55b", image_and_text=FALSE),
     list(
@@ -20,8 +21,7 @@ ullme_nvidia_preferred_model_specs = function() {
     list(id="minimaxai/minimax-m3", image_and_text=TRUE),
     list(id="z-ai/glm-5.2", image_and_text=FALSE),
     list(id="qwen/qwen3.5-122b-a10b", image_and_text=TRUE),
-    list(id="stepfun-ai/step-3.7-flash", image_and_text=TRUE),
-    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=TRUE)
+    list(id="stepfun-ai/step-3.7-flash", image_and_text=TRUE)
   )
 }
 

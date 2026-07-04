@@ -191,7 +191,6 @@
     var userSettings = byId("ullme_user_settings");
     var skillsButton = byId("ullme_skills_btn");
     var manageSkillsButton = byId("ullme_manage_skills_btn");
-    var agentSettingsButton = byId("ullme_agent_settings_btn");
     var studioNav = byId("ullme_studio_nav");
     var studioUploadButton = byId("ullme_studio_upload_btn");
     var aiPaneToggle = byId("ullme_ai_pane_toggle");
@@ -199,6 +198,9 @@
     var courseFileBack = byId("ullme_course_file_back");
     var courseFileSave = byId("ullme_course_file_save");
     var courseFileEditor = byId("ullme_course_file_editor");
+    var editHistoryControls = document.querySelectorAll(
+      ".ullme-edit-history-controls[data-edit-history-scope]"
+    );
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
@@ -311,8 +313,8 @@
       if (byId("ullme_change_approval_overlay")) {
         return;
       }
-      if (byId("ullme_agent_settings_overlay")) {
-        closeAgentSettings();
+      if (byId("ullme_tutor_create_dialog")) {
+        closeTutorCreateDialog();
         return;
       }
       if (byId("ullme_definition_create_dialog")) {
@@ -420,18 +422,22 @@
       });
     }
 
-    if (agentSettingsButton) {
-      agentSettingsButton.addEventListener("click", function () {
-        closeUserSettings();
-        sendSidebarEvent("ullme_agent_settings_open_event", {});
-      });
-    }
-
     if (settingsSave) {
       settingsSave.addEventListener("click", function () {
         sendSidebarEvent("ullme_course_settings_save_event", gatherCourseSettings());
       });
     }
+    Array.prototype.forEach.call(editHistoryControls, function (controls) {
+      controls.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-edit-history-direction]");
+        if (!button || button.disabled) return;
+        button.disabled = true;
+        sendSidebarEvent("ullme_edit_history_event", {
+          scope: controls.getAttribute("data-edit-history-scope"),
+          direction: button.getAttribute("data-edit-history-direction")
+        });
+      });
+    });
 
     if (materialUploadButton) {
       materialUploadButton.addEventListener("click", function () {
@@ -785,11 +791,6 @@
       if (definitionWorkspaceDirty() && !window.confirm("Discard your unsaved changes?")) return;
       removeDefinitionWorkspace(true);
     }
-    if (view === "history") {
-      setStudioNavigation(view, "Change history");
-      sendSidebarEvent("ullme_agent_settings_open_event", {});
-      return;
-    }
     state.studioView = view;
     var titles = {
       materials: "Materials",
@@ -946,9 +947,6 @@
     var view = document.createElement("button");
     var action = document.createElement("button");
     var id = isTutor ? item.tutorid : item.skillid;
-    var installed = isTutor && state.aiTutors.some(function (tutor) {
-      return tutor.tutorid === id;
-    });
     var courseSkill = !isTutor && state.courseSkills.some(function (skill) {
       return skill.skillid === id;
     });
@@ -971,20 +969,18 @@
       requestDefinitionWorkspace("skill", item);
     });
     action.type = "button";
-    action.className = installed || courseSkill
+    action.className = courseSkill
       ? "ullme-secondary-action"
       : "ullme-primary-action";
-    action.textContent = installed
-      ? "Added"
-      : (isTutor ? "Add" : (courseSkill ? "Activate" : "Add"));
-    action.disabled = installed;
+    action.textContent = isTutor ? "Add" : (courseSkill ? "Activate" : "Add");
     action.addEventListener("click", function () {
       if (isTutor) {
-        sendSidebarEvent("ullme_ai_tutor_add_event", { tutorid: id });
+        closeCatalogDialog();
+        openTutorCreateDialog(item);
       } else {
         sendSidebarEvent("ullme_skill_activate_event", { skillid: id });
+        closeCatalogDialog();
       }
-      closeCatalogDialog();
     });
 
     titleRow.appendChild(title);
@@ -1001,6 +997,97 @@
   function closeCatalogDialog() {
     var overlay = byId("ullme_catalog_overlay");
     if (overlay) overlay.remove();
+  }
+
+  function openTutorCreateDialog(template) {
+    closeTutorCreateDialog();
+    template = template || {};
+    var templateid = template.tutorid || "";
+    var overlay = document.createElement("div");
+    var dialog = document.createElement("section");
+    var head = document.createElement("div");
+    var title = document.createElement("div");
+    var close = document.createElement("button");
+    var description = document.createElement("p");
+    var tutorIdField = courseDialogField("Tutor ID", "ullme_new_tutor_id");
+    var hint = document.createElement("small");
+    var actions = document.createElement("div");
+    var cancel = document.createElement("button");
+    var create = document.createElement("button");
+
+    overlay.id = "ullme_tutor_create_dialog";
+    overlay.className = "ullme-dialog-overlay";
+    dialog.className = "ullme-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Create AI Tutor");
+    head.className = "ullme-dialog-head";
+    title.className = "ullme-dialog-title";
+    title.textContent = "Add AI Tutor";
+    close.type = "button";
+    close.className = "ullme-icon-button";
+    close.innerHTML = icons.close;
+    close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", closeTutorCreateDialog);
+    description.textContent =
+      "Template: " + (template.label || templateid) +
+      ". Choose the ID for this course copy.";
+    tutorIdField.input.value = templateid;
+    tutorIdField.input.autocomplete = "off";
+    hint.textContent =
+      "Start with a letter; use only letters, numbers, underscores, or hyphens.";
+    tutorIdField.label.appendChild(hint);
+    actions.className = "ullme-dialog-actions";
+    cancel.type = "button";
+    cancel.className = "ullme-secondary-action";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", closeTutorCreateDialog);
+    create.type = "button";
+    create.className = "ullme-primary-action";
+    create.textContent = "Add Tutor";
+    create.addEventListener("click", function () {
+      var tutorid = tutorIdField.input.value.trim();
+      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(tutorid)) {
+        tutorIdField.input.focus();
+        return;
+      }
+      create.disabled = true;
+      sendSidebarEvent("ullme_ai_tutor_add_event", {
+        templateid: templateid,
+        tutorid: tutorid
+      });
+    });
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeTutorCreateDialog();
+    });
+
+    head.appendChild(title);
+    head.appendChild(close);
+    actions.appendChild(cancel);
+    actions.appendChild(create);
+    dialog.appendChild(head);
+    dialog.appendChild(description);
+    dialog.appendChild(tutorIdField.label);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    tutorIdField.input.select();
+  }
+
+  function closeTutorCreateDialog() {
+    var overlay = byId("ullme_tutor_create_dialog");
+    if (overlay) overlay.remove();
+  }
+
+  function aiTutorAddComplete(result) {
+    if (result && result.ok) {
+      closeTutorCreateDialog();
+      return;
+    }
+    var create = byId("ullme_tutor_create_dialog");
+    create = create && create.querySelector(".ullme-primary-action");
+    if (create) create.disabled = false;
+    window.alert((result && result.message) || "The AI Tutor could not be added.");
   }
 
   function requestDefinitionWorkspace(kind, item) {
@@ -2013,149 +2100,6 @@
     if (overlay) overlay.remove();
   }
 
-  function closeAgentSettings(preserveNavigation) {
-    var overlay = byId("ullme_agent_settings_overlay");
-    if (overlay) overlay.remove();
-    if (preserveNavigation === true) return;
-    var titles = {
-      materials: "Materials",
-      "ai-tutors": "AI Tutors",
-      settings: "Course settings",
-      file: "File editor",
-      definitions: "Definitions"
-    };
-    setStudioNavigation(state.studioView, titles[state.studioView] || "Course studio");
-  }
-
-  function approvalSelect(labelText, name, value) {
-    var label = document.createElement("label");
-    var span = document.createElement("span");
-    var select = document.createElement("select");
-    label.className = "ullme-agent-setting-field";
-    span.textContent = labelText;
-    select.name = name;
-    ["allow", "ask", "deny"].forEach(function (policy) {
-      var option = document.createElement("option");
-      option.value = policy;
-      option.textContent = policy.charAt(0).toUpperCase() + policy.slice(1);
-      option.selected = policy === (value || "ask");
-      select.appendChild(option);
-    });
-    label.appendChild(span);
-    label.appendChild(select);
-    return label;
-  }
-
-  function openAgentSettings(payload) {
-    closeAgentSettings(true);
-    payload = payload || {};
-    var approval = payload.approval || {};
-    var history = Array.isArray(payload.history) ? payload.history : [];
-    var overlay = document.createElement("div");
-    var dialog = document.createElement("section");
-    var head = document.createElement("div");
-    var title = document.createElement("div");
-    var close = document.createElement("button");
-    var explanation = document.createElement("p");
-    var settings = document.createElement("div");
-    var historyTitle = document.createElement("div");
-    var historyList = document.createElement("div");
-    var actions = document.createElement("div");
-    var cancel = document.createElement("button");
-    var save = document.createElement("button");
-
-    overlay.id = "ullme_agent_settings_overlay";
-    overlay.className = "ullme-dialog-overlay";
-    dialog.className = "ullme-agent-settings-dialog";
-    dialog.setAttribute("role", "dialog");
-    dialog.setAttribute("aria-modal", "true");
-    dialog.setAttribute("aria-label", "Agent tools and change history");
-    head.className = "ullme-agent-settings-head";
-    title.className = "ullme-dialog-title";
-    title.textContent = "Agent tools & change history";
-    close.type = "button";
-    close.className = "ullme-icon-button";
-    close.innerHTML = icons.close;
-    close.setAttribute("aria-label", "Close");
-    close.addEventListener("click", closeAgentSettings);
-    explanation.className = "ullme-agent-settings-note";
-    explanation.textContent = "Choose whether agent-originated file changes run immediately, ask first, or are denied. Manual saves are still validated, backed up, and logged.";
-    settings.className = "ullme-agent-settings-grid";
-    settings.appendChild(approvalSelect("Default", "default", approval.default));
-    settings.appendChild(approvalSelect("Copy materials", "copy_materials", approval.copy_materials));
-    settings.appendChild(approvalSelect("Rewrite definitions", "rewrite_definitions", approval.rewrite_definitions));
-    settings.appendChild(approvalSelect("Rewrite course files", "rewrite_course_files", approval.rewrite_course_files));
-    settings.appendChild(approvalSelect("Agent undo", "undo", approval.undo));
-
-    historyTitle.className = "ullme-agent-history-title";
-    historyTitle.textContent = "Recent changes";
-    historyList.className = "ullme-agent-history";
-    if (!history.length) {
-      var empty = document.createElement("div");
-      empty.className = "ullme-agent-history-empty";
-      empty.textContent = "No ULLME-managed changes have been recorded yet.";
-      historyList.appendChild(empty);
-    } else {
-      history.forEach(function (entry) {
-        var row = document.createElement("div");
-        var text = document.createElement("div");
-        var summary = document.createElement("strong");
-        var meta = document.createElement("span");
-        var undo = document.createElement("button");
-        row.className = "ullme-agent-history-row";
-        summary.textContent = entry.summary || entry.action || entry.id;
-        meta.textContent = (entry.committed_at || "") + " · " + (entry.origin || "ui") + " · " + (entry.status || "");
-        text.appendChild(summary);
-        text.appendChild(meta);
-        undo.type = "button";
-        undo.className = "ullme-secondary-action";
-        undo.textContent = "Undo";
-        undo.disabled = entry.status !== "committed";
-        undo.addEventListener("click", function () {
-          undo.disabled = true;
-          undo.textContent = "Undoing…";
-          sendSidebarEvent("ullme_change_undo_event", { operation_id: entry.id });
-        });
-        row.appendChild(text);
-        row.appendChild(undo);
-        historyList.appendChild(row);
-      });
-    }
-
-    actions.className = "ullme-dialog-actions";
-    cancel.type = "button";
-    cancel.className = "ullme-secondary-action";
-    cancel.textContent = "Close";
-    cancel.addEventListener("click", closeAgentSettings);
-    save.type = "button";
-    save.className = "ullme-primary-action";
-    save.textContent = "Save policies";
-    save.addEventListener("click", function () {
-      var values = {};
-      Array.prototype.forEach.call(settings.querySelectorAll("select"), function (select) {
-        values[select.name] = select.value;
-      });
-      save.disabled = true;
-      sendSidebarEvent("ullme_agent_settings_save_event", values);
-    });
-    overlay.addEventListener("click", function (event) {
-      if (event.target === overlay) closeAgentSettings();
-    });
-
-    head.appendChild(title);
-    head.appendChild(close);
-    actions.appendChild(cancel);
-    actions.appendChild(save);
-    dialog.appendChild(head);
-    dialog.appendChild(explanation);
-    dialog.appendChild(settings);
-    dialog.appendChild(historyTitle);
-    dialog.appendChild(historyList);
-    dialog.appendChild(actions);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-  }
-
   function closeChangeApproval() {
     var overlay = byId("ullme_change_approval_overlay");
     if (overlay) overlay.remove();
@@ -2267,13 +2211,6 @@
     }
   }
 
-  function changeUndoComplete(result, payload) {
-    if (result && result.status === "error") {
-      window.alert(result.message || "The change could not be undone.");
-    }
-    openAgentSettings(payload || {});
-  }
-
   function courseDialogField(labelText, id) {
     var label = document.createElement("label");
     var span = document.createElement("span");
@@ -2317,6 +2254,18 @@
     setInputValue("ullme_settings_courseid", course.courseid || "");
     setInputValue("ullme_settings_coursename", course.coursename || "");
     fillCourseTimes(course.times || []);
+  }
+
+  function fillEditHistoryControls(scope, history) {
+    history = history || {};
+    var controls = document.querySelector(
+      '.ullme-edit-history-controls[data-edit-history-scope="' + scope + '"]'
+    );
+    if (!controls) return;
+    var undo = controls.querySelector('[data-edit-history-direction="undo"]');
+    var redo = controls.querySelector('[data-edit-history-direction="redo"]');
+    if (undo) undo.disabled = !history.can_undo;
+    if (redo) redo.disabled = !history.can_redo;
   }
 
   function setInputValue(id, value) {
@@ -3588,6 +3537,7 @@
       : [];
     var activeSkill = summary ? summary.active_skill : null;
     var courseFiles = summary && Array.isArray(summary.course_files) ? summary.course_files : [];
+    var editHistory = summary && summary.edit_history ? summary.edit_history : {};
     var courseWorkspace = byId("ullme_course_workspace");
     state.courseMaterial = material;
     state.materialTree = materialTree;
@@ -3600,6 +3550,7 @@
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
     fillCourseSettings(course);
+    fillEditHistoryControls("course_settings", editHistory.course_settings);
     renderMaterialTree();
     renderCourseFileTree(courseFiles);
     renderAITutors(aiTutors);
@@ -3667,15 +3618,14 @@
   window.ullme.materialConversionComplete = materialConversionComplete;
   window.ullme.updateCourseList = updateCourseList;
   window.ullme.openCatalogDialog = openCatalogDialog;
+  window.ullme.aiTutorAddComplete = aiTutorAddComplete;
   window.ullme.openDefinitionWorkspace = openDefinitionWorkspace;
   window.ullme.openDefinitionImportPreview = openDefinitionImportPreview;
   window.ullme.definitionImportComplete = definitionImportComplete;
   window.ullme.downloadDefinition = downloadDefinition;
   window.ullme.receiveDefinitionAssistantMessage = receiveDefinitionAssistantMessage;
-  window.ullme.openAgentSettings = openAgentSettings;
   window.ullme.openChangeApproval = openChangeApproval;
   window.ullme.changeApprovalComplete = changeApprovalComplete;
-  window.ullme.changeUndoComplete = changeUndoComplete;
   window.ullme.openCourseFile = openCourseFile;
   window.ullme.courseFileSaveComplete = courseFileSaveComplete;
   window.ullme.courseFileError = courseFileError;

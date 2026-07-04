@@ -64,7 +64,7 @@ ullme_tool_registry = function() {
       perm=ullme_tool_perm(mutates=TRUE)
     ),
     write_rtutor_instances_yaml=list(
-      description="Validate and write the complete instances.yml for the selected course AI Tutor, then return validation and assignment details.",
+      description="Validate and immediately write the complete instances.yml for the selected course AI Tutor using the backed-up transaction history, then return validation and assignment details.",
       perm=ullme_tool_perm(mutates=TRUE)
     ),
     convert_material_files=list(

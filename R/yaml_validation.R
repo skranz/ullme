@@ -138,11 +138,38 @@ ullme_validate_tutor_doc_specs = function(value, field) {
     if (!ullme_safe_relative_material_path(directory)) {
       errors = c(errors, paste0(label, ".pref_doc_dir must be a relative material directory."))
     }
-    for (name in c("pref_format", "auto_convert")) {
-      formats = spec[[name]] %||% list()
-      if (!is.list(formats) && !is.character(formats)) {
-        errors = c(errors, paste0(label, ".", name, " must be a list."))
+    file_types = spec$file_types %||% list()
+    if (!is.list(file_types) && !is.character(file_types)) {
+      errors = c(errors, paste0(label, ".file_types must be a list."))
+    } else {
+      file_types = tolower(sub(
+        "^\\.", "",
+        trimws(paste0(unlist(file_types, use.names=FALSE)))
+      ))
+      if (!length(file_types) || any(!nzchar(file_types))) {
+        errors = c(errors, paste0(
+          label,
+          ".file_types must list at least one allowed file type."
+        ))
+      } else {
+        unsupported = setdiff(file_types, ullme_document_candidate_formats())
+        if (length(unsupported)) {
+          errors = c(errors, paste0(
+            label, ".file_types contains unsupported type",
+            if (length(unsupported) > 1) "s" else "",
+            ": ", paste(unsupported, collapse=", "), "."
+          ))
+        }
       }
+    }
+    legacy = intersect(names(spec), c("pref_format", "auto_convert"))
+    if (length(legacy)) {
+      errors = c(errors, paste0(
+        label, " uses obsolete field",
+        if (length(legacy) > 1) "s" else "",
+        " ", paste(legacy, collapse=", "),
+        "; use file_types in preferred order."
+      ))
     }
     if (!is.null(spec$add_images) &&
         !is.logical(spec$add_images)) {

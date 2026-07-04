@@ -31,6 +31,7 @@ ullme_teacherid = function(app=getApp()) {
 
 .ullme_app = function(main_dir, userid="skranz",
                       role=c("teacher", "student"), teacherid=NULL,
+                      courseid=NULL, tutorid=NULL, instanceid=NULL,
                       uses_fake_ai=NULL, max_upload_mb=100,
                       api_key_file=NULL,
                       api_provider=c("fake", "nvidia", "local"),
@@ -42,6 +43,9 @@ ullme_teacherid = function(app=getApp()) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
+  # shinyEvents calls this shared environment `glob`; expose the clearer
+  # `global` alias used by the app constructors as well.
+  app$global = glob
 
   role = match.arg(role)
   api_provider = match.arg(api_provider)
@@ -90,10 +94,24 @@ ullme_teacherid = function(app=getApp()) {
   # app is per Shiny app instance; app$glob is shared across all instances.
   # Store only truly shared values in glob and keep user-specific state on app.
   glob$main_dir = main_dir
-  app$userid = ullme_clean_user_name(userid)
-
-  app$teacherid = if (is.null(teacherid)) app$userid else
-    ullme_clean_user_name(teacherid)
+  glob$userid = ullme_clean_user_name(userid)
+  glob$teacherid = ullme_optional_app_parameter(
+    teacherid, ullme_clean_user_name, "teacherid"
+  )
+  glob$courseid = ullme_optional_app_parameter(
+    courseid, ullme_clean_courseid, "courseid"
+  )
+  glob$tutorid = ullme_optional_app_parameter(
+    tutorid, ullme_clean_definition_id, "tutorid"
+  )
+  glob$instanceid = ullme_optional_app_parameter(
+    instanceid, ullme_clean_tutor_instance_id, "instanceid"
+  )
+  app$userid = glob$userid
+  app$teacherid = if (identical(role, "teacher")) app$userid else glob$teacherid
+  app$courseid = glob$courseid
+  app$tutorid = glob$tutorid
+  app$instanceid = glob$instanceid
   app$role = role
   app$app_kind = role
   app$allowed_roles = role
@@ -123,13 +141,20 @@ ullme_teacherid = function(app=getApp()) {
   app$pending_changes = list()
   app$change_results = list()
   app$change_waiters = list()
-  app$courseids = ullme_user_courseids(
-    main_dir=main_dir,
-    userid=app$userid,
-    role=app$role,
-    semester=app$semester
-  )
-  app$courseid = ullme_selected_courseid(app$courseids)
+  if (identical(role, "teacher")) {
+    app$courseids = ullme_user_courseids(
+      main_dir=main_dir,
+      userid=app$userid,
+      role=app$role,
+      semester=app$semester
+    )
+    app$courseid = ullme_selected_courseid(
+      app$courseids,
+      preferred=app$courseid
+    )
+  } else {
+    app$courseids = if (is.null(app$courseid)) character(0) else app$courseid
+  }
   app$material_category = "general"
   app$material_upload_directory = "general"
   app$material_upload_tree = NULL
@@ -139,9 +164,9 @@ ullme_teacherid = function(app=getApp()) {
   app$ui = ullme_app_ui(app=app)
   ullme_register_handlers(app=app)
 
-  appInitHandler(function(...) {
+  appInitHandler(function(session, app, ...) {
     restore.point("ullme_init")
-    ullme_init_app()
+    ullme_init_app(session=session, app=app)
   })
   app
 }
@@ -194,7 +219,7 @@ ullme_register_handlers = function(app=getApp()) {
   eventHandler(
     eventId = "ullme_submit_chat_event",
     id = NULL,
-    fun = ullme_handle_chat_submit,
+    fun = ullme_handle_chat_submit_safe,
     app = app
   )
   changeHandler(
@@ -202,6 +227,22 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_image_upload,
     app = app
   )
+  if (identical(app$role, "student")) {
+    eventHandler(
+      eventId="ullme_cancel_chat_event",
+      id=NULL,
+      fun=ullme_handle_chat_cancel,
+      app=app
+    )
+    eventHandler(
+      eventId="ullme_student_context_event",
+      id=NULL,
+      fun=ullme_handle_student_context,
+      app=app
+    )
+    ullme_register_audio_handlers(app=app)
+    return(invisible(TRUE))
+  }
   lapply(ullme_course_material_categories(), function(category) {
     changeHandler(
       id = paste0("ullme_material_upload_", category),
@@ -283,6 +324,12 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   eventHandler(
+    eventId = "ullme_ai_tutor_delete_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_delete,
+    app = app
+  )
+  eventHandler(
     eventId = "ullme_ai_tutor_toggle_event",
     id = NULL,
     fun = ullme_handle_ai_tutor_toggle,
@@ -343,27 +390,15 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   eventHandler(
-    eventId = "ullme_agent_settings_open_event",
-    id = NULL,
-    fun = ullme_handle_agent_settings_open,
-    app = app
-  )
-  eventHandler(
-    eventId = "ullme_agent_settings_save_event",
-    id = NULL,
-    fun = ullme_handle_agent_settings_save,
-    app = app
-  )
-  eventHandler(
     eventId = "ullme_change_approval_event",
     id = NULL,
     fun = ullme_handle_change_approval,
     app = app
   )
   eventHandler(
-    eventId = "ullme_change_undo_event",
+    eventId = "ullme_edit_history_event",
     id = NULL,
-    fun = ullme_handle_change_undo,
+    fun = ullme_handle_edit_history,
     app = app
   )
   eventHandler(
@@ -385,14 +420,27 @@ ullme_register_handlers = function(app=getApp()) {
 
 ullme_app_ui = function(app=getApp()) {
   restore.point("ullme_app_ui")
+  is_teacher = identical(app$app_kind, "teacher")
   tagList(
   tags$head(
       tags$meta(name="viewport", content="width=device-width, initial-scale=1"),
-      tags$link(rel="stylesheet", type="text/css", href="ullme/ullme-chat.css"),
-      tags$script(src="ullme/ullme-materials.js"),
-      tags$script(src="ullme/ullme-chat.js"),
-      tags$script(src="ullme/ullme-tutors.js"),
-      tags$script(src="ullme/ullme-audio.js")
+      tags$link(
+        rel="stylesheet",
+        type="text/css",
+        href=if (is_teacher) "ullme/ullme-chat.css" else
+          "ullme/ullme-student.css"
+      ),
+      if (is_teacher) tags$script(src="ullme/ullme-materials.js"),
+      tags$script(
+        src=if (is_teacher) "ullme/ullme-chat.js" else
+          "ullme/ullme-student.js"
+      ),
+      if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),
+      tags$script(src="ullme/ullme-audio.js"),
+      if (!is_teacher) tags$script(
+        src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js",
+        defer="defer"
+      )
     ),
     tags$div(
       class = "ullme-fluid",
@@ -478,7 +526,7 @@ ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE) {
       `data-intro-meta` = intro$meta,
       `data-intro-html` = intro_html
     ),
-    ullme_composer_ui()
+    ullme_composer_ui(app=app)
   )
 }
 
@@ -520,12 +568,6 @@ ullme_appbar_ui = function(app=getApp()) {
           class = "ullme-settings-link",
           type = "button",
           "Skill Library"
-        ),
-        tags$button(
-          id = "ullme_agent_settings_btn",
-          class = "ullme-settings-link",
-          type = "button",
-          "Agent tools & change history"
         )
       )
     )
@@ -630,8 +672,7 @@ ullme_course_tabs_ui = function(app=getApp()) {
 ullme_studio_navigation_ui = function(app=getApp()) {
   items = list(
     list(view="materials", label="Materials", icon="folder"),
-    list(view="settings", label="Settings", icon="settings"),
-    list(view="history", label="History", icon="history")
+    list(view="settings", label="Settings", icon="settings")
   )
   tags$nav(
     id="ullme_studio_nav",
@@ -729,7 +770,32 @@ ullme_course_settings_ui = function(app=getApp()) {
     `data-course-panel` = "settings",
     tags$div(
       class = "ullme-panel-inner",
-      tags$div(class="ullme-panel-title", "Course Settings"),
+      tags$div(
+        class="ullme-panel-head ullme-settings-panel-head",
+        tags$div(class="ullme-panel-title", "Course Settings"),
+        tags$div(
+          class="ullme-edit-history-controls",
+          `data-edit-history-scope`="course_settings",
+          tags$button(
+            class="ullme-icon-button ullme-edit-history-button",
+            type="button",
+            `data-edit-history-direction`="undo",
+            `aria-label`="Undo course settings change",
+            title="Undo",
+            disabled="disabled",
+            HTML(ullme_icon_svg("undo"))
+          ),
+          tags$button(
+            class="ullme-icon-button ullme-edit-history-button",
+            type="button",
+            `data-edit-history-direction`="redo",
+            `aria-label`="Redo course settings change",
+            title="Redo",
+            disabled="disabled",
+            HTML(ullme_icon_svg("redo"))
+          )
+        )
+      ),
       tags$div(
         class = "ullme-settings-grid",
         tags$label(
@@ -1001,7 +1067,7 @@ ullme_chat_output_html = function(text, app=getApp()) {
 }
 
 
-ullme_composer_ui = function() {
+ullme_composer_ui = function(app=getApp()) {
   restore.point("ullme_composer_ui")
   tags$footer(
     class = "ullme-composer-wrap",
@@ -1018,7 +1084,7 @@ ullme_composer_ui = function() {
         class = "ullme-upload-preview",
         `aria-live` = "polite"
       ),
-      tags$button(
+      if (identical(app$app_kind, "teacher")) tags$button(
         id = "ullme_skills_btn",
         class = "ullme-icon-button ullme-skills-button",
         type = "button",
@@ -1154,7 +1220,8 @@ ullme_icon_svg = function(name) {
     folder = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"></path><path d="M3 7V5h7l2 2"></path></svg>',
     tutor = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>',
     settings = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>',
-    history = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2-5.3"></path><path d="M4 4v6h6M12 7v5l3 2"></path></svg>'
+    undo = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9 8l-4 4 4 4"></path><path d="M5 12h8a4 4 0 0 1 4 4"></path></svg>',
+    redo = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 8l4 4-4 4"></path><path d="M19 12h-8a4 4 0 0 0-4 4"></path></svg>'
   )
   icons[[name]]
 }
@@ -1459,18 +1526,25 @@ ullme_course_summary_for_js = function(app=getApp()) {
     summary$material = lapply(summary$material, as.list)
   }
   if (identical(app$role, "teacher")) {
+    course_dir = ullme_active_course_dir(app=app)
     summary$ai_tutors = ullme_course_ai_tutors(app=app)
+    summary$edit_history = if (is.null(course_dir)) list() else list(
+      course_settings=ullme_edit_history_state(
+        scope="course_settings",
+        app=app
+      )
+    )
     summary$ai_tutor_catalog = ullme_ai_tutor_catalog(app=app)
     summary$skills = ullme_skill_catalog_for_js(app=app)
     summary$course_skills = ullme_course_skills_for_js(app=app)
     summary$active_skill = ullme_skill_for_js(ullme_active_skill(app=app))
-    course_dir = ullme_active_course_dir(app=app)
     summary$course_files = if (is.null(course_dir)) list() else
       ullme_course_file_records(course_dir)
     summary$material_tree = if (is.null(course_dir)) list() else
       ullme_material_tree(file.path(course_dir, "materials"))
   } else {
     summary$ai_tutors = list()
+    summary$edit_history = list()
     summary$ai_tutor_catalog = list()
     summary$skills = list()
     summary$course_skills = list()
@@ -1484,11 +1558,57 @@ ullme_course_summary_for_js = function(app=getApp()) {
 }
 
 
-ullme_init_app = function(app=getApp()) {
+ullme_init_app = function(session=NULL, app=getApp()) {
   restore.point("ullme_init_app")
   ullme_init_storage(main_dir=app$glob$main_dir, app=app)
-  ullme_send_course_state(app=app)
+  if (identical(app$role, "student")) {
+    ullme_init_student_app(session=session, app=app)
+  } else {
+    ullme_send_course_state(app=app)
+  }
   ullme_refresh_model_catalog(app=app)
+}
+
+
+ullme_handle_chat_submit_safe = function(..., session=NULL, app=getApp()) {
+  restore.point("ullme_handle_chat_submit_safe")
+  args = list(...)
+  message_id = paste0(args$assistantMessageId %||% "")[1]
+  tryCatch(
+    do.call(
+      ullme_handle_chat_submit,
+      c(args, list(session=session, app=app))
+    ),
+    error=function(error) {
+      request = if (nzchar(message_id)) app$chat_requests[[message_id]] else NULL
+      if (!is.null(request)) {
+        request$active = FALSE
+        if (!is.null(request$controller)) {
+          try(request$controller$cancel("Request setup failed"), silent=TRUE)
+        }
+        app$chat_requests[[message_id]] = NULL
+        app$chat_tasks[[message_id]] = NULL
+        if (identical(app$active_chat_request, request)) {
+          app$active_chat_request = NULL
+        }
+      }
+      app$chat_response_active = FALSE
+      message = paste0(
+        "The assistant request could not start: ",
+        ullme_safe_ai_error(error, app$api_config)
+      )
+      try(
+        ullme_send_chat_stream_update(
+          message_id=message_id,
+          done=TRUE,
+          error=message,
+          app=app
+        ),
+        silent=TRUE
+      )
+      invisible(NULL)
+    }
+  )
 }
 
 
@@ -1503,6 +1623,9 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   has_instance_builder = is.list(instance_builder)
   if (!nzchar(trimws(text)) && !has_uploads && !has_instance_builder) {
     return(invisible(NULL))
+  }
+  if (is.null(assistantMessageId) || !nzchar(assistantMessageId)) {
+    assistantMessageId = paste0("assistant_", as.integer(runif(1, 1, 1e9)))
   }
   if (isTRUE(app$chat_response_active)) {
     callJS(
@@ -1520,6 +1643,12 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     )
     return(invisible(NULL))
   }
+  ullme_send_chat_stream_update(
+    message_id=assistantMessageId,
+    text="Preparing your Tutor\u2026",
+    done=FALSE,
+    app=app
+  )
 
   ai_input = if (nzchar(trimws(text))) text else "[uploaded image]"
   interaction_kind = "chat"
@@ -1587,9 +1716,6 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     collapse="\n\n"
   )
   if (!nzchar(system_instructions)) system_instructions = NULL
-  if (is.null(assistantMessageId) || !nzchar(assistantMessageId)) {
-    assistantMessageId = paste0("assistant_", as.integer(runif(1, 1, 1e9)))
-  }
   interaction_dir = ullme_ai_interaction_start(
     input=ai_input,
     visible_text=text,

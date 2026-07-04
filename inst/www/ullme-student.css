@@ -1,0 +1,700 @@
+:root {
+  color-scheme: light;
+  --ullme-accent: #235bdb;
+  --ullme-accent-dark: #1746b0;
+  --ullme-border: #dfe3ea;
+  --ullme-muted: #667085;
+  --ullme-panel: #f7f8fb;
+  --ullme-text: #172033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--ullme-text);
+  background: #fff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+select,
+textarea,
+input {
+  font: inherit;
+}
+
+.ullme-fluid,
+.ullme-app {
+  min-height: 100vh;
+}
+
+.ullme-app {
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr);
+}
+
+.ullme-appbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--ullme-border);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.ullme-appbar-brand {
+  color: #13244a;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.ullme-context-controls {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.ullme-fixed-role {
+  color: var(--ullme-muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.ullme-student-course-summary {
+  overflow: hidden;
+  max-width: 320px;
+  padding-left: 10px;
+  border-left: 1px solid var(--ullme-border);
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ullme-appbar-spacer {
+  flex: 1;
+}
+
+.ullme-icon-button,
+.ullme-submit-button,
+.ullme-mini-action,
+.ullme-preview-remove {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ullme-icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.ullme-icon-button:hover,
+.ullme-mini-action:hover {
+  background: #eef1f6;
+}
+
+.ullme-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.ullme-user-settings {
+  position: absolute;
+  top: 50px;
+  right: 18px;
+  display: none;
+  width: min(300px, calc(100vw - 36px));
+  padding: 18px;
+  border: 1px solid var(--ullme-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(20, 30, 55, 0.16);
+}
+
+.ullme-user-settings-open {
+  display: block;
+}
+
+.ullme-user-settings-title {
+  margin-bottom: 14px;
+  font-weight: 700;
+}
+
+.ullme-user-settings-field {
+  display: grid;
+  gap: 6px;
+  color: var(--ullme-muted);
+  font-size: 12px;
+}
+
+.ullme-user-settings-field input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--ullme-border);
+  border-radius: 8px;
+  color: var(--ullme-text);
+  background: var(--ullme-panel);
+}
+
+.ullme-main {
+  min-height: 0;
+}
+
+.ullme-student-workspace {
+  --ullme-student-sidebar-width: 280px;
+  display: grid;
+  grid-template-columns: var(--ullme-student-sidebar-width) 10px minmax(0, 1fr);
+  height: calc(100vh - 58px);
+  min-height: 0;
+  transition: grid-template-columns 160ms ease;
+}
+
+.ullme-student-workspace.ullme-student-sidebar-collapsed {
+  grid-template-columns: 0 30px minmax(0, 1fr);
+}
+
+.ullme-student-sidebar {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 28px 22px;
+  background: var(--ullme-panel);
+  transition: padding 160ms ease, visibility 160ms ease;
+}
+
+.ullme-student-sidebar-collapsed .ullme-student-sidebar {
+  visibility: hidden;
+  overflow: hidden;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.ullme-student-pane-resizer {
+  position: relative;
+  z-index: 5;
+  min-width: 0;
+  cursor: col-resize;
+  touch-action: none;
+  background: #fff;
+}
+
+.ullme-student-pane-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  content: "";
+  background: var(--ullme-border);
+  transform: translateX(-50%);
+}
+
+.ullme-student-pane-resizer:hover::before,
+.ullme-student-pane-resizer:focus::before,
+.ullme-student-pane-resizing .ullme-student-pane-resizer::before {
+  width: 2px;
+  background: #98a2b3;
+}
+
+.ullme-student-sidebar-toggle {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--ullme-border);
+  border-radius: 8px;
+  color: #475467;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(32, 48, 80, 0.08);
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.ullme-student-sidebar-toggle:hover,
+.ullme-student-sidebar-toggle:focus-visible {
+  color: var(--ullme-text);
+  border-color: #b7bfcc;
+  background: #f8f9fb;
+}
+
+.ullme-student-sidebar-toggle span {
+  font-size: 22px;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.ullme-student-sidebar-collapsed .ullme-student-sidebar-toggle span {
+  transform: rotate(180deg);
+}
+
+.ullme-student-sidebar-collapsed .ullme-student-pane-resizer {
+  cursor: default;
+}
+
+.ullme-student-pane-resizing,
+.ullme-student-pane-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.ullme-student-pane-resizing .ullme-student-workspace {
+  transition: none;
+}
+
+.ullme-student-sidebar-heading {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 22px;
+}
+
+.ullme-student-sidebar-eyebrow {
+  color: var(--ullme-muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ullme-student-sidebar-heading strong {
+  overflow-wrap: anywhere;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.ullme-student-course-meta {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 26px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--ullme-border);
+}
+
+.ullme-student-course-meta div {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.ullme-student-course-meta dt {
+  color: var(--ullme-muted);
+  font-size: 12px;
+}
+
+.ullme-student-course-meta dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ullme-student-selector {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ullme-student-selector select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 32px 8px 10px;
+  border: 1px solid #ccd2dc;
+  border-radius: 9px;
+  color: var(--ullme-text);
+  background: #fff;
+}
+
+.ullme-student-selector select:disabled {
+  color: #475467;
+  background: #eef0f4;
+  opacity: 1;
+}
+
+.ullme-student-tutor-description {
+  margin: 9px 0 0;
+  color: var(--ullme-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ullme-student-context-error {
+  margin-top: 20px;
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ullme-chat-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+.ullme-chat-messages {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 34px max(24px, calc((100% - 780px) / 2)) 24px;
+}
+
+.ullme-message {
+  display: flex;
+  width: 100%;
+  margin: 0 auto 24px;
+}
+
+.ullme-message-user {
+  justify-content: flex-end;
+}
+
+.ullme-bubble {
+  max-width: min(82%, 720px);
+  color: var(--ullme-text);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.ullme-message-user .ullme-bubble {
+  padding: 11px 15px;
+  border-radius: 18px 18px 4px 18px;
+  background: #eef2f8;
+}
+
+.ullme-message-assistant .ullme-bubble {
+  width: 100%;
+}
+
+.ullme-message-text-markdown {
+  white-space: normal;
+}
+
+.ullme-message-text-markdown > :first-child {
+  margin-top: 0;
+}
+
+.ullme-message-text-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.ullme-message-text-markdown pre {
+  overflow-x: auto;
+  padding: 13px;
+  border-radius: 10px;
+  background: #f3f5f8;
+}
+
+.ullme-message-text-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.ullme-message-meta {
+  margin-bottom: 7px;
+  color: var(--ullme-muted);
+  font-size: 12px;
+}
+
+.ullme-message-error {
+  color: #b42318;
+}
+
+.ullme-thinking .ullme-message-text {
+  color: var(--ullme-muted);
+}
+
+.ullme-message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.ullme-mini-action {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--ullme-muted);
+}
+
+.ullme-mini-action .ullme-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.ullme-composer-wrap {
+  padding: 10px max(20px, calc((100% - 800px) / 2)) 20px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), #fff 18px);
+}
+
+.ullme-composer {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #cfd5df;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(32, 48, 80, 0.08);
+}
+
+.ullme-chat-input {
+  flex: 1;
+  min-width: 80px;
+  min-height: 38px;
+  max-height: 170px;
+  resize: none;
+  padding: 8px 5px;
+  border: 0;
+  outline: 0;
+  color: var(--ullme-text);
+  line-height: 1.45;
+}
+
+.ullme-chat-input::placeholder {
+  color: #98a2b3;
+}
+
+.ullme-model-select {
+  align-self: center;
+  max-width: 145px;
+  padding: 7px 5px;
+  border: 0;
+  color: var(--ullme-muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.ullme-submit-button {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: #fff;
+  background: var(--ullme-accent);
+}
+
+.ullme-submit-button:hover:not(:disabled) {
+  background: var(--ullme-accent-dark);
+}
+
+.ullme-submit-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.ullme-submit-stop {
+  background: #344054;
+}
+
+.ullme-upload-preview {
+  position: absolute;
+  right: 10px;
+  bottom: calc(100% + 8px);
+  display: none;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--ullme-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(32, 48, 80, 0.12);
+}
+
+.ullme-upload-preview.has-items {
+  display: flex;
+}
+
+.ullme-preview-item {
+  position: relative;
+}
+
+.ullme-preview-item img,
+.ullme-attachment-thumb {
+  width: 74px;
+  height: 74px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.ullme-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  background: #344054;
+}
+
+.ullme-preview-remove .ullme-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.ullme-attachments {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ullme-file-input,
+.ullme-recording-panel,
+.ullme-active-skill {
+  display: none;
+}
+
+.ullme-composer.ullme-composer-recording .ullme-recording-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.ullme-composer.ullme-composer-recording > :not(.ullme-recording-panel) {
+  display: none;
+}
+
+.ullme-recording-cancel,
+.ullme-recording-finish {
+  min-width: 68px;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 19px;
+}
+
+.ullme-recording-cancel {
+  background: #eef0f4;
+}
+
+.ullme-recording-finish {
+  color: #fff;
+  background: #172033;
+}
+
+.ullme-recording-status {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ullme-recording-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d92d20;
+}
+
+.ullme-recording-wave {
+  width: 110px;
+  height: 28px;
+}
+
+.ullme-recording-options {
+  display: flex;
+  gap: 4px;
+}
+
+.ullme-audio-select {
+  max-width: 90px;
+  height: 34px;
+  border: 0;
+  border-radius: 17px;
+  background: #f2f4f7;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .ullme-appbar {
+    padding: 0 14px;
+  }
+
+  .ullme-student-workspace,
+  .ullme-student-workspace.ullme-student-sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    transition: none;
+  }
+
+  .ullme-student-sidebar,
+  .ullme-student-sidebar-collapsed .ullme-student-sidebar {
+    display: grid;
+    visibility: visible;
+    grid-template-columns: minmax(110px, 1fr) minmax(130px, 1fr);
+    gap: 10px 14px;
+    overflow: visible;
+    padding: 12px 14px;
+    border-right: 0;
+    border-bottom: 1px solid var(--ullme-border);
+  }
+
+  .ullme-student-pane-resizer {
+    display: none;
+  }
+
+  .ullme-student-sidebar-heading,
+  .ullme-student-course-meta,
+  .ullme-student-tutor-description {
+    display: none;
+  }
+
+  .ullme-student-selector {
+    margin: 0;
+  }
+
+  .ullme-student-context-error {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .ullme-chat-pane {
+    min-height: 0;
+  }
+
+  .ullme-chat-messages {
+    padding: 22px 16px;
+  }
+
+  .ullme-composer-wrap {
+    padding: 8px 10px 12px;
+  }
+
+  .ullme-model-select {
+    display: none;
+  }
+}

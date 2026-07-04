@@ -1,0 +1,11 @@
+tutorid: chat_tutor
+lang: en
+label: Chat Tutor
+description: Student chat check
+system_prompt: Be helpful. {{personality}}
+shown_text: Welcome from shown_text.
+default_personality: Friendly
+docs_per_instance: []
+docs_per_course: []
+allowed_tools: []
+allowed_student_customization: []

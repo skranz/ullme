@@ -14,6 +14,8 @@
   var tutorIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>';
   var skillIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>';
   var robotIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="3"></rect><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"></path></svg>';
+  var undoIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9 8l-4 4 4 4"></path><path d="M5 12h8a4 4 0 0 1 4 4"></path></svg>';
+  var redoIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 8l4 4-4 4"></path><path d="M19 12h-8a4 4 0 0 0-4 4"></path></svg>';
 
   function byId(id) {
     return document.getElementById(id);
@@ -207,8 +209,11 @@
     var header = document.createElement("header");
     var identity = document.createElement("div");
     var select = document.createElement("select");
+    var tutorId = document.createElement("div");
     var description = document.createElement("div");
     var actions = document.createElement("div");
+    var history = tutorHistoryControls(tutor);
+    var remove = document.createElement("button");
     var toggleLabel = document.createElement("label");
     var toggle = document.createElement("input");
     var toggleText = document.createElement("span");
@@ -227,12 +232,28 @@
     select.addEventListener("change", function () {
       selectTutor(select.value);
     });
+    tutorId.className = "ullme-tutor-detail-id";
+    tutorId.textContent = "Tutor ID: " + tutor.tutorid;
     description.className = "ullme-tutor-detail-description";
     description.textContent = tutor.description || "No description";
     identity.appendChild(select);
+    identity.appendChild(tutorId);
     identity.appendChild(description);
 
     actions.className = "ullme-tutor-detail-actions";
+    remove.type = "button";
+    remove.className = "ullme-danger-action ullme-tutor-delete-button";
+    remove.textContent = "Delete Tutor";
+    remove.addEventListener("click", function () {
+      if (!window.confirm(
+        'Delete Tutor "' + (tutor.label || tutor.tutorid) +
+        '" (' + tutor.tutorid + ')?'
+      )) return;
+      remove.disabled = true;
+      sendEvent("ullme_ai_tutor_delete_event", {
+        tutorid: tutor.tutorid
+      });
+    });
     toggleLabel.className = "ullme-tutor-enabled";
     toggle.type = "checkbox";
     toggle.checked = Boolean(tutor.enabled);
@@ -246,10 +267,48 @@
     toggleText.textContent = "Enabled";
     toggleLabel.appendChild(toggle);
     toggleLabel.appendChild(toggleText);
+    actions.appendChild(history);
+    actions.appendChild(remove);
     actions.appendChild(toggleLabel);
     header.appendChild(identity);
     header.appendChild(actions);
     return header;
+  }
+
+  function tutorHistoryControls(tutor) {
+    var wrap = document.createElement("div");
+    var editHistory = tutor.edit_history || {};
+    var scope = "tutor_definition";
+    var history = editHistory.definition || {};
+    if (state.activeTab === "instances" ||
+        (state.activeTab === "yaml" && state.yamlTab === "instances")) {
+      scope = "tutor_instances";
+      history = editHistory.instances || {};
+    }
+    wrap.className = "ullme-edit-history-controls";
+    [
+      { direction: "undo", icon: undoIcon, enabled: Boolean(history.can_undo) },
+      { direction: "redo", icon: redoIcon, enabled: Boolean(history.can_redo) }
+    ].forEach(function (spec) {
+      var button = document.createElement("button");
+      var label = spec.direction === "undo" ? "Undo" : "Redo";
+      button.type = "button";
+      button.className = "ullme-icon-button ullme-edit-history-button";
+      button.innerHTML = spec.icon;
+      button.disabled = !spec.enabled;
+      button.title = label;
+      button.setAttribute("aria-label", label + " changes in this Tutor pane");
+      button.addEventListener("click", function () {
+        button.disabled = true;
+        sendEvent("ullme_edit_history_event", {
+          scope: scope,
+          tutorid: tutor.tutorid,
+          direction: spec.direction
+        });
+      });
+      wrap.appendChild(button);
+    });
+    return wrap;
   }
 
   function tutorTabs(tutor) {
@@ -611,6 +670,13 @@
       tutor.description || ""
     ));
     basics.appendChild(field(
+      "Text shown to students at start",
+      "ullme_tutor_shown_text",
+      "textarea",
+      tutor.shown_text || "",
+      "Displayed as the Tutor's first chat message."
+    ));
+    basics.appendChild(field(
       "Typical instances for the AI helper",
       "ullme_tutor_instance_guidance",
       "textarea",
@@ -665,6 +731,7 @@
           lang: valueOf("ullme_tutor_lang"),
           label: valueOf("ullme_tutor_label"),
           description: valueOf("ullme_tutor_description"),
+          shown_text: valueOf("ullme_tutor_shown_text"),
           instance_guidance: valueOf("ullme_tutor_instance_guidance"),
           default_personality: valueOf("ullme_tutor_default_personality"),
           allowed_tools: splitList(valueOf("ullme_tutor_tools")),
@@ -699,7 +766,7 @@
     });
     head.appendChild(title);
     head.appendChild(add);
-    ["ID", "Description", "Preferred formats", "Convert", "Directory", "Images", ""]
+    ["ID", "Description", "File types", "Directory", "Images", ""]
       .forEach(function (label) { appendCell(headRow, "th", label); });
     tableHead.appendChild(headRow);
     body.id = id;
@@ -721,8 +788,7 @@
     [
       { name: "docid", value: spec.docid || "", placeholder: "ps" },
       { name: "descr", value: spec.descr || "", placeholder: "Problem set" },
-      { name: "pref_format", value: (spec.pref_format || []).join(", "), placeholder: "md, tex, pdf" },
-      { name: "auto_convert", value: (spec.auto_convert || []).join(", "), placeholder: "pdf" },
+      { name: "file_types", value: (spec.file_types || []).join(", "), placeholder: "md, tex" },
       { name: "pref_doc_dir", value: spec.pref_doc_dir || "", placeholder: "ps" }
     ].forEach(function (fieldSpec) {
       var cell = document.createElement("td");
@@ -764,8 +830,7 @@
       return {
         docid: fieldValue("docid").trim(),
         descr: fieldValue("descr"),
-        pref_format: splitList(fieldValue("pref_format")),
-        auto_convert: splitList(fieldValue("auto_convert")),
+        file_types: splitList(fieldValue("file_types")),
         pref_doc_dir: fieldValue("pref_doc_dir").trim(),
         add_images: Boolean(images && images.checked)
       };
@@ -986,6 +1051,20 @@
     }
   }
 
+  function deleteComplete(result) {
+    if (!result || result.ok === false) {
+      renderTutorDetail();
+      window.alert((result && result.message) || "The AI Tutor could not be deleted.");
+    }
+  }
+
+  function historyComplete(result) {
+    if (!result || result.ok === false) {
+      renderTutorDetail();
+      window.alert((result && result.message) || "The change could not be applied.");
+    }
+  }
+
   window.ullmeTutors = {
     update: update,
     updateSkill: updateSkill
@@ -994,6 +1073,8 @@
   window.ullme.aiTutorSaveComplete = saveComplete;
   window.ullme.aiTutorInstancesSaveComplete = saveComplete;
   window.ullme.aiTutorConversionComplete = saveComplete;
+  window.ullme.aiTutorDeleteComplete = deleteComplete;
+  window.ullme.editHistoryComplete = historyComplete;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

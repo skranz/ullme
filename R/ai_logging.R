@@ -1,5 +1,18 @@
 ullme_ai_interactions_dir = function(app=getApp()) {
   if (!isTRUE(app$store_ai_interactions)) return(NULL)
+  if (identical(app$role, "student")) {
+    parts = c(
+      app$teacherid %||% "teacher",
+      app$courseid %||% "course",
+      app$tutorid %||% "tutor",
+      app$instanceid %||% "instance"
+    )
+    parts = gsub("[^A-Za-z0-9._-]+", "_", parts)
+    return(do.call(
+      file.path,
+      as.list(c(app$cur_session_dir, "ai_interactions", parts))
+    ))
+  }
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) return(NULL)
   file.path(course_dir, "ai_interactions")

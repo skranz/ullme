@@ -28,15 +28,13 @@ writeLines(c(
   "docs_per_instance:",
   "  ps:",
   "    descr: problem set",
-  "    pref_format: [md, docx, pdf]",
+  "    file_types: [md, docx, pdf]",
   "    pref_doc_dir: ps",
-  "    auto_convert: [docx]",
   "    add_images: true",
   "  ps_sol:",
   "    descr: solution",
-  "    pref_format: [md, docx, pdf]",
+  "    file_types: [md, tex]",
   "    pref_doc_dir: ps",
-  "    auto_convert: [docx]",
   "    add_images: true",
   "docs_per_course: {}",
   "allowed_tools: []",
@@ -61,6 +59,16 @@ stopifnot(
   grepl("ps/week1/sheet_solution.md", prompt, fixed=TRUE),
   !grepl("slides/lecture.md", prompt, fixed=TRUE),
   grepl("EXAMPLE YAML", prompt, fixed=TRUE),
+  grepl(
+    "allowed file types in preferred order: md, docx, pdf",
+    prompt,
+    fixed=TRUE
+  ),
+  grepl(
+    "allowed file types in preferred order: md, tex",
+    prompt,
+    fixed=TRUE
+  ),
   grepl("example_1_ps.md", prompt, fixed=TRUE),
   grepl("example_1_ps_sol.md", prompt, fixed=TRUE),
   grepl("write_rtutor_instances_yaml", prompt, fixed=TRUE),
@@ -68,6 +76,17 @@ stopifnot(
   !grepl("rewrite_tutor_instances_yaml", prompt, fixed=TRUE),
   grepl('Solutions end in "solution".', prompt, fixed=TRUE)
 )
+legacy_tutor = sub(
+  "file_types: \\[md, docx, pdf\\]",
+  "pref_format: [md, docx, pdf]",
+  paste(readLines(
+    file.path(course_dir, "ai_tutors", "pstutor", "tutor.yml"),
+    warn=FALSE
+  ), collapse="\n")
+)
+stopifnot(!ullme_validate_definition_yaml(
+  "tutor", "pstutor", legacy_tutor
+)$ok)
 stopifnot(
   identical(
     ullme_tool_prompt_summary("write_rtutor_instances_yaml"),

@@ -6,6 +6,8 @@ ullme_chat_key = function(model, task_profile="", app=getApp()) {
     app$userid %||% "",
     app$semester %||% "",
     app$courseid %||% "",
+    app$tutorid %||% "",
+    app$instanceid %||% "",
     sep="|"
   )
 }
@@ -186,8 +188,13 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
                                   task_profile="",
                                   app=getApp()) {
   restore.point("ullme_ai_request_chat")
+  if (identical(app$role, "student")) {
+    chat = ullme_student_chat(model=model, app=app)
+    if (is.null(chat)) stop("No model is configured.")
+    return(chat)
+  }
   if (!identical(app$role, "teacher")) {
-    stop("The real AI assistant is currently available only in teacher mode.")
+    stop("The AI assistant is not available for this role.")
   }
   tool_names = if (identical(task_profile, "instance_builder")) {
     "write_rtutor_instances_yaml"
@@ -389,12 +396,15 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     app=app
   )
   controller = ellmer::stream_controller()
-  stream = chat$stream_async(
+  stream_args = list(
     input,
-    tool_mode="sequential",
     stream="content",
     controller=controller
   )
+  if (identical(app$role, "teacher")) {
+    stream_args$tool_mode = "sequential"
+  }
+  stream = do.call(chat$stream_async, stream_args)
   state = new.env(parent=emptyenv())
   state$text = ""
   state$thinking = ""
@@ -448,8 +458,12 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
     task_profile=task_profile,
     app=app
   )
+  chat_args = list(input)
+  if (identical(app$role, "teacher")) {
+    chat_args$tool_mode = "sequential"
+  }
   list(
-    promise=chat$chat_async(input, tool_mode="sequential"),
+    promise=do.call(chat$chat_async, chat_args),
     chat=chat
   )
 }

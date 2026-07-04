@@ -136,11 +136,11 @@ ullme_normalize_tutor_doc_specs = function(value) {
   specs = lapply(seq_along(value), function(i) {
     spec = value[[i]]
     if (!is.list(spec)) spec = list()
+    file_types = spec$file_types %||% spec$pref_format %||% list()
     list(
       docid=paste0(ids[[i]])[1],
       descr=paste0(spec$descr %||% "")[1],
-      pref_format=as.list(paste0(unlist(spec$pref_format %||% list(), use.names=FALSE))),
-      auto_convert=as.list(paste0(unlist(spec$auto_convert %||% list(), use.names=FALSE))),
+      file_types=as.list(paste0(unlist(file_types, use.names=FALSE))),
       pref_doc_dir=paste0(spec$pref_doc_dir %||% "")[1],
       add_images=isTRUE(spec$add_images)
     )
@@ -173,6 +173,7 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     source=source,
     enabled=!identical(definition$enabled, FALSE),
     system_prompt=paste0(definition$system_prompt %||% "", collapse="\n"),
+    shown_text=paste0(definition$shown_text %||% "", collapse="\n"),
     default_personality=paste0(
       definition$default_personality %||% "",
       collapse="\n"
@@ -311,7 +312,8 @@ ullme_tutor_spec_files = function(course_dir, spec) {
     no..=TRUE,
     include.dirs=FALSE
   )
-  keep = tolower(tools::file_ext(paths)) %in% ullme_document_candidate_formats()
+  allowed = ullme_tutor_file_types(spec$file_types)
+  keep = tolower(tools::file_ext(paths)) %in% allowed
   paths = paths[keep]
   sort(gsub("\\\\", "/", file.path(directory, paths)))
 }
@@ -411,7 +413,7 @@ ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
     docs = list()
     docs[[anchor]] = as.list(ullme_preferred_document_file(
       anchor_files[anchor_keys == key],
-      specs[[anchor]]$pref_format
+      specs[[anchor]]$file_types
     ))
     for (docid in docids[-1]) {
       role_files = files[[docid]]
@@ -429,7 +431,7 @@ ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
       )
       docs[[docid]] = as.list(ullme_preferred_document_file(
         role_files[candidate_keys == key],
-        specs[[docid]]$pref_format
+        specs[[docid]]$file_types
       ))
     }
     list(instanceid=key, docs=docs, source="suggested")
@@ -482,6 +484,18 @@ ullme_course_ai_tutors = function(app=getApp()) {
       course_docs=instance_data$course_docs
     )
     definition$instance_builder_inputs = instance_builder_inputs
+    definition$edit_history = list(
+      definition=ullme_edit_history_state(
+        scope="tutor_definition",
+        tutorid=tutorid,
+        app=app
+      ),
+      instances=ullme_edit_history_state(
+        scope="tutor_instances",
+        tutorid=tutorid,
+        app=app
+      )
+    )
     conversion_specs = c(
       ullme_normalize_tutor_doc_specs(value$docs_per_instance),
       ullme_normalize_tutor_doc_specs(value$docs_per_course)
@@ -535,15 +549,20 @@ ullme_materialize_course_ai_tutor = function(tutorid, course_tutor, path,
 }
 
 
-ullme_add_course_ai_tutor = function(tutorid, app=getApp()) {
+ullme_add_course_ai_tutor = function(templateid=NULL, tutorid=NULL,
+                                      app=getApp()) {
   restore.point("ullme_add_course_ai_tutor")
-  if (!identical(app$role, "teacher")) return(FALSE)
+  if (!identical(app$role, "teacher")) stop("Only teachers can add AI Tutors.")
+  if (is.null(templateid)) templateid = tutorid
+  if (is.null(tutorid)) tutorid = templateid
+  templateid = ullme_clean_definition_id(templateid)
   tutorid = ullme_clean_definition_id(tutorid)
-  template_path = ullme_ai_tutor_template_path(tutorid)
+  template_path = ullme_ai_tutor_template_path(templateid)
   course_dir = ullme_active_course_dir(app=app)
-  if (is.null(template_path) || is.null(course_dir)) return(FALSE)
+  if (is.null(template_path)) stop("The selected AI Tutor template was not found.")
+  if (is.null(course_dir)) stop("Select a course first.")
   tutor_dir = ullme_course_ai_tutor_dir(course_dir, tutorid)
-  if (dir.exists(tutor_dir)) return(TRUE)
+  if (dir.exists(tutor_dir)) stop("An AI Tutor with this Tutor ID already exists.")
 
   value = yaml::read_yaml(template_path)
   value$tutorid = tutorid
@@ -557,6 +576,27 @@ ullme_add_course_ai_tutor = function(tutorid, app=getApp()) {
     origin="ui",
     details=list(courseid=app$courseid, tutorid=tutorid),
     changes=list(ullme_change_copy(stage, tutor_dir, overwrite=FALSE)),
+    app=app
+  )
+  result = ullme_submit_change(operation, app=app)
+  isTRUE(result$ok)
+}
+
+
+ullme_delete_course_ai_tutor = function(tutorid, app=getApp()) {
+  restore.point("ullme_delete_course_ai_tutor")
+  if (!identical(app$role, "teacher")) stop("Only teachers can delete AI Tutors.")
+  tutorid = ullme_clean_definition_id(tutorid)
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) stop("Select a course first.")
+  tutor_dir = ullme_course_ai_tutor_dir(course_dir, tutorid)
+  if (!dir.exists(tutor_dir)) stop("The selected AI Tutor no longer exists.")
+  operation = ullme_new_change(
+    action="course_tutor_delete",
+    summary=paste0("Delete AI Tutor ", tutorid, " from course ", app$courseid),
+    origin="ui",
+    details=list(courseid=app$courseid, tutorid=tutorid),
+    changes=list(ullme_change_delete(tutor_dir)),
     app=app
   )
   result = ullme_submit_change(operation, app=app)
@@ -596,18 +636,13 @@ ullme_tutor_doc_specs_from_rows = function(rows) {
   for (row in rows) {
     if (!is.list(row)) next
     docid = ullme_clean_definition_id(row$docid)
-    formats = unique(trimws(paste0(unlist(
-      row$pref_format %||% list(),
-      use.names=FALSE
-    ))))
-    conversions = unique(trimws(paste0(unlist(
-      row$auto_convert %||% list(),
+    file_types = unique(trimws(paste0(unlist(
+      row$file_types %||% list(),
       use.names=FALSE
     ))))
     result[[docid]] = list(
       descr=paste0(row$descr %||% "")[1],
-      pref_format=as.list(formats[nzchar(formats)]),
-      auto_convert=as.list(conversions[nzchar(conversions)]),
+      file_types=as.list(file_types[nzchar(file_types)]),
       pref_doc_dir=paste0(row$pref_doc_dir %||% "")[1],
       add_images=isTRUE(row$add_images)
     )
@@ -649,6 +684,9 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     }
     if (has_field("system_prompt")) {
       current$system_prompt = paste0(fields$system_prompt, collapse="\n")
+    }
+    if (has_field("shown_text")) {
+      current$shown_text = paste0(fields$shown_text, collapse="\n")
     }
     if (has_field("default_personality")) {
       current$default_personality = paste0(
@@ -845,14 +883,46 @@ ullme_save_course_ai_tutor_instances_yaml = function(tutorid, yaml_content,
 }
 
 
-ullme_handle_ai_tutor_add = function(tutorid=NULL, app=getApp(), ...) {
+ullme_handle_ai_tutor_add = function(templateid=NULL, tutorid=NULL,
+                                      app=getApp(), ...) {
   restore.point("ullme_handle_ai_tutor_add")
-  added = tryCatch(
-    ullme_add_course_ai_tutor(tutorid=tutorid, app=app),
-    error=function(e) FALSE
+  result = tryCatch({
+    added = ullme_add_course_ai_tutor(
+      templateid=templateid,
+      tutorid=tutorid,
+      app=app
+    )
+    if (!isTRUE(added)) stop("The AI Tutor could not be added.")
+    ullme_send_course_state(app=app)
+    list(ok=TRUE, message="AI Tutor added.")
+  }, error=function(e) {
+    list(ok=FALSE, status="error", message=conditionMessage(e))
+  })
+  callJS(
+    .fun="window.ullme.aiTutorAddComplete",
+    .args=list(result),
+    .app=app
   )
-  if (added) ullme_send_course_state(app=app)
-  invisible(added)
+  invisible(result)
+}
+
+
+ullme_handle_ai_tutor_delete = function(tutorid=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_ai_tutor_delete")
+  result = tryCatch({
+    deleted = ullme_delete_course_ai_tutor(tutorid=tutorid, app=app)
+    if (!isTRUE(deleted)) stop("The AI Tutor could not be deleted.")
+    ullme_send_course_state(app=app)
+    list(ok=TRUE, message="AI Tutor deleted.")
+  }, error=function(e) {
+    list(ok=FALSE, status="error", message=conditionMessage(e))
+  })
+  callJS(
+    .fun="window.ullme.aiTutorDeleteComplete",
+    .args=list(result),
+    .app=app
+  )
+  invisible(result)
 }
 
 

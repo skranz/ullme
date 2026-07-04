@@ -241,15 +241,11 @@ ullme_require_yaml = function() {
 ullme_course_summary = function(app) {
   restore.point("ullme_course_summary")
   if (is.null(app$courseid) || !nzchar(app$courseid)) return(NULL)
-  course_dir = ullme_course_dir(
-    main_dir=app$glob$main_dir,
-    userid=app$userid,
-    role=app$role,
-    semester=app$semester,
-    courseid=app$courseid
-  )
-  if (!dir.exists(course_dir)) return(NULL)
-  ullme_init_course_material_dirs(course_dir=course_dir, app=app)
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir) || !dir.exists(course_dir)) return(NULL)
+  if (identical(app$role, "teacher")) {
+    ullme_init_course_material_dirs(course_dir=course_dir, app=app)
+  }
   list(
     course = ullme_read_course_yaml(course_dir),
     material = ullme_course_material_files(course_dir)

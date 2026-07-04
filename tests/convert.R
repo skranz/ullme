@@ -6,7 +6,7 @@ stopifnot(
       c("ps/topic.pdf", "ps/topic.docx"),
       c("md", "tex", "pdf")
     ),
-    "ps/topic.docx"
+    "ps/topic.pdf"
   ),
   identical(
     ullme_preferred_document_file(
@@ -145,7 +145,7 @@ writeLines(c(
   "default_personality: Friendly",
   "docs_per_instance:",
   "  ps:",
-  "    pref_format: [md, tex, pdf]",
+  "    file_types: [md, tex, pdf]",
   "    pref_doc_dir: ps",
   "docs_per_course: {}",
   "allowed_tools: []",

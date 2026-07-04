@@ -345,7 +345,7 @@ utool_write_rtutor_instances_yaml = function(tutorid, yaml_content,
   result = ullme_save_course_ai_tutor_instances_yaml(
     tutorid=tutorid,
     yaml_content=yaml_content,
-    origin="agent",
+    origin="instance_builder",
     app=app
   )
   info = ullme_rtutor_instances_yaml_info(tutorid, yaml_content)

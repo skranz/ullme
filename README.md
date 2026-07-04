@@ -34,11 +34,20 @@ teacher_app = teacherApp(main_dir, userid="teacher_id")
 student_app = studentApp(
   main_dir,
   userid="student_id",
-  teacherid="teacher_id"
+  teacherid="teacher_id",
+  courseid="course_id",
+  tutorid="optional_tutor_id",
+  instanceid="optional_instance_id"
 )
 ```
 
 Roles are fixed by the constructor and cannot be switched inside an app.
+For student apps, `teacherid`, `courseid`, `tutorid`, and `instanceid` can
+instead be supplied as URL query parameters. A constructor argument always
+takes precedence over the corresponding URL value. `teacherid` and `courseid`
+are required; when no tutor or instance is specified, the student can switch
+it in the sidebar. `userid` is currently accepted only as a `studentApp()`
+argument.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait

@@ -9,6 +9,10 @@ COURSE
 BRIEF INSTRUCTION
 {{tutor_guidance}}
 
+DOCUMENT ROLES
+The file types are allowed in the listed preferred order.
+{{document_roles}}
+
 EXAMPLE YAML
 This example was generated from the Tutor's required document roles. Replace
 its placeholder paths and add or remove instances as needed.
@@ -19,6 +23,7 @@ its placeholder paths and add or remove instances as needed.
 FILES IN `materials/ps`
 Paths below are relative to `materials/` and must be copied exactly.
 {{ps_files}}
+
 
 TEACHER'S TEXT
 {{user_guidance}}

@@ -705,14 +705,135 @@ ullme_undo_change = function(operation_id="last", origin="agent", app=getApp()) 
 }
 
 
-ullme_handle_change_undo = function(operation_id="last", app=getApp(), ...) {
-  result = tryCatch(
-    ullme_undo_change(operation_id=operation_id, origin="ui", app=app),
-    error=function(e) list(ok=FALSE, status="error", message=conditionMessage(e))
+ullme_edit_scope_target = function(scope, tutorid=NULL, app=getApp()) {
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) stop("Select a course first.")
+  scope = paste0(scope %||% "")[1]
+  switch(
+    scope,
+    course_settings=ullme_course_yaml_path(course_dir),
+    tutor_definition=ullme_existing_course_ai_tutor_path(
+      course_dir,
+      ullme_clean_definition_id(tutorid)
+    ),
+    tutor_instances=ullme_course_ai_tutor_instances_path(
+      course_dir,
+      ullme_clean_definition_id(tutorid)
+    ),
+    stop("Unknown edit-history scope.")
   )
+}
+
+
+ullme_manifest_touches_target = function(manifest, target, app=getApp()) {
+  target = ullme_normalize_absolute_path(target, mustWork=FALSE)
+  if (identical(.Platform$OS.type, "windows")) target = tolower(target)
+  changes = manifest$changes %||% list()
+  any(vapply(changes, function(change) {
+    candidate = tryCatch(
+      ullme_resolve_manifest_target(change$target, app=app),
+      error=function(e) ""
+    )
+    if (!nzchar(candidate)) return(FALSE)
+    candidate = ullme_normalize_absolute_path(candidate, mustWork=FALSE)
+    if (identical(.Platform$OS.type, "windows")) candidate = tolower(candidate)
+    identical(candidate, target)
+  }, logical(1)))
+}
+
+
+ullme_edit_history_state = function(scope, tutorid=NULL, app=getApp()) {
+  target = ullme_edit_scope_target(scope=scope, tutorid=tutorid, app=app)
+  history = rev(ullme_change_history(app=app, limit=1000L))
+  active = character(0)
+  redo = character(0)
+  latest = list()
+  operation_base = list()
+
+  for (entry in history) {
+    if (!identical(entry$status, "committed") ||
+        !identical(entry$courseid %||% "", app$courseid %||% "")) next
+    path = ullme_manifest_path(entry$id, app=app)
+    if (!file.exists(path)) next
+    manifest = tryCatch(
+      yaml::read_yaml(path, eval.expr=FALSE),
+      error=function(e) NULL
+    )
+    if (is.null(manifest) ||
+        !identical(manifest$status, "committed") ||
+        !identical(manifest$semester %||% "", app$semester %||% "") ||
+        !ullme_manifest_touches_target(manifest, target, app=app)) next
+
+    id = paste0(manifest$id)[1]
+    if (identical(manifest$action, "undo")) {
+      undoes = paste0(manifest$details$undoes %||% "")[1]
+      base = operation_base[[undoes]]
+      if (is.null(base)) next
+      operation_base[[id]] = base
+      latest[[base]] = id
+      if (base %in% active) {
+        active = active[active != base]
+        redo = c(redo[redo != base], base)
+      } else {
+        redo = redo[redo != base]
+        active = c(active[active != base], base)
+      }
+    } else {
+      redo = character(0)
+      operation_base[[id]] = id
+      latest[[id]] = id
+      active = c(active, id)
+    }
+  }
+
+  candidate = function(stack) {
+    if (length(stack) == 0) return("")
+    paste0(latest[[stack[[length(stack)]]]] %||% "")[1]
+  }
+  available = function(id) {
+    if (!nzchar(id)) return(FALSE)
+    is.null(tryCatch({
+      ullme_prepare_undo(operation_id=id, origin="ui", app=app)
+      NULL
+    }, error=function(e) e))
+  }
+  undo_id = candidate(active)
+  redo_id = candidate(redo)
+  can_undo = available(undo_id)
+  can_redo = available(redo_id)
+  list(
+    can_undo=can_undo,
+    can_redo=can_redo,
+    undo_id=if (can_undo) undo_id else "",
+    redo_id=if (can_redo) redo_id else ""
+  )
+}
+
+
+ullme_handle_edit_history = function(scope=NULL, tutorid=NULL,
+                                      direction="undo", app=getApp(), ...) {
+  result = tryCatch({
+    state = ullme_edit_history_state(
+      scope=scope,
+      tutorid=tutorid,
+      app=app
+    )
+    direction = match.arg(paste0(direction)[1], c("undo", "redo"))
+    operation_id = if (identical(direction, "undo")) {
+      state$undo_id
+    } else {
+      state$redo_id
+    }
+    if (!nzchar(operation_id)) {
+      stop("There is nothing to ", direction, " in this pane.")
+    }
+    ullme_undo_change(operation_id=operation_id, origin="ui", app=app)
+  }, error=function(e) {
+    list(ok=FALSE, status="error", message=conditionMessage(e))
+  })
   callJS(
-    .fun="window.ullme.changeUndoComplete",
-    .args=list(result, ullme_agent_settings_payload(app=app)),
+    .fun="window.ullme.editHistoryComplete",
+    .args=list(result),
     .app=app
   )
   if (isTRUE(result$ok)) ullme_send_course_state(app=app)
