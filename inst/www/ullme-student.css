@@ -213,14 +213,14 @@ input {
 }
 
 .ullme-student-workspace.ullme-student-workspace-with-history {
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns: 210px minmax(0, 1fr);
 }
 
 .ullme-student-chat-history {
   display: none;
   overflow-y: auto;
   min-width: 0;
-  padding: 14px 10px;
+  padding: 12px 7px;
   border-right: 1px solid var(--ullme-border);
   background: #f7f8fb;
 }
@@ -234,14 +234,20 @@ input {
   align-items: center;
   justify-content: space-between;
   min-height: 38px;
-  padding: 0 6px 8px 10px;
+  padding: 0 3px 7px 8px;
   font-size: 14px;
   font-weight: 700;
 }
 
 .ullme-student-chat-history-head .ullme-icon-button {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
+}
+
+.ullme-student-chat-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
 }
 
 .ullme-student-chat-history-list {
@@ -249,10 +255,15 @@ input {
   gap: 3px;
 }
 
+.ullme-student-chat-history-row {
+  position: relative;
+  min-width: 0;
+}
+
 .ullme-student-chat-history-item {
   overflow: hidden;
   width: 100%;
-  padding: 9px 10px;
+  padding: 8px 31px 8px 9px;
   border: 0;
   border-radius: 8px;
   color: #344054;
@@ -261,6 +272,45 @@ input {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.ullme-student-chat-history-delete {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  opacity: 0;
+  color: #667085;
+  background: transparent;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.ullme-student-chat-history-delete .ullme-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.ullme-student-chat-history-row:hover .ullme-student-chat-history-delete,
+.ullme-student-chat-history-delete:focus-visible {
+  opacity: 1;
+}
+
+.ullme-student-chat-history-delete:hover {
+  color: #b42318;
+  background: #feeceb;
+}
+
+@media (hover: none) {
+  .ullme-student-chat-history-delete {
+    opacity: 1;
+  }
 }
 
 .ullme-student-chat-history-item:hover {
@@ -295,7 +345,7 @@ input {
 
 @media (max-width: 760px) {
   .ullme-student-workspace.ullme-student-workspace-with-history {
-    grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-columns: 180px minmax(0, 1fr);
   }
 }
 
@@ -305,7 +355,14 @@ input {
   }
 
   .ullme-student-workspace-with-history .ullme-student-chat-history {
-    display: none;
+    position: fixed;
+    z-index: 30;
+    top: 58px;
+    bottom: 0;
+    left: 0;
+    display: block;
+    width: min(210px, calc(100vw - 48px));
+    box-shadow: 12px 0 30px rgba(20, 30, 55, 0.14);
   }
 }
 

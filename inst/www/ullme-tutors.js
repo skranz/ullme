@@ -742,11 +742,8 @@
         false
       ));
     }
-    form.appendChild(documentSpecsEditor(
-      "Documents per course",
-      "ullme_docs_per_course",
-      tutor.docs_per_course || [],
-      true
+    form.appendChild(placeholderDocumentsEditor(
+      tutor.placeholder_documents || []
     ));
     form.appendChild(filePermissionsEditor(tutor.file_permissions || []));
 
@@ -775,7 +772,7 @@
           docs_per_instance: tutor.multiple_instances === false
             ? (tutor.docs_per_instance || [])
             : collectDocSpecs("ullme_docs_per_instance"),
-          docs_per_course: collectDocSpecs("ullme_docs_per_course"),
+          placeholder_documents: collectPlaceholderDocuments(),
           file_permissions: collectFilePermissions()
         }
       });
@@ -888,6 +885,91 @@
         add_images: Boolean(images && images.checked)
       };
     }).filter(function (spec) { return spec.docid; });
+  }
+
+  function placeholderDocumentsEditor(documents) {
+    var section = document.createElement("div");
+    var head = document.createElement("div");
+    var add = document.createElement("button");
+    var table = document.createElement("table");
+    var tableHead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    var body = document.createElement("tbody");
+    section.className = "ullme-tutor-form-section ullme-doc-spec-section";
+    head.className = "ullme-doc-spec-head";
+    head.appendChild(sectionTitle("Placeholder documents"));
+    add.type = "button";
+    add.className = "ullme-secondary-action";
+    add.textContent = "Add document";
+    add.addEventListener("click", function () {
+      body.appendChild(placeholderDocumentRow({}));
+    });
+    head.appendChild(add);
+    ["Placeholder", "Material file", ""].forEach(function (label) {
+      appendCell(headRow, "th", label);
+    });
+    tableHead.appendChild(headRow);
+    body.id = "ullme_placeholder_documents";
+    (Array.isArray(documents) ? documents : []).forEach(function (document) {
+      body.appendChild(placeholderDocumentRow(document));
+    });
+    table.appendChild(tableHead);
+    table.appendChild(body);
+    var wrap = document.createElement("div");
+    wrap.className = "ullme-doc-spec-table-wrap";
+    wrap.appendChild(table);
+    section.appendChild(head);
+    section.appendChild(wrap);
+    return section;
+  }
+
+  function placeholderDocumentRow(document) {
+    var row = document.createElement("tr");
+    [
+      {
+        name: "placeholder",
+        value: document.placeholder || "",
+        placeholder: "knowledge_start"
+      },
+      {
+        name: "path",
+        value: document.path || "",
+        placeholder: "knowledge.md"
+      }
+    ].forEach(function (spec) {
+      var cell = document.createElement("td");
+      var input = document.createElement("input");
+      input.className = "ullme-doc-spec-input";
+      input.setAttribute("data-field", spec.name);
+      input.value = spec.value;
+      input.placeholder = spec.placeholder;
+      cell.appendChild(input);
+      row.appendChild(cell);
+    });
+    var removeCell = document.createElement("td");
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ullme-text-action";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () { row.remove(); });
+    removeCell.appendChild(remove);
+    row.appendChild(removeCell);
+    return row;
+  }
+
+  function collectPlaceholderDocuments() {
+    var body = byId("ullme_placeholder_documents");
+    if (!body) return [];
+    return Array.prototype.map.call(body.querySelectorAll("tr"), function (row) {
+      var placeholder = row.querySelector('[data-field="placeholder"]');
+      var path = row.querySelector('[data-field="path"]');
+      return {
+        placeholder: placeholder ? placeholder.value.trim() : "",
+        path: path ? path.value.trim() : ""
+      };
+    }).filter(function (document) {
+      return document.placeholder;
+    });
   }
 
   function filePermissionsEditor(permissions) {

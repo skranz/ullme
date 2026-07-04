@@ -155,16 +155,8 @@ ullme_convert_document = function(source, to, output, from=NULL,
 ullme_tutor_doc_spec_for_path = function(definition, path) {
   specs = c(
     ullme_normalize_tutor_doc_specs(definition$docs_per_instance),
-    ullme_normalize_tutor_doc_specs(
-      definition$docs_per_course,
-      allow_fixed_paths=TRUE
-    )
+    ullme_normalize_tutor_doc_specs(definition$docs_per_course)
   )
-  specs = specs[vapply(
-    specs,
-    function(spec) !nzchar(spec$fixed_path %||% ""),
-    logical(1)
-  )]
   if (!length(specs)) return(NULL)
   path = gsub("\\\\", "/", paste0(path)[1])
   matches = Filter(function(spec) {

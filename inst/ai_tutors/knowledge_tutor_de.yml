@@ -8,17 +8,17 @@ shown_text: |
   Ich bin ein KI Tutor der dir Fragen über den Kurs beantworten kann.
 
 system_prompt: |
-  Beantworte Fragen über den Kurs. Wenn immer möglich lasse deine Fragen auf den vorhandenen Quellen basieren.
+  Beantworte Fragen über den Kurs. Lasse deine Fragen auf den hinterlegten Kursmaterialien basieren. Wenn die Materialien keine Informationen enthalten um die Frage zu beantworten sage das klar.
 
   Hier gibt es einen Überblick über die Kursmaterialen:
 
   {{knowledge_start}}
 
 default_personality: |
-  Du bist eine freundliche, hilfreiche KI
+  Du bist eine freundliche, hilfreiche KI, die aber auch klar sagt, wenn die vorhandenen Materialien nicht ausreichen um eine Frage zu beantworten.
 
 # per default in materials
-docs_per_course:
+placeholder_documents:
   knowledge_start: knowledge.md
 
 multiple_instances: false

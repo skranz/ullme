@@ -194,6 +194,31 @@ ullme_validate_tutor_doc_specs = function(value, field,
 }
 
 
+ullme_validate_tutor_placeholder_documents = function(value) {
+  errors = character(0)
+  if (is.null(value)) return(errors)
+  if (!is.list(value)) {
+    return("placeholder_documents must map placeholder names to file paths.")
+  }
+  ids = names(value)
+  if (length(value) && (
+      is.null(ids) || any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", ids)))) {
+    return("placeholder_documents contains an invalid placeholder name.")
+  }
+  for (placeholder in ids %||% character(0)) {
+    path = value[[placeholder]]
+    if (!is.character(path) || length(path) != 1L || is.na(path) ||
+        !ullme_safe_relative_material_path(path)) {
+      errors = c(errors, paste0(
+        "placeholder_documents.", placeholder,
+        " must be a relative file path below the materials directory."
+      ))
+    }
+  }
+  errors
+}
+
+
 ullme_validate_tutor_file_permissions = function(value) {
   errors = character(0)
   if (is.null(value)) return(errors)
@@ -284,12 +309,17 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
           errors,
           ullme_validate_tutor_doc_specs(
             value[[field]],
-            field,
-            allow_fixed_paths=identical(field, "docs_per_course")
+            field
           )
         )
       }
     }
+    errors = c(
+      errors,
+      ullme_validate_tutor_placeholder_documents(
+        value$placeholder_documents
+      )
+    )
     for (field in c("allowed_tools", "allowed_student_customization")) {
       if (!field %in% names(value)) {
         errors = c(errors, paste0(field, " is required, even when empty."))
@@ -324,7 +354,8 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
     )
     document_ids = c(
       names(value$docs_per_instance %||% list()),
-      names(value$docs_per_course %||% list())
+      names(value$docs_per_course %||% list()),
+      names(value$placeholder_documents %||% list())
     )
     for (prompt_field in c("system_prompt", "shown_text")) {
       prompt = paste0(value[[prompt_field]] %||% "", collapse="\n")

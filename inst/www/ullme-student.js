@@ -12,7 +12,10 @@
     cancelledAssistantRequests: {},
     contextReady: false,
     context: null,
-    historyCurrentId: null
+    historyCurrentId: null,
+    historyEnabled: false,
+    historyPaneClosed: false,
+    historyPanePreferenceSet: false
   };
   var mathJaxQueue = Promise.resolve();
 
@@ -120,6 +123,8 @@
     var instanceSelect = byId("ullme_student_instance_select");
     var newChatBtn = byId("ullme_student_new_chat_btn");
     var historyNewBtn = byId("ullme_student_history_new_btn");
+    var historyCloseBtn = byId("ullme_student_history_close_btn");
+    var historyOpenBtn = byId("ullme_student_history_open_btn");
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
@@ -201,6 +206,16 @@
     if (historyNewBtn) {
       historyNewBtn.addEventListener("click", function () {
         sendEvent("ullme_student_chat_history_event", { new_chat: true });
+      });
+    }
+    if (historyCloseBtn) {
+      historyCloseBtn.addEventListener("click", function () {
+        setHistoryPaneClosed(true);
+      });
+    }
+    if (historyOpenBtn) {
+      historyOpenBtn.addEventListener("click", function () {
+        setHistoryPaneClosed(false);
       });
     }
 
@@ -645,8 +660,32 @@
     return item;
   }
 
+  function setHistoryPaneClosed(closed) {
+    state.historyPaneClosed = Boolean(closed);
+    state.historyPanePreferenceSet = true;
+    updateHistoryPaneLayout();
+  }
+
+  function updateHistoryPaneLayout() {
+    var workspace = document.querySelector(".ullme-student-workspace");
+    var sidebar = byId("ullme_student_chat_history");
+    var openButton = byId("ullme_student_history_open_btn");
+    var open = state.historyEnabled && !state.historyPaneClosed;
+    if (workspace) {
+      workspace.classList.toggle("ullme-student-workspace-with-history", open);
+    }
+    if (sidebar) sidebar.setAttribute("aria-hidden", open ? "false" : "true");
+    if (openButton) {
+      openButton.style.display =
+        state.historyEnabled && state.historyPaneClosed ? "" : "none";
+    }
+  }
+
   function historyButton(item, currentId) {
+    var row = document.createElement("div");
     var button = document.createElement("button");
+    var remove = document.createElement("button");
+    row.className = "ullme-student-chat-history-row";
     button.type = "button";
     button.className = "ullme-student-chat-history-item";
     if (item.id === currentId) {
@@ -658,7 +697,25 @@
       if (item.id === state.historyCurrentId) return;
       sendEvent("ullme_student_chat_history_event", { chat_id: item.id });
     });
-    return button;
+    remove.type = "button";
+    remove.className = "ullme-student-chat-history-delete";
+    remove.setAttribute("aria-label", "Delete " + (item.label || "chat"));
+    remove.title = "Delete chat";
+    remove.innerHTML = icons.close;
+    remove.addEventListener("click", function (event) {
+      event.stopPropagation();
+      if (item.id === state.historyCurrentId && state.chatBusy) {
+        window.alert("Wait for the current response to finish before deleting this chat.");
+        return;
+      }
+      if (!window.confirm("Delete this chat permanently?")) return;
+      sendEvent("ullme_student_chat_history_event", {
+        delete_chat_id: item.id
+      });
+    });
+    row.appendChild(button);
+    row.appendChild(remove);
+    return row;
   }
 
   function renderStoredChat(messages) {
@@ -681,17 +738,17 @@
 
   function updateStudentChatHistory(payload) {
     payload = payload || {};
-    var workspace = document.querySelector(".ullme-student-workspace");
     var recent = byId("ullme_student_chat_history_recent");
     var older = byId("ullme_student_chat_history_older");
     var more = byId("ullme_student_chat_history_more");
     var enabled = Boolean(payload.enabled);
-    if (workspace) {
-      workspace.classList.toggle(
-        "ullme-student-workspace-with-history",
-        enabled
+    state.historyEnabled = enabled;
+    if (enabled && !state.historyPanePreferenceSet) {
+      state.historyPaneClosed = Boolean(
+        window.matchMedia && window.matchMedia("(max-width: 560px)").matches
       );
     }
+    updateHistoryPaneLayout();
     if (!enabled) {
       state.historyCurrentId = null;
       if (recent) recent.innerHTML = "";

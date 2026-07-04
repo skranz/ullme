@@ -17,7 +17,7 @@ The core fields are:
 - `system_prompt`;
 - `default_personality`;
 - `docs_per_instance`;
-- `docs_per_course`;
+- `placeholder_documents`;
 - `multiple_instances` and `chat_history`;
 - `file_permissions`;
 - `allowed_tools`; and
@@ -44,17 +44,17 @@ reads the package template directly.
 ## Document specifications
 
 `docs_per_instance` defines documents that differ between Tutor instances.
-`docs_per_course` defines documents shared by every instance. It accepts the
-same metadata mappings as `docs_per_instance`. A course-wide Tutor can also
-map a placeholder directly to a file below the course's `materials` folder:
+`placeholder_documents` maps prompt placeholder names directly to files below
+the course's `materials` folder:
 
 ```yaml
-docs_per_course:
+placeholder_documents:
   knowledge_start: knowledge.md
 ```
 
-Missing fixed files render as `[content missing]`. Metadata entries may
-contain:
+Missing placeholder files render as `[content missing]`.
+
+`docs_per_instance` metadata entries may contain:
 
 ```yaml
 descr: Human-readable description

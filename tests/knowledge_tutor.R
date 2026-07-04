@@ -84,3 +84,8 @@ stopifnot(
     fixed=TRUE
   )
 )
+stopifnot(ullme_student_chat_history_delete(first_chat, app=app))
+stopifnot(
+  !identical(app$student_chat_id, first_chat),
+  is.null(ullme_student_chat_history_read(first_chat, app=app))
+)

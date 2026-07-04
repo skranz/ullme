@@ -76,9 +76,6 @@ docs_per_instance:
     pref_doc_dir: ps
     add_images: true
 
-# documents that will be the same for the course and
-docs_per_course: {}
-
 chat_history: false
 
 allowed_tools: []

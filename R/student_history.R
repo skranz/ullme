@@ -153,6 +153,36 @@ ullme_student_chat_history_select = function(chat_id=NULL, app=getApp()) {
 }
 
 
+ullme_student_chat_history_delete = function(chat_id, app=getApp()) {
+  if (!ullme_student_chat_history_enabled(app=app)) return(invisible(FALSE))
+  directory = ullme_student_chat_history_dir(chat_id, app=app)
+  root = ullme_student_chat_history_root(app=app)
+  if (is.null(directory) || is.null(root) || !dir.exists(directory)) {
+    return(invisible(FALSE))
+  }
+  directory = normalizePath(directory, winslash="/", mustWork=TRUE)
+  root = normalizePath(root, winslash="/", mustWork=TRUE)
+  if (!ullme_path_is_within(directory, root, allow_root=FALSE)) {
+    stop("The selected chat history is outside the Tutor history directory.")
+  }
+  deleting_current = identical(chat_id, app$student_chat_id %||% "")
+  if (deleting_current && isTRUE(app$chat_response_active)) {
+    stop("Wait for the current response to finish before deleting this chat.")
+  }
+  unlink(directory, recursive=TRUE, force=TRUE)
+  if (dir.exists(directory)) stop("The chat history could not be deleted.")
+  if (deleting_current) {
+    model = ullme_model_id(NULL, app=app)
+    key = ullme_chat_key(model, task_profile="student_tutor", app=app)
+    app$teacher_chats[[key]] = NULL
+    histories = ullme_student_chat_history_list(app=app)
+    next_id = if (length(histories)) histories[[1]]$id else NULL
+    ullme_student_chat_history_select(chat_id=next_id, app=app)
+  }
+  invisible(TRUE)
+}
+
+
 ullme_student_chat_history_init = function(app=getApp()) {
   app$student_chat_id = NULL
   app$student_history_messages = list()
@@ -259,8 +289,18 @@ ullme_send_student_chat_history = function(app=getApp()) {
 
 
 ullme_handle_student_chat_history = function(chat_id=NULL, new_chat=FALSE,
+                                              delete_chat_id=NULL,
                                               app=getApp(), ...) {
   if (!ullme_student_chat_history_enabled(app=app)) return(invisible(FALSE))
+  delete_chat_id = paste0(delete_chat_id %||% "")[1]
+  if (nzchar(delete_chat_id)) {
+    deleted = tryCatch(
+      ullme_student_chat_history_delete(delete_chat_id, app=app),
+      error=function(e) FALSE
+    )
+    ullme_send_student_chat_history(app=app)
+    return(invisible(isTRUE(deleted)))
+  }
   model = ullme_model_id(NULL, app=app)
   key = ullme_chat_key(model, task_profile="student_tutor", app=app)
   app$teacher_chats[[key]] = NULL

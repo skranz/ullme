@@ -163,6 +163,34 @@ ullme_tutor_doc_specs_for_js = function(specs) {
 }
 
 
+ullme_normalize_tutor_placeholder_documents = function(value) {
+  restore.point("ullme_normalize_tutor_placeholder_documents")
+  if (is.null(value) || !is.list(value) || is.null(names(value))) {
+    return(list())
+  }
+  result = lapply(seq_along(value), function(i) {
+    path = value[[i]]
+    if (!is.character(path) || length(path) != 1L || is.na(path)) return(NULL)
+    list(
+      placeholder=paste0(names(value)[[i]])[1],
+      path=gsub("\\\\", "/", trimws(path))
+    )
+  })
+  result = Filter(Negate(is.null), result)
+  names(result) = vapply(
+    result,
+    function(document) document$placeholder,
+    character(1)
+  )
+  result
+}
+
+
+ullme_tutor_placeholder_documents_for_js = function(documents) {
+  unname(documents)
+}
+
+
 ullme_normalize_tutor_file_permissions = function(value) {
   restore.point("ullme_normalize_tutor_file_permissions")
   if (is.null(value) || !is.list(value)) return(list())
@@ -205,10 +233,25 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
   restore.point("ullme_normalize_ai_tutor_definition")
   if (!is.list(definition)) definition = list()
   per_instance = ullme_normalize_tutor_doc_specs(definition$docs_per_instance)
-  per_course = ullme_normalize_tutor_doc_specs(
-    definition$docs_per_course,
-    allow_fixed_paths=TRUE
+  legacy_course_specs = definition$docs_per_course
+  if (is.list(legacy_course_specs)) {
+    legacy_course_specs = legacy_course_specs[vapply(
+      legacy_course_specs,
+      is.list,
+      logical(1)
+    )]
+  }
+  per_course = ullme_normalize_tutor_doc_specs(legacy_course_specs)
+  placeholder_documents = ullme_normalize_tutor_placeholder_documents(
+    definition$placeholder_documents
   )
+  # Read scalar legacy docs_per_course entries as placeholder documents.
+  if (!length(placeholder_documents) &&
+      is.list(definition$docs_per_course)) {
+    placeholder_documents = ullme_normalize_tutor_placeholder_documents(
+      definition$docs_per_course
+    )
+  }
   list(
     tutorid=tutorid,
     lang=paste0(definition$lang %||% "")[1],
@@ -230,8 +273,12 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     ),
     docs_per_instance=ullme_tutor_doc_specs_for_js(per_instance),
     docs_per_course=ullme_tutor_doc_specs_for_js(per_course),
+    placeholder_documents=ullme_tutor_placeholder_documents_for_js(
+      placeholder_documents
+    ),
     doc_ids_per_instance=as.list(names(per_instance)),
     doc_ids_per_course=as.list(names(per_course)),
+    placeholder_document_ids=as.list(names(placeholder_documents)),
     allowed_tools=as.list(paste0(unlist(
       definition$allowed_tools %||% list(),
       use.names=FALSE
@@ -273,9 +320,15 @@ ullme_ai_tutor_yaml = function(value) {
     content,
     perl=TRUE
   )
-  sub(
+  content = sub(
     "(?m)^docs_per_course: \\[\\]$",
     "docs_per_course: {}",
+    content,
+    perl=TRUE
+  )
+  sub(
+    "(?m)^placeholder_documents: \\[\\]$",
+    "placeholder_documents: {}",
     content,
     perl=TRUE
   )
@@ -564,16 +617,8 @@ ullme_course_ai_tutors = function(app=getApp()) {
     )
     conversion_specs = c(
       ullme_normalize_tutor_doc_specs(value$docs_per_instance),
-      ullme_normalize_tutor_doc_specs(
-        value$docs_per_course,
-        allow_fixed_paths=TRUE
-      )
+      ullme_normalize_tutor_doc_specs(value$docs_per_course)
     )
-    conversion_specs = conversion_specs[vapply(
-      conversion_specs,
-      function(spec) !nzchar(spec$fixed_path %||% ""),
-      logical(1)
-    )]
     conversion_files = unique(unlist(lapply(
       conversion_specs,
       function(spec) ullme_tutor_spec_files(course_dir, spec)
@@ -736,6 +781,23 @@ ullme_tutor_doc_specs_from_rows = function(rows, allow_fixed_paths=FALSE) {
 }
 
 
+ullme_tutor_placeholder_documents_from_rows = function(rows) {
+  restore.point("ullme_tutor_placeholder_documents_from_rows")
+  if (!is.list(rows)) return(list())
+  result = list()
+  for (row in rows) {
+    if (!is.list(row)) next
+    placeholder = ullme_clean_definition_id(row$placeholder)
+    path = gsub("\\\\", "/", trimws(paste0(row$path %||% "")[1]))
+    if (!ullme_safe_relative_material_path(path)) {
+      stop("Placeholder document paths must be relative material paths.")
+    }
+    result[[placeholder]] = path
+  }
+  result
+}
+
+
 ullme_tutor_file_permissions_from_rows = function(rows) {
   restore.point("ullme_tutor_file_permissions_from_rows")
   permissions = ullme_normalize_tutor_file_permissions(rows)
@@ -812,9 +874,14 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     }
     if (has_field("docs_per_course")) {
       current$docs_per_course = ullme_tutor_doc_specs_from_rows(
-        fields$docs_per_course %||% list(),
-        allow_fixed_paths=TRUE
+        fields$docs_per_course %||% list()
       )
+    }
+    if (has_field("placeholder_documents")) {
+      current$placeholder_documents =
+        ullme_tutor_placeholder_documents_from_rows(
+          fields$placeholder_documents %||% list()
+        )
     }
     if (has_field("allowed_tools")) {
       current$allowed_tools = as.list(unique(trimws(paste0(unlist(

@@ -382,24 +382,23 @@ ullme_student_tutor_values = function(tutor=ullme_student_selected_tutor(app),
     identical(paste0(instance$instanceid %||% "")[1], instanceid %||% "")
   }, logical(1))]
   instance_docs = if (length(selected)) selected[[1]]$docs else list()
-  course_specs = ullme_normalize_tutor_doc_specs(
+  placeholder_documents = ullme_normalize_tutor_placeholder_documents(
     setNames(
-      lapply(tutor$docs_per_course %||% list(), function(spec) {
-        if (nzchar(spec$fixed_path %||% "")) {
-          spec$fixed_path
-        } else {
-          spec
-        }
+      lapply(tutor$placeholder_documents %||% list(), function(document) {
+        document$path
       }),
       vapply(
-        tutor$docs_per_course %||% list(),
-        function(spec) spec$docid,
+        tutor$placeholder_documents %||% list(),
+        function(document) document$placeholder,
         character(1)
       )
-    ),
-    allow_fixed_paths=TRUE
+    )
   )
   docids = unique(c(
+    paste0(unlist(
+      tutor$placeholder_document_ids %||% list(),
+      use.names=FALSE
+    )),
     paste0(unlist(tutor$doc_ids_per_course %||% list(), use.names=FALSE)),
     paste0(unlist(tutor$doc_ids_per_instance %||% list(), use.names=FALSE)),
     names(tutor$course_docs %||% list()),
@@ -407,10 +406,10 @@ ullme_student_tutor_values = function(tutor=ullme_student_selected_tutor(app),
   ))
   docids = docids[nzchar(docids)]
   values = lapply(docids, function(docid) {
-    fixed_path = course_specs[[docid]]$fixed_path %||% ""
-    if (nzchar(fixed_path)) {
+    placeholder_path = placeholder_documents[[docid]]$path %||% ""
+    if (nzchar(placeholder_path)) {
       return(ullme_student_document_text(
-        fixed_path,
+        placeholder_path,
         course_dir=course_dir,
         missing="[content missing]"
       ))
@@ -513,6 +512,15 @@ ullme_student_context_controls_ui = function(app=getApp()) {
   restore.point("ullme_student_context_controls_ui")
   tags$div(
     class="ullme-context-controls ullme-student-context-summary",
+    tags$button(
+      id="ullme_student_history_open_btn",
+      class="ullme-icon-button ullme-student-history-open-button",
+      type="button",
+      `aria-label`="Open chat history",
+      title="Open chat history",
+      style="display: none;",
+      HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M9 4v16"></path><path d="M13 9l3 3-3 3"></path></svg>')
+    ),
     tags$span(
       id="ullme_student_course_summary",
       class="ullme-student-course-summary",
@@ -562,13 +570,24 @@ ullme_student_sidebar_ui = function(app=getApp()) {
     tags$div(
       class="ullme-student-chat-history-head",
       tags$span("Chats"),
-      tags$button(
-        id="ullme_student_history_new_btn",
-        class="ullme-icon-button",
-        type="button",
-        `aria-label`="New chat",
-        title="New chat",
-        HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>')
+      tags$div(
+        class="ullme-student-chat-history-actions",
+        tags$button(
+          id="ullme_student_history_new_btn",
+          class="ullme-icon-button",
+          type="button",
+          `aria-label`="New chat",
+          title="New chat",
+          HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>')
+        ),
+        tags$button(
+          id="ullme_student_history_close_btn",
+          class="ullme-icon-button",
+          type="button",
+          `aria-label`="Close chat history",
+          title="Close chat history",
+          HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M9 4v16"></path><path d="M16 9l-3 3 3 3"></path></svg>')
+        )
       )
     ),
     tags$nav(

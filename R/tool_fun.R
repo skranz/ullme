@@ -108,7 +108,7 @@ utool_list_ai_tutors = function(app=getApp()) {
       enabled=tutor$enabled,
       instance_count=tutor$instance_count,
       docs_per_instance=tutor$doc_ids_per_instance,
-      docs_per_course=tutor$doc_ids_per_course
+      placeholder_documents=tutor$placeholder_document_ids
     )
   })
 }
