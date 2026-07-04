@@ -17,7 +17,10 @@
     historyPaneClosed: false,
     historyPanePreferenceSet: false
   };
-  var mathJaxQueue = Promise.resolve();
+  var chatCommon = window.ullmeChat;
+  var typesetMath = chatCommon.typesetMath;
+  var textBlock = chatCommon.textBlock;
+  var renderAttachments = chatCommon.renderAttachments;
 
   var icons = {
     copy: '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M5 15V5h10"></path></svg>',
@@ -28,22 +31,15 @@
   };
 
   function byId(id) {
-    return document.getElementById(id);
+    return chatCommon.byId(id);
   }
 
   function nextId(prefix) {
-    state.messageIndex += 1;
-    return prefix + "_" + Date.now() + "_" + state.messageIndex;
+    return chatCommon.nextId(state, prefix);
   }
 
   function sendEvent(inputId, payload) {
-    payload = payload || {};
-    payload.nonce = Math.random();
-    if (window.Shiny && window.Shiny.setInputValue) {
-      window.Shiny.setInputValue(inputId, payload, { priority: "event" });
-    } else if (window.Shiny && window.Shiny.onInputChange) {
-      window.Shiny.onInputChange(inputId, payload);
-    }
+    chatCommon.sendEvent(inputId, payload);
   }
 
   function sendChatEvent(payload) {
@@ -69,34 +65,6 @@
       true,
       "The app is not connected to the uLLMe server."
     );
-  }
-
-  function clearMath(element) {
-    if (!element || !window.MathJax ||
-        typeof window.MathJax.typesetClear !== "function") return;
-    try {
-      window.MathJax.typesetClear([element]);
-    } catch (error) {
-      return;
-    }
-  }
-
-  function typesetMath(element) {
-    if (!element || !window.MathJax ||
-        typeof window.MathJax.typesetPromise !== "function") return;
-    var startup = window.MathJax.startup && window.MathJax.startup.promise
-      ? window.MathJax.startup.promise
-      : Promise.resolve();
-    mathJaxQueue = mathJaxQueue
-      .then(function () { return startup; })
-      .then(function () {
-        return window.MathJax.typesetPromise([element]);
-      })
-      .catch(function (error) {
-        if (window.console && console.warn) {
-          console.warn("MathJax could not typeset a chat message.", error);
-        }
-      });
   }
 
   function clearChatUI() {
@@ -240,17 +208,7 @@
   }
 
   function resizeInput(input) {
-    var composer = input.closest(".ullme-composer");
-    if (composer) composer.classList.remove("ullme-composer-multiline");
-    input.style.height = "auto";
-    var minHeight = parseFloat(window.getComputedStyle(input).minHeight) || 40;
-    var multiline = input.value.indexOf("\n") !== -1 ||
-      input.scrollHeight > minHeight + 2;
-    if (composer) composer.classList.toggle("ullme-composer-multiline", multiline);
-    input.style.height = Math.max(
-      minHeight,
-      Math.min(input.scrollHeight, 170)
-    ) + "px";
+    chatCommon.resizeInput(input, 40);
   }
 
   function updateSubmitState() {
@@ -425,11 +383,7 @@
   }
 
   function setAssistantMessageContent(element, text, html) {
-    var renderHtml = typeof html === "string" && html.length > 0;
-    clearMath(element);
-    element.classList.toggle("ullme-message-text-markdown", renderHtml);
-    if (renderHtml) element.innerHTML = html;
-    else element.textContent = text || "";
+    chatCommon.setMessageContent(element, text, html);
   }
 
   function renderAssistantActions(messageId, text) {
@@ -548,56 +502,14 @@
     }
   }
 
-  function textBlock(text) {
-    var block = document.createElement("div");
-    block.textContent = text;
-    return block;
-  }
-
-  function renderAttachments(uploads) {
-    var wrap = document.createElement("div");
-    wrap.className = "ullme-attachments";
-    uploads.forEach(function (upload) {
-      if (!upload.previewUrl) return;
-      var image = document.createElement("img");
-      image.className = "ullme-attachment-thumb";
-      image.alt = upload.name || "Uploaded image";
-      image.src = upload.previewUrl;
-      wrap.appendChild(image);
-    });
-    return wrap;
-  }
-
   function addLocalUploads(files) {
-    files.filter(function (file) {
-      return /^image\//.test(file.type || "");
-    }).forEach(function (file) {
-      var upload = {
-        localId: nextId("upload"),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        previewUrl: ""
-      };
-      state.uploads.push(upload);
-      var reader = new FileReader();
-      reader.onload = function (event) {
-        upload.previewUrl = event.target.result;
-        renderUploadPreview();
-      };
-      reader.readAsDataURL(file);
-    });
-    renderUploadPreview();
+    chatCommon.addLocalUploads(
+      files, state, nextId, renderUploadPreview
+    );
   }
 
   function handlePaste(event) {
-    var items = event.clipboardData && event.clipboardData.items;
-    if (!items) return;
-    var files = Array.prototype.slice.call(items).filter(function (item) {
-      return item.kind === "file" && /^image\//.test(item.type || "");
-    }).map(function (item) {
-      return item.getAsFile();
-    }).filter(Boolean);
+    var files = chatCommon.clipboardImageFiles(event);
     if (!files.length) return;
     event.preventDefault();
     addLocalUploads(files);
@@ -605,51 +517,17 @@
   }
 
   function renderUploadPreview() {
-    var preview = byId("ullme_upload_preview");
-    if (!preview) return;
-    preview.innerHTML = "";
-    preview.classList.toggle("has-items", state.uploads.length > 0);
-    state.uploads.forEach(function (upload) {
-      var item = document.createElement("div");
-      var image = document.createElement("img");
-      var remove = document.createElement("button");
-      item.className = "ullme-preview-item";
-      image.alt = upload.name || "Upload preview";
-      image.src = upload.previewUrl || "";
-      remove.className = "ullme-preview-remove";
-      remove.type = "button";
-      remove.title = "Remove image";
-      remove.innerHTML = icons.close;
-      remove.addEventListener("click", function () {
-        state.uploads = state.uploads.filter(function (candidate) {
-          return candidate.localId !== upload.localId;
-        });
-        renderUploadPreview();
-        updateSubmitState();
-      });
-      item.appendChild(image);
-      item.appendChild(remove);
-      preview.appendChild(item);
-    });
+    chatCommon.renderUploadPreview(
+      state, icons.close, updateSubmitState
+    );
   }
 
   function clearUploads() {
-    var input = byId("ullme_image_upload");
-    state.uploads = [];
-    if (input) input.value = "";
-    renderUploadPreview();
+    chatCommon.clearUploads(state, renderUploadPreview);
   }
 
   function receiveStoredUploads(records) {
-    (records || []).forEach(function (record) {
-      var match = state.uploads.find(function (upload) {
-        return !upload.serverId && upload.size === record.size;
-      });
-      if (match) {
-        match.serverId = record.id;
-        match.storedUrl = record.url;
-      }
-    });
+    chatCommon.receiveStoredUploads(state, records);
   }
 
   function option(value, label) {
@@ -855,23 +733,7 @@
   }
 
   function updateModelCatalog(payload) {
-    var select = byId("ullme_model_select");
-    if (!select || !payload) return;
-    var previous = select.value;
-    var models = Array.isArray(payload.models) ? payload.models : [];
-    select.innerHTML = "";
-    models.forEach(function (model) {
-      select.appendChild(option(model.id, model.label || model.id));
-    });
-    var hasPrevious = models.some(function (model) {
-      return model.id === previous;
-    });
-    if (hasPrevious) select.value = previous;
-    else if (payload.default) select.value = payload.default;
-    select.disabled = models.length === 0;
-    select.title = payload.error
-      ? String(payload.provider || "Model") + ": " + payload.error
-      : "Model provider: " + String(payload.provider || "model");
+    chatCommon.updateModelCatalog(payload);
   }
 
   window.ullme = window.ullme || {};

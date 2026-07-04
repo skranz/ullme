@@ -439,12 +439,13 @@ ullme_app_ui = function(app=getApp()) {
       tags$link(
         rel="stylesheet",
         type="text/css",
-        href=if (is_teacher) "ullme/ullme-chat.css" else
+        href=if (is_teacher) "ullme/ullme-teacher.css" else
           "ullme/ullme-student.css"
       ),
       if (is_teacher) tags$script(src="ullme/ullme-materials.js"),
+      tags$script(src="ullme/ullme-chat.js"),
       tags$script(
-        src=if (is_teacher) "ullme/ullme-chat.js" else
+        src=if (is_teacher) "ullme/ullme-teacher.js" else
           "ullme/ullme-student.js"
       ),
       if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),

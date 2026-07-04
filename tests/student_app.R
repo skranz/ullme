@@ -61,14 +61,15 @@ stopifnot(
   grepl("ullme-student.css", ui, fixed=TRUE),
   grepl("ullme-student.js", ui, fixed=TRUE),
   grepl(
-    "https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js",
+    "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
     ui,
     fixed=TRUE
   ),
   grepl("ullme_student_pane_resizer", ui, fixed=TRUE),
   grepl("ullme_student_sidebar_toggle", ui, fixed=TRUE),
   !grepl("ullme-chat.css", ui, fixed=TRUE),
-  !grepl("ullme-chat.js", ui, fixed=TRUE),
+  grepl("ullme-chat.js", ui, fixed=TRUE),
+  !grepl("ullme-teacher.js", ui, fixed=TRUE),
   !grepl("ullme-tutors.js", ui, fixed=TRUE)
 )
 

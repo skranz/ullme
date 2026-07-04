@@ -28,9 +28,10 @@ there.
 R builds a stable HTML shell and loads:
 
 ```text
-inst/www/ullme-chat.css
+inst/www/ullme-teacher.css or inst/www/ullme-student.css
 inst/www/ullme-materials.js
 inst/www/ullme-chat.js
+inst/www/ullme-teacher.js or inst/www/ullme-student.js
 inst/www/ullme-tutors.js
 inst/www/ullme-audio.js
 ```
@@ -301,7 +302,7 @@ alternatives.
 rectangle selection (with Ctrl/Cmd additive selection), multi-file dragging,
 and resolution of row drop targets. Dropping onto a file resolves to that
 file's parent directory. Rendering, sorting, and server messaging remain in
-`ullme-chat.js`.
+`ullme-teacher.js`.
 
 All UI file operations pass paths relative to the active course's `materials`
 directory to `delete_material_file()`, `move_material_file()`,
