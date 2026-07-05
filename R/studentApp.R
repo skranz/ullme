@@ -22,7 +22,8 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
                        api_model=NULL, api_base_url=NULL,
                        render_chat_markdown=TRUE,
                        stream_chat=TRUE,
-                       store_ai_interactions=TRUE) {
+                       store_ai_interactions=TRUE,
+                       never_save_chats=TRUE) {
   restore.point("studentApp")
   .ullme_app(
     main_dir=main_dir,
@@ -41,7 +42,8 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
     api_base_url=api_base_url,
     stream_chat=stream_chat,
     show_chat_thinking=FALSE,
-    store_ai_interactions=store_ai_interactions
+    store_ai_interactions=store_ai_interactions,
+    never_save_chats=never_save_chats
   )
 }
 
@@ -323,6 +325,12 @@ ullme_handle_student_context = function(tutorid=NULL, instanceid=NULL,
       instanceid=instanceid,
       app=app
     )
+    context_changed =
+      !identical(app$tutorid, old_tutorid) ||
+      !identical(app$instanceid, old_instanceid)
+    if (isTRUE(context_changed)) {
+      ullme_student_session_stats_init(app=app)
+    }
     if (!identical(app$tutorid, old_tutorid)) {
       ullme_student_chat_history_init(app=app)
     }
@@ -512,15 +520,17 @@ ullme_student_context_controls_ui = function(app=getApp()) {
   restore.point("ullme_student_context_controls_ui")
   tags$div(
     class="ullme-context-controls ullme-student-context-summary",
-    tags$button(
-      id="ullme_student_history_open_btn",
-      class="ullme-icon-button ullme-student-history-open-button",
-      type="button",
-      `aria-label`="Open chat history",
-      title="Open chat history",
-      style="display: none;",
-      HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M9 4v16"></path><path d="M13 9l3 3-3 3"></path></svg>')
-    ),
+    if (!isTRUE(app$never_save_chats)) {
+      tags$button(
+        id="ullme_student_history_open_btn",
+        class="ullme-icon-button ullme-student-history-open-button",
+        type="button",
+        `aria-label`="Open chat history",
+        title="Open chat history",
+        style="display: none;",
+        HTML('<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M9 4v16"></path><path d="M13 9l3 3-3 3"></path></svg>')
+      )
+    },
     tags$span(
       id="ullme_student_course_summary",
       class="ullme-student-course-summary",
@@ -563,6 +573,7 @@ ullme_student_context_controls_ui = function(app=getApp()) {
 
 ullme_student_sidebar_ui = function(app=getApp()) {
   restore.point("ullme_student_sidebar_ui")
+  if (isTRUE(app$never_save_chats)) return(NULL)
   tags$aside(
     id="ullme_student_chat_history",
     class="ullme-student-chat-history",
@@ -620,6 +631,7 @@ ullme_student_workspace_ui = function(app=getApp()) {
 
 ullme_handle_student_chat_clear = function(app=getApp(), ...) {
   restore.point("ullme_handle_student_chat_clear")
+  ullme_student_session_stats_init(app=app)
   model = ullme_model_id(NULL, app=app)
   key = ullme_chat_key(model, task_profile="student_tutor", app=app)
   app$teacher_chats[[key]] = NULL

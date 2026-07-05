@@ -39,6 +39,8 @@ app = studentApp(
 
 stopifnot(
   identical(app$global, app$glob),
+  isTRUE(app$never_save_chats),
+  is.null(ullme_ai_interactions_dir(app=app)),
   identical(app$global$userid, "student_a"),
   identical(app$global$teacherid, "teacher_a"),
   identical(app$global$courseid, "course_a"),
@@ -66,7 +68,7 @@ stopifnot(
     fixed=TRUE
   ),
   grepl("ullme_student_pane_resizer", ui, fixed=TRUE),
-  grepl("ullme_student_sidebar_toggle", ui, fixed=TRUE),
+  !grepl("ullme_student_sidebar_toggle", ui, fixed=TRUE),
   !grepl("ullme-chat.css", ui, fixed=TRUE),
   grepl("ullme-chat.js", ui, fixed=TRUE),
   !grepl("ullme-teacher.js", ui, fixed=TRUE),

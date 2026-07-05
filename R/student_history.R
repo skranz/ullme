@@ -1,4 +1,5 @@
 ullme_student_chat_history_enabled = function(app=getApp()) {
+  if (isTRUE(app$never_save_chats)) return(FALSE)
   tutor = ullme_student_selected_tutor(app=app)
   !is.null(tutor) && isTRUE(tutor$chat_history)
 }
@@ -294,16 +295,24 @@ ullme_handle_student_chat_history = function(chat_id=NULL, new_chat=FALSE,
   if (!ullme_student_chat_history_enabled(app=app)) return(invisible(FALSE))
   delete_chat_id = paste0(delete_chat_id %||% "")[1]
   if (nzchar(delete_chat_id)) {
+    deleting_current = identical(
+      delete_chat_id,
+      app$student_chat_id %||% ""
+    )
     deleted = tryCatch(
       ullme_student_chat_history_delete(delete_chat_id, app=app),
       error=function(e) FALSE
     )
+    if (isTRUE(deleted) && isTRUE(deleting_current)) {
+      ullme_student_session_stats_init(app=app)
+    }
     ullme_send_student_chat_history(app=app)
     return(invisible(isTRUE(deleted)))
   }
   model = ullme_model_id(NULL, app=app)
   key = ullme_chat_key(model, task_profile="student_tutor", app=app)
   app$teacher_chats[[key]] = NULL
+  ullme_student_session_stats_init(app=app)
   if (isTRUE(new_chat)) {
     ullme_student_chat_history_new(app=app)
   } else {

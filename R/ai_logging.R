@@ -1,6 +1,7 @@
 ullme_ai_interactions_dir = function(app=getApp()) {
   if (!isTRUE(app$store_ai_interactions)) return(NULL)
   if (identical(app$role, "student")) {
+    if (isTRUE(app$never_save_chats)) return(NULL)
     parts = c(
       app$teacherid %||% "teacher",
       app$courseid %||% "course",

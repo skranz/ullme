@@ -118,3 +118,17 @@ A Tutor session belongs to one student, course Tutor, and Tutor instance.
 With `chat_history: true`, conversations are stored per student, semester,
 course, and Tutor and shown in a left sidebar. The ten most recent chats are
 shown first, with older chats under **More**. The default is `false`.
+
+`studentApp(never_save_chats=TRUE)` is the application-level privacy override
+and is the default. It disables both saved student conversations and the
+student interaction debug log, and suppresses the history sidebar regardless
+of `chat_history`. Set it to `FALSE` only when the deployment has an
+appropriate data-protection basis for retaining chat text.
+
+Student apps write content-free usage records to
+`main_dir/session_stats/<anonymous-session-id>.csv`. A new random 16-character
+ID is created for the initial chat and each explicitly started new chat.
+Rows contain course and Tutor identifiers, model and token counts, time until
+the first visible output in milliseconds (`ttf_ms`), time until the last
+visible output token in seconds (`total_sec`), and an error code only when no
+reply was produced; they never contain prompts or replies.

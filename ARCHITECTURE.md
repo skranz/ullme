@@ -376,6 +376,11 @@ Main-chat tool activity is stored as ordered YAML records under
 `tool_events/`; sensitive argument names are redacted and long values are
 truncated.
 
+For student apps, `never_save_chats=TRUE` is the default and overrides both
+`store_ai_interactions` and the Tutor's `chat_history` flag. Chat text then
+exists only in the live app process. Anonymous, content-free usage metadata is
+written separately to one CSV per chat under `main_dir/session_stats/`.
+
 The first assistant message comes from `ullme_intro_msg()` and can later become
 course- or user-specific.
 

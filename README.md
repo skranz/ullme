@@ -53,9 +53,12 @@ Assistant output is rendered as CommonMark Markdown by default. Pass
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait
 for complete responses. `teacherApp(show_chat_thinking=TRUE)` also shows
 provider-supplied thinking content in a closed, expandable field when present.
-AI requests and responses are stored below the active course's
+Teacher AI requests and responses are stored below the active course's
 `ai_interactions/` directory by default; pass
-`store_ai_interactions=FALSE` to disable this debugging log.
+`store_ai_interactions=FALSE` to disable this debugging log. Student apps
+default to `never_save_chats=TRUE`, which overrides Tutor chat-history settings,
+hides the history sidebar, and prevents prompts and replies from being stored.
+Content-free aggregate usage rows are still written to `session_stats/`.
 
 
 # Code Design

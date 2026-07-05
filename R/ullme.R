@@ -39,7 +39,8 @@ ullme_teacherid = function(app=getApp()) {
                       render_chat_markdown=TRUE,
                       stream_chat=TRUE,
                       show_chat_thinking=FALSE,
-                      store_ai_interactions=TRUE) {
+                      store_ai_interactions=TRUE,
+                      never_save_chats=TRUE) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
@@ -87,6 +88,11 @@ ullme_teacherid = function(app=getApp()) {
       is.na(store_ai_interactions)) {
     stop("store_ai_interactions must be TRUE or FALSE.")
   }
+  if (!is.logical(never_save_chats) ||
+      length(never_save_chats) != 1L ||
+      is.na(never_save_chats)) {
+    stop("never_save_chats must be TRUE or FALSE.")
+  }
   # Shiny's upload limit is process-wide, even though upload state is per app.
   current_upload_limit = getOption("shiny.maxRequestSize", 5 * 1024^2)
   options(shiny.maxRequestSize=max(current_upload_limit, max_upload_mb * 1024^2))
@@ -122,6 +128,8 @@ ullme_teacherid = function(app=getApp()) {
   app$show_chat_thinking =
     identical(role, "teacher") && isTRUE(show_chat_thinking)
   app$store_ai_interactions = isTRUE(store_ai_interactions)
+  app$never_save_chats =
+    identical(role, "student") && isTRUE(never_save_chats)
   app$chat_response_active = FALSE
   app$chat_tasks = list()
   app$chat_requests = list()
@@ -1586,6 +1594,7 @@ ullme_init_app = function(session=NULL, app=getApp()) {
   restore.point("ullme_init_app")
   ullme_init_storage(main_dir=app$glob$main_dir, app=app)
   if (identical(app$role, "student")) {
+    ullme_student_session_stats_init(app=app)
     ullme_init_student_app(session=session, app=app)
   } else {
     ullme_send_course_state(app=app)
@@ -1617,6 +1626,27 @@ ullme_handle_chat_submit_safe = function(..., session=NULL, app=getApp()) {
         }
       }
       app$chat_response_active = FALSE
+      if (identical(app$role, "student")) {
+        stats = if (is.null(request)) {
+          ullme_student_stats_request(
+            model=args$model %||% app$api_config$model,
+            app=app
+          )
+        } else {
+          request$stats_request
+        }
+        reply = if (is.null(request) || is.null(request$state)) {
+          ""
+        } else {
+          request$state$text %||% ""
+        }
+        ullme_student_stats_append(
+          stats,
+          reply=reply,
+          error_code="setup_error",
+          app=app
+        )
+      }
       message = paste0(
         "The assistant request could not start: ",
         ullme_safe_ai_error(error, app$api_config)
@@ -1667,6 +1697,14 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     )
     return(invisible(NULL))
   }
+  stats_request = if (identical(app$role, "student")) {
+    ullme_student_stats_request(
+      model=model %||% app$api_config$model,
+      app=app
+    )
+  } else {
+    NULL
+  }
   ullme_send_chat_stream_update(
     message_id=assistantMessageId,
     text="Preparing your Tutor\u2026",
@@ -1691,6 +1729,13 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         error=conditionMessage(built),
         app=app
       )
+      if (identical(app$role, "student")) {
+        ullme_student_stats_append(
+          stats_request,
+          error_code="setup_error",
+          app=app
+        )
+      }
       return(invisible(NULL))
     }
     ai_input = built
@@ -1757,6 +1802,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   )
   if (ullme_uses_fake_ai(app=app)) {
     answer = paste0("Fake AI answer to:\n", ai_input)
+    ullme_student_stats_mark_output(stats_request)
     callJS(
       .fun="window.ullme.receiveAssistantMessage",
       .args=list(
@@ -1775,12 +1821,18 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         app=app
       )
       ullme_send_student_chat_history(app=app)
+      ullme_student_stats_append(
+        stats_request,
+        reply=answer,
+        app=app
+      )
     }
     return(invisible(answer))
   }
 
   app$chat_response_active = TRUE
-  finish = function(status="completed", text="", thinking="", error="") {
+  finish = function(status="completed", text="", thinking="", error="",
+                    error_code="") {
     request$active = FALSE
     app$chat_response_active = FALSE
     app$chat_tasks[[assistantMessageId]] = NULL
@@ -1801,6 +1853,14 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       )
       ullme_send_student_chat_history(app=app)
     }
+    if (identical(app$role, "student")) {
+      ullme_student_stats_append(
+        stats_request,
+        reply=text,
+        error_code=error_code,
+        app=app
+      )
+    }
   }
   fail = function(error, text="", thinking="") {
     message = paste0(
@@ -1809,7 +1869,8 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     )
     on.exit(if (isTRUE(request$active)) {
       finish(
-        status="error", text=text, thinking=thinking, error=message
+        status="error", text=text, thinking=thinking, error=message,
+        error_code="provider_error"
       )
     }, add=TRUE)
     ullme_send_chat_stream_update(
@@ -1820,8 +1881,14 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       error=message,
       app=app
     )
+    error_code = if (grepl(
+      "timed out",
+      tolower(conditionMessage(error)),
+      fixed=TRUE
+    )) "timeout" else "provider_error"
     finish(
-      status="error", text=text, thinking=thinking, error=message
+      status="error", text=text, thinking=thinking, error=message,
+      error_code=error_code
     )
     NULL
   }
@@ -1834,6 +1901,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   request$waiting_for_approval = FALSE
   request$message_id = assistantMessageId
   request$tool_event_seq = 0L
+  request$stats_request = stats_request
   app$chat_requests[[assistantMessageId]] = request
   app$active_chat_request = request
   connection_status = ullme_ai_connection_status(model=model, app=app)
@@ -1857,6 +1925,9 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
           if (!isTRUE(request$active)) return(invisible(NULL))
           if (nzchar(text) || nzchar(thinking)) {
             request$received_provider_output = TRUE
+          }
+          if (nzchar(trimws(text))) {
+            ullme_student_stats_mark_output(stats_request)
           }
           ullme_send_chat_stream_update(
             message_id=assistantMessageId,
@@ -1882,6 +1953,11 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     }
     request$controller = job$controller
     request$state = job$state
+    ullme_student_stats_attach_chat(
+      stats_request,
+      job$chat,
+      usage_start=job$usage_start
+    )
     later::later(function() {
       if (!isTRUE(request$active) ||
           isTRUE(request$received_provider_output)) {
@@ -1954,6 +2030,11 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     if (inherits(response, "error")) {
       return(invisible(fail(response)))
     }
+    ullme_student_stats_attach_chat(
+      stats_request,
+      response$chat,
+      usage_start=response$usage_start
+    )
     task = promises::then(
       ullme_promise_timeout(
         response$promise,
@@ -1962,6 +2043,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       ),
       onFulfilled=function(answer) {
         if (!isTRUE(request$active)) return(invisible(NULL))
+        ullme_student_stats_mark_output(stats_request)
         thinking = if (isTRUE(app$show_chat_thinking)) {
           ullme_chat_last_thinking(response$chat)
         } else {
@@ -2025,6 +2107,14 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
       app=app
     )
     ullme_send_student_chat_history(app=app)
+  }
+  if (identical(app$role, "student")) {
+    ullme_student_stats_append(
+      request$stats_request,
+      reply=text,
+      error_code="cancelled",
+      app=app
+    )
   }
   ullme_send_chat_stream_update(
     message_id=message_id,

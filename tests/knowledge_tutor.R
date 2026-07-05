@@ -24,7 +24,8 @@ app = studentApp(
   teacherid="teacher_a",
   courseid="course_a",
   tutorid="knowledge_tutor_de",
-  api_provider="fake"
+  api_provider="fake",
+  never_save_chats=FALSE
 )
 ullme_student_select_context(app=app)
 ullme_student_chat_history_init(app=app)

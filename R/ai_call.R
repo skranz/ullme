@@ -395,6 +395,7 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     task_profile=task_profile,
     app=app
   )
+  usage_start = ullme_chat_usage_snapshot(chat)
   controller = ellmer::stream_controller()
   stream_args = list(
     input,
@@ -442,7 +443,13 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     on_update(state$text, state$thinking, TRUE)
     list(text=state$text, thinking=state$thinking)
   })
-  list(promise=runner(), state=state, controller=controller)
+  list(
+    promise=runner(),
+    state=state,
+    controller=controller,
+    chat=chat,
+    usage_start=usage_start
+  )
 }
 
 
@@ -458,13 +465,15 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
     task_profile=task_profile,
     app=app
   )
+  usage_start = ullme_chat_usage_snapshot(chat)
   chat_args = list(input)
   if (identical(app$role, "teacher")) {
     chat_args$tool_mode = "sequential"
   }
   list(
     promise=do.call(chat$chat_async, chat_args),
-    chat=chat
+    chat=chat,
+    usage_start=usage_start
   )
 }
 
