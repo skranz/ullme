@@ -62,10 +62,11 @@ access to Skill and agent settings. AI Tutors are added from the rail's Add
 menu.
 
 Teacher mode divides the workspace into a compact navigation rail, the main
-course work surface, and a resizable AI assistant pane. Materials and Settings
-are fixed rail entries. Each installed AI Tutor and each course Skill receive a
-dynamic rail entry. The active Skill is highlighted. The Add menu opens the
-Tutor-template or Skill catalog.
+work surface, and a resizable AI assistant pane. The global Usage dashboard is
+the initial view; Materials and Settings are fixed course rail entries. Each
+installed AI Tutor and each course Skill receive a dynamic rail entry. The
+active Skill is highlighted. The Add menu opens the Tutor-template or Skill
+catalog.
 
 Selecting a Tutor opens one course-local Tutor with Instances, Definition, and
 YAML tabs. `course/ai_tutors/<tutorid>/tutor.yml` is always a complete,
@@ -142,6 +143,8 @@ while keeping its constructor and workspace markup separate.
 - `ullme_course_select_event`: updates `app$courseid`.
 - `ullme_add_course_event`: creates and selects a course.
 - `ullme_course_settings_save_event`: writes course settings to `course.yaml`.
+- `ullme_usage_statistics_refresh_event`: starts an incremental deferred usage
+  aggregation.
 - `ullme_material_category_event`: records the active material category.
 - `ullme_material_delete_event`: validates and deletes one material file.
 - `ullme_material_operation_event`: copies, moves, or deletes selected material
@@ -380,6 +383,20 @@ For student apps, `never_save_chats=TRUE` is the default and overrides both
 `store_ai_interactions` and the Tutor's `chat_history` flag. Chat text then
 exists only in the live app process. Anonymous, content-free usage metadata is
 written separately to one CSV per chat under `main_dir/session_stats/`.
+
+`R/usage_statistics.R` owns teacher analytics. Each teacher has an incremental
+manifest, per-session normalized caches, course summaries, and a teacher-wide
+daily summary under:
+
+```text
+main_dir/teachers/<teacherid>/usage_statistics/
+```
+
+The teacher app sends the cached dashboard immediately, then uses `later` to
+read new or changed source files and rebuild affected course summaries in
+small batches. Teacher summaries are combined from the course level. A lock
+directory prevents concurrent teacher sessions from writing the same
+aggregate, and completed CSV files are replaced through temporary files.
 
 The first assistant message comes from `ullme_intro_msg()` and can later become
 course- or user-specific.

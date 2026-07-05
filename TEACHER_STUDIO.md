@@ -1,5 +1,10 @@
 # Teacher Studio
 
+The teacher app starts in the global **Usage** view. It shows anonymous request,
+token, latency, model, Tutor, error, course, and semester statistics across all
+courses. Aggregation runs after startup without delaying the initial cached
+dashboard; the Refresh action checks for new or changed session files.
+
 Teacher mode uses a workbench layout with three regions:
 
 1. a compact navigation rail;
@@ -10,10 +15,10 @@ Student mode remains chat-first.
 
 ## Navigation
 
-The rail contains fixed entries for **Materials**, **Settings**, and
-**History**. Each AI Tutor installed in the selected course gets its own Tutor
-entry. Skills added to the course get Skill entries; the currently active one
-is highlighted.
+The rail starts with the global **Usage** entry, followed by fixed
+**Materials** and **Settings** entries. Each AI Tutor installed in the selected
+course gets its own Tutor entry. Skills added to the course get Skill entries;
+the currently active one is highlighted.
 
 The **Add** menu currently offers:
 

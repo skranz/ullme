@@ -17,7 +17,7 @@ ullme_student_session_stats_dir = function(app=getApp()) {
 
 ullme_student_session_stats_columns = function() {
   c(
-    "date", "teacherid", "courseid", "tutorid", "model",
+    "date", "teacherid", "semester", "courseid", "tutorid", "model",
     "input_token", "output_token", "thinking_token",
     "ttf_ms", "total_sec", "error"
   )
@@ -123,6 +123,7 @@ ullme_student_stats_request = function(model, app=getApp()) {
   request$model = paste0(model %||% app$api_config$model %||% "")[1]
   request$stats_path = app$session_stats_path %||% NULL
   request$teacherid = app$teacherid %||% ""
+  request$semester = app$semester %||% ""
   request$courseid = app$courseid %||% ""
   request$tutorid = app$tutorid %||% ""
   request$started_at = as.numeric(Sys.time())
@@ -186,6 +187,7 @@ ullme_student_stats_append = function(request, reply="", error_code="",
   row = data.frame(
     date=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z"),
     teacherid=request$teacherid %||% "",
+    semester=request$semester %||% "",
     courseid=request$courseid %||% "",
     tutorid=request$tutorid %||% "",
     model=request$model %||% "",

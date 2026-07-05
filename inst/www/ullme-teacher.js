@@ -31,8 +31,8 @@
     materialConversionBusy: false,
     materialUploadDestination: "general",
     pendingMaterialDrop: null,
-    studioView: "materials",
-    previousStudioView: "materials",
+    studioView: "usage",
+    previousStudioView: "usage",
     courseFile: null,
     courseFileOriginalContent: "",
     selectedCourseid: ""
@@ -778,6 +778,7 @@
     }
     state.studioView = view;
     var titles = {
+      usage: "Usage statistics",
       materials: "Materials",
       "ai-tutors": "AI Tutors",
       settings: "Course settings",
@@ -1539,6 +1540,7 @@
     if (embedded && !preserveAssistantState) {
       state.studioView = state.previousStudioView || "materials";
       var titles = {
+        usage: "Usage statistics",
         materials: "Materials",
         "ai-tutors": "AI Tutors",
         settings: "Course settings"
@@ -3472,7 +3474,9 @@
     renderAITutors(aiTutors);
     renderActiveSkill(activeSkill);
     updateAIContext();
-    if (!selectedCourseid) activateStudioView("materials");
+    if (!selectedCourseid && state.studioView !== "usage") {
+      activateStudioView("usage");
+    }
   }
 
   function completePendingMaterialUpload(inputId, result) {

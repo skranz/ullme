@@ -302,6 +302,12 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   eventHandler(
+    eventId = "ullme_usage_statistics_refresh_event",
+    id = NULL,
+    fun = ullme_handle_usage_statistics_refresh,
+    app = app
+  )
+  eventHandler(
     eventId = "ullme_material_category_event",
     id = NULL,
     fun = ullme_handle_material_category,
@@ -452,6 +458,7 @@ ullme_app_ui = function(app=getApp()) {
       ),
       if (is_teacher) tags$script(src="ullme/ullme-materials.js"),
       tags$script(src="ullme/ullme-chat.js"),
+      if (is_teacher) tags$script(src="ullme/ullme-usage.js"),
       tags$script(
         src=if (is_teacher) "ullme/ullme-teacher.js" else
           "ullme/ullme-student.js"
@@ -661,6 +668,7 @@ ullme_course_workspace_ui = function(app=getApp()) {
   tags$section(
     id = "ullme_course_workspace",
     class = paste("ullme-course-workspace", if (!nzchar(app$courseid)) "ullme-course-workspace-empty" else ""),
+    ullme_usage_statistics_ui(app=app),
     ullme_ai_tutors_ui(app=app),
     ullme_material_ui(app=app),
     ullme_course_file_ui(app=app),
@@ -692,6 +700,7 @@ ullme_course_tabs_ui = function(app=getApp()) {
 
 ullme_studio_navigation_ui = function(app=getApp()) {
   items = list(
+    list(view="usage", label="Usage", icon="analytics"),
     list(view="materials", label="Materials", icon="folder"),
     list(view="settings", label="Settings", icon="settings")
   )
@@ -734,12 +743,12 @@ ullme_studio_navigation_ui = function(app=getApp()) {
     lapply(seq_along(items), function(i) {
       item = items[[i]]
       tagList(
-        if (i == 2) tags$div(
+        if (i == 3) tags$div(
           id="ullme_tutor_nav_items",
           class="ullme-dynamic-nav-items",
           `aria-label`="Course AI Tutors"
         ),
-        if (i == 2) tags$div(
+        if (i == 3) tags$div(
           id="ullme_skill_nav_items",
           class="ullme-dynamic-nav-items",
           `aria-label`="Active Skills"
@@ -871,7 +880,7 @@ ullme_material_ui = function(app=getApp()) {
   restore.point("ullme_material_ui")
   tags$section(
     id = "ullme_material_panel",
-    class = "ullme-material ullme-course-content-panel ullme-course-content-panel-active",
+    class = "ullme-material ullme-course-content-panel",
     `data-course-panel` = "materials",
     tags$div(
       class = "ullme-panel-inner",
@@ -1252,6 +1261,7 @@ ullme_icon_svg = function(name) {
     folder = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"></path><path d="M3 7V5h7l2 2"></path></svg>',
     tutor = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>',
     settings = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>',
+    analytics = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10"></path><path d="M10 20V4"></path><path d="M16 20v-7"></path><path d="M22 20H2"></path></svg>',
     undo = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9 8l-4 4 4 4"></path><path d="M5 12h8a4 4 0 0 1 4 4"></path></svg>',
     redo = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 8l4 4-4 4"></path><path d="M19 12h-8a4 4 0 0 0-4 4"></path></svg>'
   )
@@ -1598,6 +1608,7 @@ ullme_init_app = function(session=NULL, app=getApp()) {
     ullme_init_student_app(session=session, app=app)
   } else {
     ullme_send_course_state(app=app)
+    ullme_init_teacher_usage_statistics(app=app)
   }
   ullme_refresh_model_catalog(app=app)
 }

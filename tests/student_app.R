@@ -72,6 +72,7 @@ stopifnot(
   !grepl("ullme-chat.css", ui, fixed=TRUE),
   grepl("ullme-chat.js", ui, fixed=TRUE),
   !grepl("ullme-teacher.js", ui, fixed=TRUE),
+  !grepl("ullme-usage.js", ui, fixed=TRUE),
   !grepl("ullme-tutors.js", ui, fixed=TRUE)
 )
 

@@ -15,6 +15,7 @@ stopifnot(
   isTRUE(app$never_save_chats),
   !ullme_student_chat_history_enabled(app=app)
 )
+app$semester = "SS26"
 
 first_id = ullme_student_session_stats_init(app=app)
 first_path = app$session_stats_path
@@ -55,6 +56,7 @@ stopifnot(
   identical(names(first_rows), ullme_student_session_stats_columns()),
   NROW(first_rows) == 1L,
   identical(first_rows$teacherid[[1]], "teacher_a"),
+  identical(first_rows$semester[[1]], "SS26"),
   identical(first_rows$courseid[[1]], "course_a"),
   identical(first_rows$tutorid[[1]], "tutor_a"),
   identical(first_rows$model[[1]], "fake-model"),

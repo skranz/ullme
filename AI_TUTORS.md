@@ -128,7 +128,13 @@ appropriate data-protection basis for retaining chat text.
 Student apps write content-free usage records to
 `main_dir/session_stats/<anonymous-session-id>.csv`. A new random 16-character
 ID is created for the initial chat and each explicitly started new chat.
-Rows contain course and Tutor identifiers, model and token counts, time until
-the first visible output in milliseconds (`ttf_ms`), time until the last
-visible output token in seconds (`total_sec`), and an error code only when no
-reply was produced; they never contain prompts or replies.
+Rows contain semester, course and Tutor identifiers, model and token counts,
+time until the first visible output in milliseconds (`ttf_ms`), time until the
+last visible output token in seconds (`total_sec`), and an error code only when
+no reply was produced; they never contain prompts or replies.
+
+The teacher Usage pane incrementally combines these anonymous records across
+all courses and semesters. Cached per-course and teacher-wide summaries live
+under `teachers/<teacherid>/usage_statistics/`. Source files are fingerprinted
+by filename, size, and modification time, so unchanged sessions are not read
+again.

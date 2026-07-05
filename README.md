@@ -59,6 +59,10 @@ Teacher AI requests and responses are stored below the active course's
 default to `never_save_chats=TRUE`, which overrides Tutor chat-history settings,
 hides the history sidebar, and prevents prompts and replies from being stored.
 Content-free aggregate usage rows are still written to `session_stats/`.
+The teacher app opens on a global Usage dashboard that summarizes these
+anonymous records across the teacher's courses and semesters. Its cached
+incremental aggregates are stored below the teacher's
+`usage_statistics/` directory.
 
 
 # Code Design
