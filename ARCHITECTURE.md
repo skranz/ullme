@@ -134,6 +134,14 @@ while keeping its constructor and workspace markup separate.
 
 ## shinyEvents Boundary
 
+With `login_check="sel"`, the initial UI contains only the
+shinyEventsLogin output container. Course state, user directories, dynamic
+resource paths, and the full teacher/student UI are initialized only after the
+login callback succeeds. Teacher email-to-ID authorization is loaded from
+`main_dir/allowed_teachers.yaml`; students receive a stable hashed internal
+user ID. Upload, audio, and download resource prefixes are random per
+authenticated Shiny session and are removed when that session ends.
+
 `ullme_register_handlers()` registers the main application boundary:
 
 - `ullme_submit_chat_event`: submits text, model, message IDs, and image

@@ -23,7 +23,9 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
                        render_chat_markdown=TRUE,
                        stream_chat=TRUE,
                        store_ai_interactions=TRUE,
-                       never_save_chats=TRUE) {
+                       never_save_chats=TRUE,
+                       login_check=c("none", "sel"),
+                       login_args=list()) {
   restore.point("studentApp")
   .ullme_app(
     main_dir=main_dir,
@@ -43,7 +45,9 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
     stream_chat=stream_chat,
     show_chat_thinking=FALSE,
     store_ai_interactions=store_ai_interactions,
-    never_save_chats=never_save_chats
+    never_save_chats=never_save_chats,
+    login_check=login_check,
+    login_args=login_args
   )
 }
 

@@ -29,7 +29,12 @@ ullme_handle_audio_upload = function(id, value, session, app=getApp(), ...) {
   if (!any(copied)) return(invisible(NULL))
 
   session_dir = basename(audio_dir)
-  urls = paste("ullme-audio", session_dir, target_names, sep="/")
+  urls = paste(
+    app$audio_resource_prefix %||% "ullme-audio",
+    session_dir,
+    target_names,
+    sep="/"
+  )
   records = Map(
     f = ullme_audio_record,
     id = audio_ids[copied],

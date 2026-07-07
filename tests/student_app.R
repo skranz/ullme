@@ -39,6 +39,8 @@ app = studentApp(
 
 stopifnot(
   identical(app$global, app$glob),
+  identical(app$login_check, "none"),
+  isTRUE(app$is.authenticated),
   isTRUE(app$never_save_chats),
   is.null(ullme_ai_interactions_dir(app=app)),
   identical(app$global$userid, "student_a"),

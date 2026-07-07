@@ -40,7 +40,9 @@ ullme_teacherid = function(app=getApp()) {
                       stream_chat=TRUE,
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
-                      never_save_chats=TRUE) {
+                      never_save_chats=TRUE,
+                      login_check=c("none", "sel"),
+                      login_args=list()) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
@@ -49,6 +51,8 @@ ullme_teacherid = function(app=getApp()) {
   app$global = glob
 
   role = match.arg(role)
+  login_check = ullme_login_check(login_check)
+  if (!is.list(login_args)) stop("login_args must be a list.")
   api_provider = match.arg(api_provider)
   if (!is.null(uses_fake_ai)) {
     if (isTRUE(uses_fake_ai)) {
@@ -100,10 +104,19 @@ ullme_teacherid = function(app=getApp()) {
   # app is per Shiny app instance; app$glob is shared across all instances.
   # Store only truly shared values in glob and keep user-specific state on app.
   glob$main_dir = main_dir
-  glob$userid = ullme_clean_user_name(userid)
-  glob$teacherid = ullme_optional_app_parameter(
-    teacherid, ullme_clean_user_name, "teacherid"
-  )
+  glob$userid = if (identical(login_check, "sel")) {
+    "login_pending"
+  } else {
+    ullme_clean_user_name(userid)
+  }
+  glob$teacherid = if (identical(login_check, "sel") &&
+                       identical(role, "teacher")) {
+    NULL
+  } else {
+    ullme_optional_app_parameter(
+      teacherid, ullme_clean_user_name, "teacherid"
+    )
+  }
   glob$courseid = ullme_optional_app_parameter(
     courseid, ullme_clean_courseid, "courseid"
   )
@@ -121,6 +134,10 @@ ullme_teacherid = function(app=getApp()) {
   app$role = role
   app$app_kind = role
   app$allowed_roles = role
+  app$login_check = login_check
+  app$login_args = login_args
+  app$login_email = NULL
+  app$is.authenticated = identical(login_check, "none")
   app$semester = ullme_semester()
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
@@ -139,27 +156,26 @@ ullme_teacherid = function(app=getApp()) {
   app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
-  app$user_dir = ullme_user_dir(main_dir=main_dir, userid=app$userid)
-  app$role_user_dir = ullme_role_user_dir(main_dir=main_dir, userid=app$userid, role=app$role)
-  app$cur_session_dir = ullme_cur_session_dir(user_dir=app$user_dir)
-  app$uploads_dir = ullme_cur_session_images_dir(cur_session_dir=app$cur_session_dir)
-  app$audio_dir = ullme_cur_session_audio_dir(cur_session_dir=app$cur_session_dir)
-  app$definition_downloads_dir = file.path(app$cur_session_dir, "definition_downloads")
+  ullme_set_app_user_paths(app=app)
   app$definition_imports = list()
   app$pending_changes = list()
   app$change_results = list()
   app$change_waiters = list()
   if (identical(role, "teacher")) {
-    app$courseids = ullme_user_courseids(
-      main_dir=main_dir,
-      userid=app$userid,
-      role=app$role,
-      semester=app$semester
-    )
-    app$courseid = ullme_selected_courseid(
-      app$courseids,
-      preferred=app$courseid
-    )
+    if (identical(login_check, "sel")) {
+      app$courseids = character()
+    } else {
+      app$courseids = ullme_user_courseids(
+        main_dir=main_dir,
+        userid=app$userid,
+        role=app$role,
+        semester=app$semester
+      )
+      app$courseid = ullme_selected_courseid(
+        app$courseids,
+        preferred=app$courseid
+      )
+    }
   } else {
     app$courseids = if (is.null(app$courseid)) character(0) else app$courseid
   }
@@ -168,13 +184,26 @@ ullme_teacherid = function(app=getApp()) {
   app$material_upload_tree = NULL
   app$active_skillid = ""
 
-  ullme_add_resource_paths(app=app)
-  app$ui = ullme_app_ui(app=app)
+  if (identical(login_check, "sel")) {
+    app$login_args = ullme_validate_sel_login_args(login_args)
+    if (identical(role, "teacher")) {
+      app$allowed_teachers = ullme_allowed_teachers(main_dir)
+    }
+    app$login_module = ullme_make_login_module(app=app)
+    app$ui = ullme_login_shell_ui()
+  } else {
+    ullme_add_resource_paths(app=app)
+    app$ui = ullme_app_ui(app=app)
+  }
   ullme_register_handlers(app=app)
 
   appInitHandler(function(session, app, ...) {
     restore.point("ullme_init")
-    ullme_init_app(session=session, app=app)
+    if (identical(app$login_check, "sel")) {
+      ullme_init_login(app=app)
+    } else {
+      ullme_init_app(session=session, app=app)
+    }
   })
   app
 }
@@ -182,18 +211,56 @@ ullme_teacherid = function(app=getApp()) {
 
 ullme_add_resource_paths = function(app=getApp()) {
   restore.point("ullme_add_resource_paths")
+  if (isTRUE(app$resource_paths_registered)) return(invisible(TRUE))
   www_dir = ullme_www_dir()
   dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
   dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
   dir.create(app$definition_downloads_dir, recursive=TRUE, showWarnings=FALSE)
 
-  shiny::addResourcePath(prefix="ullme", directoryPath=www_dir)
-  shiny::addResourcePath(prefix="ullme-uploads", directoryPath=app$uploads_dir)
-  shiny::addResourcePath(prefix="ullme-audio", directoryPath=app$audio_dir)
-  shiny::addResourcePath(
-    prefix="ullme-definition-downloads",
-    directoryPath=app$definition_downloads_dir
+  existing = shiny::resourcePaths()
+  add_path = function(prefix, directory) {
+    if (prefix %in% names(existing)) {
+      existing_path = normalizePath(
+        existing[[prefix]],
+        winslash="/",
+        mustWork=FALSE
+      )
+      requested_path = normalizePath(
+        directory,
+        winslash="/",
+        mustWork=FALSE
+      )
+      if (!identical(existing_path, requested_path)) {
+        stop("The resource prefix ", prefix, " is already in use.")
+      }
+      return(invisible(FALSE))
+    }
+    shiny::addResourcePath(prefix=prefix, directoryPath=directory)
+    existing[[prefix]] <<- directory
+    invisible(TRUE)
+  }
+  add_path("ullme", www_dir)
+  add_path(app$uploads_resource_prefix, app$uploads_dir)
+  add_path(app$audio_resource_prefix, app$audio_dir)
+  add_path(
+    app$definition_downloads_resource_prefix,
+    app$definition_downloads_dir
   )
+  app$resource_paths_registered = TRUE
+  if (identical(app$login_check, "sel") &&
+      !is.null(app$session) &&
+      is.function(app$session$onSessionEnded)) {
+    prefixes = c(
+      app$uploads_resource_prefix,
+      app$audio_resource_prefix,
+      app$definition_downloads_resource_prefix
+    )
+    app$session$onSessionEnded(function() {
+      for (prefix in prefixes) {
+        try(shiny::removeResourcePath(prefix), silent=TRUE)
+      }
+    })
+  }
   invisible(TRUE)
 }
 
@@ -587,7 +654,11 @@ ullme_appbar_ui = function(app=getApp()) {
       tags$label(
         class = "ullme-user-settings-field",
         tags$span("Username"),
-        tags$input(type="text", value=app$userid, readonly="readonly")
+        tags$input(
+          type="text",
+          value=app$login_email %||% app$userid,
+          readonly="readonly"
+        )
       ),
       if (identical(app$app_kind, "teacher")) tags$div(
         class = "ullme-teacher-library-links",
@@ -2188,7 +2259,12 @@ ullme_handle_image_upload = function(id, value, session, app=getApp(), ...) {
   if (!any(copied)) return(invisible(NULL))
 
   session_dir = basename(upload_dir)
-  urls = paste("ullme-uploads", session_dir, target_names, sep="/")
+  urls = paste(
+    app$uploads_resource_prefix %||% "ullme-uploads",
+    session_dir,
+    target_names,
+    sep="/"
+  )
   records = Map(
     f = ullme_upload_record,
     id = upload_ids[copied],

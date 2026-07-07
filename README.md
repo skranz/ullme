@@ -42,6 +42,10 @@ student_app = studentApp(
 ```
 
 Roles are fixed by the constructor and cannot be switched inside an app.
+Both constructors accept `login_check="none"` (the default) or
+`login_check="sel"` for the optional shinyEventsLogin integration. See
+[LOGIN.md](LOGIN.md) for configuration, teacher email authorization, and the
+security limitations.
 For student apps, `teacherid`, `courseid`, `tutorid`, and `instanceid` can
 instead be supplied as URL query parameters. A constructor argument always
 takes precedence over the corresponding URL value. `teacherid` and `courseid`

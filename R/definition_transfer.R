@@ -290,7 +290,9 @@ ullme_prepare_definition_download = function(kind, definitionid, source, app=get
     if (!file.exists(target)) stop("Could not prepare the Skill ZIP download.")
 
   url = paste0(
-    "ullme-definition-downloads/",
+    app$definition_downloads_resource_prefix %||%
+      "ullme-definition-downloads",
+    "/",
     utils::URLencode(filename, reserved=TRUE)
   )
   callJS(
