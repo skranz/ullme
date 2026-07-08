@@ -89,10 +89,37 @@ ullme_custom_stream_image_mime = function(upload, path) {
 }
 
 
+ullme_custom_stream_clean_base64 = function(base64) {
+  gsub("[[:space:]]", "", paste0(base64, collapse=""))
+}
+
+
+ullme_custom_stream_image_part_from_base64 = function(base64, mime,
+                                                      app=getApp()) {
+  url = paste0(
+    "data:",
+    mime,
+    ";base64,",
+    ullme_custom_stream_clean_base64(base64)
+  )
+  list(
+    type="image_url",
+    image_url=list(url=url)
+  )
+}
+
+
 ullme_custom_stream_image_part = function(upload, app=getApp()) {
   path = ullme_custom_stream_upload_path(upload, app=app)
   if (is.null(path) || !file.exists(path) || dir.exists(path)) {
-    return(ullme_custom_stream_data_url_image_part(upload))
+    ullme_chat_debug(
+      app,
+      "custom stream image using data_url id=",
+      paste0(upload$id %||% "")[1],
+      " data_url_bytes=",
+      nchar(paste0(upload$data_url %||% "")[1], type="bytes")
+    )
+    return(ullme_custom_stream_data_url_image_part(upload, app=app))
   }
   size = suppressWarnings(file.info(path)$size)
   if (is.na(size) || size > 12 * 1024^2) {
@@ -100,21 +127,22 @@ ullme_custom_stream_image_part = function(upload, app=getApp()) {
   }
   mime = ullme_custom_stream_image_mime(upload, path)
   bytes = readBin(path, what="raw", n=size)
-  list(
-    type="image_url",
-    image_url=list(
-      url=paste0(
-        "data:",
-        mime,
-        ";base64,",
-        jsonlite::base64_enc(bytes)
-      )
-    )
+  ullme_chat_debug(
+    app,
+    "custom stream image using stored file id=",
+    paste0(upload$id %||% "")[1],
+    " bytes=", size,
+    " mime=", mime
+  )
+  ullme_custom_stream_image_part_from_base64(
+    jsonlite::base64_enc(bytes),
+    mime,
+    app=app
   )
 }
 
 
-ullme_custom_stream_data_url_image_part = function(upload) {
+ullme_custom_stream_data_url_image_part = function(upload, app=getApp()) {
   data_url = paste0(upload$data_url %||% "")[1]
   if (!nzchar(data_url)) return(NULL)
   if (!grepl(
@@ -127,9 +155,12 @@ ullme_custom_stream_data_url_image_part = function(upload) {
   if (nchar(data_url, type="bytes") > 16 * 1024^2) {
     stop("Uploaded image is too large for the custom stream backend.")
   }
-  list(
-    type="image_url",
-    image_url=list(url=data_url)
+  mime = sub("^data:([^;]+);base64,.*$", "\\1", data_url)
+  base64 = sub("^data:[^;]+;base64,", "", data_url)
+  ullme_custom_stream_image_part_from_base64(
+    base64,
+    mime,
+    app=app
   )
 }
 
@@ -151,6 +182,17 @@ ullme_custom_stream_user_message = function(input, uploads=NULL,
     image_part = ullme_custom_stream_image_part(upload, app=app)
     if (!is.null(image_part)) content[[length(content) + 1L]] = image_part
   }
+  image_parts = sum(vapply(
+    content,
+    function(part) identical(part$type %||% "", "image_url"),
+    logical(1)
+  ))
+  ullme_chat_debug(
+    app,
+    "custom stream user message uploads=", length(uploads),
+    " image_parts=", image_parts,
+    " content_parts=", length(content)
+  )
   list(role="user", content=content)
 }
 
@@ -245,18 +287,38 @@ ullme_custom_stream_tools = function(task_profile="", app=getApp()) {
 }
 
 
+ullme_custom_stream_message_has_images = function(message) {
+  content = message$content
+  if (!is.list(content)) return(FALSE)
+  any(vapply(
+    content,
+    function(part) identical(part$type %||% "", "image_url"),
+    logical(1)
+  ))
+}
+
+
+ullme_custom_stream_messages_have_images = function(messages) {
+  any(vapply(messages, ullme_custom_stream_message_has_images, logical(1)))
+}
+
+
 ullme_custom_stream_body = function(input, model, context=list(),
                                     system_instructions=NULL,
                                     task_profile="",
                                     messages=NULL,
                                     uploads=NULL,
                                     app=getApp()) {
-  system_prompt = ullme_custom_stream_system_prompt(
-    context=context,
-    system_instructions=system_instructions,
-    task_profile=task_profile,
-    app=app
-  )
+  system_prompt = if (is.null(messages)) {
+    ullme_custom_stream_system_prompt(
+      context=context,
+      system_instructions=system_instructions,
+      task_profile=task_profile,
+      app=app
+    )
+  } else {
+    NULL
+  }
   profile = if (identical(app$api_config$provider, "nvidia")) {
     ullme_nvidia_chat_profile(model, task_profile=task_profile)
   } else {
@@ -279,7 +341,11 @@ ullme_custom_stream_body = function(input, model, context=list(),
     ),
     profile$api_args
   )
-  tools = ullme_custom_stream_tools(task_profile=task_profile, app=app)
+  tools = if (ullme_custom_stream_messages_have_images(body$messages)) {
+    list()
+  } else {
+    ullme_custom_stream_tools(task_profile=task_profile, app=app)
+  }
   if (length(tools)) {
     body$tools = tools
     body$tool_choice = "auto"
@@ -749,6 +815,22 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
         messages=state$messages,
         uploads=uploads,
         app=app
+      )
+      body_image_parts = sum(vapply(body$messages, function(message) {
+        content = message$content
+        if (!is.list(content)) return(0L)
+        sum(vapply(
+          content,
+          function(part) identical(part$type %||% "", "image_url"),
+          logical(1)
+        ))
+      }, integer(1)))
+      ullme_chat_debug(
+        app,
+        "custom stream request body request=", state$request_count,
+        " messages=", length(body$messages),
+        " image_parts=", body_image_parts,
+        " tools=", length(body$tools %||% list())
       )
       body_json = jsonlite::toJSON(
         body,

@@ -13,7 +13,7 @@ ullme_nvidia_default_model = function() {
 ullme_nvidia_preferred_model_specs = function() {
   restore.point("ullme_nvidia_preferred_model_specs")
   list(
-    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=TRUE),
+    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=FALSE),
     list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=TRUE),
     list(id="nvidia/nemotron-3-ultra-550b-a55b", image_and_text=FALSE),
     list(

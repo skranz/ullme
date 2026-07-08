@@ -1,13 +1,19 @@
-if (requireNamespace("ullme", quietly=TRUE)) {
-  library(ullme)
-} else {
-  restore.point = function(...) invisible(NULL)
+if (file.exists(file.path("R", "custom_stream.R"))) {
+  if (!exists("restore.point")) restore.point = function(...) invisible(NULL)
   getApp = function() app
   source(file.path("R", "courses.R"))
+  source(file.path("R", "nvidia_api.R"))
   source(file.path("R", "ai_tools.R"))
   source(file.path("R", "tool_fun.R"))
   source(file.path("R", "teacher_info.R"))
   source(file.path("R", "custom_stream.R"))
+} else if (requireNamespace("ullme", quietly=TRUE)) {
+  library(ullme)
+} else {
+  stop("Run this script from the package root or install ullme first.")
+}
+if (!exists("ullme_chat_debug")) {
+  ullme_chat_debug = function(...) invisible(NULL)
 }
 
 if (!requireNamespace("jsonlite", quietly=TRUE)) {
@@ -39,6 +45,7 @@ fallback_message = ullme_custom_stream_user_message(
   uploads=list(fallback_upload),
   app=app
 )
+png_base64 = sub("^data:image/png;base64,", "", tiny_png_data_url)
 stopifnot(
   identical(fallback_message$role, "user"),
   is.list(fallback_message$content),
@@ -47,8 +54,7 @@ stopifnot(
 )
 
 stored_path = file.path(app$uploads_dir, "session", "img_123_plot.png")
-base64_payload = sub("^data:image/png;base64,", "", tiny_png_data_url)
-writeBin(jsonlite::base64_dec(base64_payload), stored_path)
+writeBin(jsonlite::base64_dec(png_base64), stored_path)
 stored_upload = list(
   id="img_123",
   name="plot.png",
@@ -62,10 +68,8 @@ stored_message = ullme_custom_stream_user_message(
   app=app
 )
 stopifnot(
-  grepl(
-    "^data:image/png;base64,",
-    stored_message$content[[2]]$image_url$url
-  ),
+  grepl("^data:image/png;base64,", stored_message$content[[2]]$image_url$url),
+  !grepl("[[:space:]]", stored_message$content[[2]]$image_url$url),
   !identical(stored_message$content[[2]]$image_url$url, "not-used")
 )
 
@@ -79,6 +83,13 @@ stopifnot(
   "cur_user" %in% tool_names,
   "list_material_files" %in% tool_names
 )
+image_body = ullme_custom_stream_body(
+  "Describe this image.",
+  model="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  messages=list(stored_message),
+  app=app
+)
+stopifnot(length(image_body$tools %||% list()) == 0)
 
 state = new.env(parent=emptyenv())
 state$tool_calls = list()
