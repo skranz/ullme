@@ -26,6 +26,7 @@ ullme_chat_key = function(model, task_profile="", app=getApp()) {
     app$courseid %||% "",
     app$tutorid %||% "",
     app$instanceid %||% "",
+    if (isTRUE(app$enable_ai_tools)) "tools" else "no_tools",
     sep="|"
   )
 }
@@ -166,17 +167,19 @@ ullme_teacher_chat = function(model=NULL, system_prompt=NULL,
       task_profile=task_profile
     )
     if (!is.null(chat)) {
-      tools = ullme_tools(app=app)
-      if (identical(task_profile, "instance_builder")) {
-        tools = tools["write_rtutor_instances_yaml"]
+      if (isTRUE(app$enable_ai_tools)) {
+        tools = ullme_tools(app=app)
+        if (identical(task_profile, "instance_builder")) {
+          tools = tools["write_rtutor_instances_yaml"]
+        }
+        chat$register_tools(tools)
+        chat$on_tool_request(function(request) {
+          ullme_handle_tool_lifecycle_event("request", request, app=app)
+        })
+        chat$on_tool_result(function(result) {
+          ullme_handle_tool_lifecycle_event("result", result, app=app)
+        })
       }
-      chat$register_tools(tools)
-      chat$on_tool_request(function(request) {
-        ullme_handle_tool_lifecycle_event("request", request, app=app)
-      })
-      chat$on_tool_result(function(result) {
-        ullme_handle_tool_lifecycle_event("result", result, app=app)
-      })
       app$teacher_chats[[key]] = chat
     }
   } else if (!is.null(system_prompt)) {
@@ -214,7 +217,9 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
   if (!identical(app$role, "teacher")) {
     stop("The AI assistant is not available for this role.")
   }
-  tool_names = if (identical(task_profile, "instance_builder")) {
+  tool_names = if (!isTRUE(app$enable_ai_tools)) {
+    character(0)
+  } else if (identical(task_profile, "instance_builder")) {
     "write_rtutor_instances_yaml"
   } else {
     NULL
@@ -436,7 +441,7 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     stream=stream_mode,
     controller=controller
   )
-  if (identical(app$role, "teacher")) {
+  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools)) {
     stream_args$tool_mode = "sequential"
   }
   ullme_chat_debug(
@@ -568,7 +573,7 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
   )
   usage_start = ullme_chat_usage_snapshot(NULL)
   chat_args = list(input)
-  if (identical(app$role, "teacher")) {
+  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools)) {
     chat_args$tool_mode = "sequential"
   }
   list(

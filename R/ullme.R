@@ -40,6 +40,7 @@ ullme_teacherid = function(app=getApp()) {
                       stream_chat=TRUE,
                       catch_chat_errors=TRUE,
                       chat_debug=FALSE,
+                      enable_ai_tools=TRUE,
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
                       never_save_chats=TRUE,
@@ -93,6 +94,11 @@ ullme_teacherid = function(app=getApp()) {
       length(chat_debug) != 1L ||
       is.na(chat_debug)) {
     stop("chat_debug must be TRUE or FALSE.")
+  }
+  if (!is.logical(enable_ai_tools) ||
+      length(enable_ai_tools) != 1L ||
+      is.na(enable_ai_tools)) {
+    stop("enable_ai_tools must be TRUE or FALSE.")
   }
   if (!is.logical(show_chat_thinking) ||
       length(show_chat_thinking) != 1L ||
@@ -156,6 +162,7 @@ ullme_teacherid = function(app=getApp()) {
   app$stream_chat = isTRUE(stream_chat)
   app$catch_chat_errors = isTRUE(catch_chat_errors)
   app$chat_debug = isTRUE(chat_debug)
+  app$enable_ai_tools = isTRUE(enable_ai_tools)
   app$show_chat_thinking =
     identical(role, "teacher") && isTRUE(show_chat_thinking)
   app$store_ai_interactions = isTRUE(store_ai_interactions)
