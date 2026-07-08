@@ -1827,6 +1827,16 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     )
     return(invisible(NULL))
   }
+  model = ullme_chat_model_for_uploads(
+    model=model,
+    has_uploads=has_uploads,
+    app=app
+  )
+  ullme_chat_debug(
+    app,
+    "handle_chat selected model=", model,
+    " uploads=", length(uploads)
+  )
   stats_request = if (identical(app$role, "student")) {
     ullme_student_stats_request(
       model=model %||% app$api_config$model,

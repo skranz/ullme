@@ -110,6 +110,29 @@ ullme_model_id = function(model, app=getApp()) {
 }
 
 
+ullme_chat_model_for_uploads = function(model=NULL, has_uploads=FALSE,
+                                        app=getApp()) {
+  restore.point("ullme_chat_model_for_uploads")
+  selected = trimws(paste0(model %||% app$api_config$model)[1])
+  if (!isTRUE(has_uploads) ||
+      !identical(app$api_config$provider, "nvidia") ||
+      ullme_nvidia_model_supports_images(selected)) {
+    return(selected)
+  }
+  fallback = ullme_nvidia_image_model(
+    app$api_models %||% app$api_config$model,
+    preferred=app$api_config$model
+  )
+  if (!length(fallback)) return(selected)
+  ullme_chat_debug(
+    app,
+    "chat image upload switching model from ", selected,
+    " to ", fallback
+  )
+  fallback[[1]]
+}
+
+
 ullme_model_label = function(model) {
   restore.point("ullme_model_label")
   label = sub("^.*/", "", model)

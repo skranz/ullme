@@ -27,9 +27,9 @@ stopifnot(
       "google/gemma_4_31b_it",
       "minimaxai/minimax-m3",
       "qwen/qwen3.5-122b-a10b",
-      "nvidia/nemotron-3-ultra-550b-a55b",
       "stepfun-ai/step-3.7-flash",
-      "mistralai/mistral-small-4-119b-2603"
+      "mistralai/mistral-small-4-119b-2603",
+      "nvidia/nemotron-3-ultra-550b-a55b"
     )
   ),
   identical(
@@ -38,9 +38,15 @@ stopifnot(
       "google/gemma_4_31b_it",
       "minimaxai/minimax-m3",
       "qwen/qwen3.5-122b-a10b",
-      "stepfun-ai/step-3.7-flash",
-      "mistralai/mistral-small-4-119b-2603"
+      "stepfun-ai/step-3.7-flash"
     )
+  ),
+  !ullme_nvidia_model_supports_images(
+    "mistralai/mistral-small-4-119b-2603"
+  ),
+  identical(
+    ullme_nvidia_image_model(available_models),
+    "google/gemma_4_31b_it"
   ),
   identical(
     ullme_nvidia_resolve_model(

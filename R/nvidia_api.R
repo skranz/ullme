@@ -13,18 +13,18 @@ ullme_nvidia_default_model = function() {
 ullme_nvidia_preferred_model_specs = function() {
   restore.point("ullme_nvidia_preferred_model_specs")
   list(
-    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=FALSE),
-    list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=TRUE),
-    list(id="nvidia/nemotron-3-ultra-550b-a55b", image_and_text=FALSE),
     list(
       id="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       image_and_text=TRUE
     ),
+    list(id="nvidia/nemotron-3-nano-30b-a3b", image_and_text=TRUE),
     list(id="google/gemma-4-31b-it", image_and_text=TRUE),
     list(id="minimaxai/minimax-m3", image_and_text=TRUE),
-    list(id="z-ai/glm-5.2", image_and_text=FALSE),
     list(id="qwen/qwen3.5-122b-a10b", image_and_text=TRUE),
-    list(id="stepfun-ai/step-3.7-flash", image_and_text=TRUE)
+    list(id="stepfun-ai/step-3.7-flash", image_and_text=TRUE),
+    list(id="mistralai/mistral-small-4-119b-2603", image_and_text=FALSE),
+    list(id="nvidia/nemotron-3-ultra-550b-a55b", image_and_text=FALSE),
+    list(id="z-ai/glm-5.2", image_and_text=FALSE)
   )
 }
 
@@ -81,6 +81,35 @@ ullme_nvidia_available_models = function(available_models,
     if (length(hits)) matched = c(matched, sort(hits)[[1]])
   }
   unique(matched)
+}
+
+
+ullme_nvidia_model_supports_images = function(model) {
+  restore.point("ullme_nvidia_model_supports_images")
+  model = paste0(model %||% "")[1]
+  if (!nzchar(model)) return(FALSE)
+  specs = ullme_nvidia_preferred_model_specs()
+  for (spec in specs) {
+    if (isTRUE(spec$image_and_text) &&
+        ullme_nvidia_model_matches(model, spec$id)) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+
+ullme_nvidia_image_model = function(available_models,
+                                    preferred=ullme_nvidia_default_model()) {
+  restore.point("ullme_nvidia_image_model")
+  candidates = ullme_nvidia_available_models(
+    available_models,
+    image_and_text=TRUE
+  )
+  if (!length(candidates)) return(character(0))
+  resolved = ullme_nvidia_resolve_model(preferred, candidates)
+  if (length(resolved)) return(resolved[[1]])
+  candidates[[1]]
 }
 
 
