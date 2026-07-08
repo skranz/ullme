@@ -425,10 +425,15 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
   ullme_chat_debug(app, "start_ai_stream chat ready")
   usage_start = ullme_chat_usage_snapshot(NULL)
   controller = ellmer::stream_controller()
+  stream_mode = if (identical(task_profile, "instance_builder")) {
+    "content"
+  } else {
+    "text"
+  }
   ullme_chat_debug(app, "start_ai_stream controller ready")
   stream_args = list(
     input,
-    stream="content",
+    stream=stream_mode,
     controller=controller
   )
   if (identical(app$role, "teacher")) {
@@ -437,7 +442,8 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
   ullme_chat_debug(
     app,
     "start_ai_stream before stream_async tool_mode=",
-    paste0(stream_args$tool_mode %||% "default")[1]
+    paste0(stream_args$tool_mode %||% "default")[1],
+    " stream=", stream_mode
   )
   stream = do.call(chat$stream_async, stream_args)
   ullme_chat_debug(app, "start_ai_stream after stream_async")
