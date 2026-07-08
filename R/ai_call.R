@@ -584,6 +584,49 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
 }
 
 
+ullme_start_ai_chat_sync = function(input, model=NULL, context=list(),
+                                    system_instructions=NULL,
+                                    task_profile="",
+                                    app=getApp()) {
+  ullme_chat_debug(
+    app,
+    "start_ai_chat_sync begin role=", app$role %||% "",
+    " task_profile=", task_profile,
+    " model=", paste0(model %||% app$api_config$model %||% "")[1],
+    " input_bytes=", nchar(paste0(input, collapse="\n"), type="bytes")
+  )
+  chat = ullme_ai_request_chat(
+    model=model,
+    context=context,
+    system_instructions=system_instructions,
+    task_profile=task_profile,
+    app=app
+  )
+  ullme_chat_debug(app, "start_ai_chat_sync chat ready")
+  usage_start = ullme_chat_usage_snapshot(NULL)
+  chat_args = list(input, echo="none")
+  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools)) {
+    chat_args$tool_mode = "sequential"
+  }
+  ullme_chat_debug(
+    app,
+    "start_ai_chat_sync before chat tool_mode=",
+    paste0(chat_args$tool_mode %||% "default")[1]
+  )
+  answer = do.call(chat$chat, chat_args)
+  ullme_chat_debug(
+    app,
+    "start_ai_chat_sync after chat answer_bytes=",
+    nchar(paste0(answer, collapse=""), type="bytes")
+  )
+  list(
+    answer=answer,
+    chat=chat,
+    usage_start=usage_start
+  )
+}
+
+
 ullme_chat_last_thinking = function(chat) {
   turn = tryCatch(chat$last_turn(), error=function(e) NULL)
   contents = tryCatch(turn@contents, error=function(e) list())

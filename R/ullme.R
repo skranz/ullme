@@ -40,6 +40,7 @@ ullme_teacherid = function(app=getApp()) {
                       stream_chat=TRUE,
                       catch_chat_errors=TRUE,
                       chat_debug=FALSE,
+                      sync_chat=FALSE,
                       enable_ai_tools=TRUE,
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
@@ -94,6 +95,11 @@ ullme_teacherid = function(app=getApp()) {
       length(chat_debug) != 1L ||
       is.na(chat_debug)) {
     stop("chat_debug must be TRUE or FALSE.")
+  }
+  if (!is.logical(sync_chat) ||
+      length(sync_chat) != 1L ||
+      is.na(sync_chat)) {
+    stop("sync_chat must be TRUE or FALSE.")
   }
   if (!is.logical(enable_ai_tools) ||
       length(enable_ai_tools) != 1L ||
@@ -162,6 +168,7 @@ ullme_teacherid = function(app=getApp()) {
   app$stream_chat = isTRUE(stream_chat)
   app$catch_chat_errors = isTRUE(catch_chat_errors)
   app$chat_debug = isTRUE(chat_debug)
+  app$sync_chat = isTRUE(sync_chat)
   app$enable_ai_tools = isTRUE(enable_ai_tools)
   app$show_chat_thinking =
     identical(role, "teacher") && isTRUE(show_chat_thinking)
@@ -2036,7 +2043,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     app=app
   )
 
-  if (isTRUE(app$stream_chat)) {
+  if (isTRUE(app$stream_chat) && !isTRUE(app$sync_chat)) {
     ullme_chat_debug(app, "handle_chat stream branch begin")
     start_stream = function() ullme_start_ai_stream(
       input=ai_input,
@@ -2165,6 +2172,44 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     )
   } else {
     ullme_chat_debug(app, "handle_chat nonstream branch begin")
+    if (isTRUE(app$sync_chat)) {
+      ullme_chat_debug(app, "handle_chat sync branch begin")
+      start_sync_chat = function() {
+        ullme_start_ai_chat_sync(
+          input=ai_input,
+          model=model,
+          context=context %||% list(),
+          system_instructions=system_instructions,
+          task_profile=task_profile,
+          app=app
+        )
+      }
+      if (identical(app$catch_chat_errors, FALSE)) {
+        response = start_sync_chat()
+      } else {
+        response = tryCatch(start_sync_chat(), error=function(e) e)
+        if (inherits(response, "error")) {
+          return(invisible(fail(response)))
+        }
+      }
+      ullme_student_stats_attach_chat(
+        stats_request,
+        response$chat,
+        usage_start=response$usage_start
+      )
+      answer = response$answer
+      ullme_student_stats_mark_output(stats_request)
+      ullme_send_chat_stream_update(
+        message_id=assistantMessageId,
+        text=answer,
+        thinking="",
+        done=TRUE,
+        app=app
+      )
+      finish(text=answer, thinking="")
+      ullme_chat_debug(app, "handle_chat sync branch end")
+      return(invisible(answer))
+    }
     start_chat = function() {
       ullme_start_ai_chat(
         input=ai_input,
