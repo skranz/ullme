@@ -226,17 +226,16 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 
 
 .ullme_stream_chunk_part = function(chunk) {
-  restore.point(".ullme_stream_chunk_part")
   if (is.character(chunk)) {
     return(list(type="text", value=paste0(chunk, collapse="")))
   }
-  classes = class(chunk)
+  classes = tryCatch(class(chunk), error=function(e) character(0))
   if (any(grepl("ContentThinking", classes, fixed=TRUE))) {
-    value = tryCatch(paste0(chunk@thinking)[1], error=function(e) "")
+    value = paste0(.ullme_content_property(chunk, "thinking", ""))[1]
     return(list(type="thinking", value=value))
   }
   if (any(grepl("ContentText", classes, fixed=TRUE))) {
-    value = tryCatch(paste0(chunk@text)[1], error=function(e) "")
+    value = paste0(.ullme_content_property(chunk, "text", ""))[1]
     return(list(type="text", value=value))
   }
   if (any(grepl("ContentToolRequest", classes, fixed=TRUE))) {
@@ -250,7 +249,6 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 
 
 .ullme_content_property = function(content, name, default=NULL) {
-  restore.point(".ullme_content_property")
   tryCatch(
     get("prop", envir=asNamespace("S7"))(content, name),
     error=function(e) {
@@ -261,7 +259,6 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 
 
 ullme_tool_request_record = function(content) {
-  restore.point("ullme_tool_request_record")
   list(
     call_id=paste0(.ullme_content_property(content, "id", ""))[1],
     tool=paste0(.ullme_content_property(content, "name", "unknown_tool"))[1],
@@ -273,7 +270,6 @@ ullme_tool_request_record = function(content) {
 
 
 ullme_tool_result_record = function(content) {
-  restore.point("ullme_tool_result_record")
   request = .ullme_content_property(content, "request", NULL)
   error = .ullme_content_property(content, "error", NULL)
   value = .ullme_content_property(content, "value", NULL)
@@ -330,7 +326,6 @@ ullme_send_tool_activity = function(request, activity="",
 
 
 ullme_handle_tool_lifecycle_event = function(kind, content, app=getApp()) {
-  restore.point("ullme_handle_tool_lifecycle_event")
   tryCatch({
     request = app$active_chat_request
     if (is.null(request) || !isTRUE(request$active)) return(invisible(NULL))
