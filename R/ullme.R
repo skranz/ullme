@@ -38,6 +38,7 @@ ullme_teacherid = function(app=getApp()) {
                       api_model=NULL, api_base_url=NULL,
                       render_chat_markdown=TRUE,
                       stream_chat=TRUE,
+                      stream_backend=c("ellmer", "custom"),
                       catch_chat_errors=TRUE,
                       chat_debug=FALSE,
                       sync_chat=FALSE,
@@ -55,6 +56,7 @@ ullme_teacherid = function(app=getApp()) {
   app$global = glob
 
   role = match.arg(role)
+  stream_backend = match.arg(stream_backend)
   login_check = ullme_login_check(login_check)
   if (!is.list(login_args)) stop("login_args must be a list.")
   api_provider = match.arg(api_provider)
@@ -166,6 +168,7 @@ ullme_teacherid = function(app=getApp()) {
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$stream_chat = isTRUE(stream_chat)
+  app$stream_backend = stream_backend
   app$catch_chat_errors = isTRUE(catch_chat_errors)
   app$chat_debug = isTRUE(chat_debug)
   app$sync_chat = isTRUE(sync_chat)
@@ -2044,49 +2047,62 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   )
 
   if (isTRUE(app$stream_chat) && !isTRUE(app$sync_chat)) {
-    ullme_chat_debug(app, "handle_chat stream branch begin")
-    start_stream = function() ullme_start_ai_stream(
+    use_custom_stream = identical(app$stream_backend, "custom") &&
+      ullme_custom_stream_supported(app=app, task_profile=task_profile)
+    stream_fun = if (isTRUE(use_custom_stream)) {
+      ullme_start_custom_ai_stream
+    } else {
+      ullme_start_ai_stream
+    }
+    ullme_chat_debug(
+      app,
+      "handle_chat stream branch begin backend=",
+      if (isTRUE(use_custom_stream)) "custom" else "ellmer"
+    )
+    stream_on_update = function(text, thinking, done) {
+      ullme_chat_debug(
+        app,
+        "handle_chat on_update callback begin done=", done,
+        " text_bytes=", nchar(paste0(text, collapse=""), type="bytes"),
+        " thinking_bytes=", nchar(paste0(thinking, collapse=""), type="bytes")
+      )
+      if (!isTRUE(request$active)) return(invisible(NULL))
+      if (nzchar(text) || nzchar(thinking)) {
+        request$received_provider_output = TRUE
+      }
+      if (nzchar(trimws(text))) {
+        ullme_student_stats_mark_output(stats_request)
+      }
+      ullme_send_chat_stream_update(
+        message_id=assistantMessageId,
+        text=text,
+        thinking=thinking,
+        done=done,
+        app=app
+      )
+      ullme_chat_debug(
+        app,
+        "handle_chat on_update callback end done=", done
+      )
+    }
+    stream_on_event = function(type, content) {
+      ullme_chat_debug(app, "handle_chat on_event callback begin type=", type)
+      if (!isTRUE(request$active)) return(invisible(NULL))
+      if (type %in% c("tool_request", "tool_result")) {
+        request$received_provider_output = TRUE
+      }
+      ullme_chat_debug(app, "handle_chat on_event callback end type=", type)
+      invisible(NULL)
+    }
+    start_stream = function() stream_fun(
       input=ai_input,
       model=model,
       context=context %||% list(),
       system_instructions=system_instructions,
       include_thinking=isTRUE(app$show_chat_thinking),
       task_profile=task_profile,
-      on_update=function(text, thinking, done) {
-        ullme_chat_debug(
-          app,
-          "handle_chat on_update callback begin done=", done,
-          " text_bytes=", nchar(paste0(text, collapse=""), type="bytes"),
-          " thinking_bytes=", nchar(paste0(thinking, collapse=""), type="bytes")
-        )
-        if (!isTRUE(request$active)) return(invisible(NULL))
-        if (nzchar(text) || nzchar(thinking)) {
-          request$received_provider_output = TRUE
-        }
-        if (nzchar(trimws(text))) {
-          ullme_student_stats_mark_output(stats_request)
-        }
-        ullme_send_chat_stream_update(
-          message_id=assistantMessageId,
-          text=text,
-          thinking=thinking,
-          done=done,
-          app=app
-        )
-        ullme_chat_debug(
-          app,
-          "handle_chat on_update callback end done=", done
-        )
-      },
-      on_event=function(type, content) {
-        ullme_chat_debug(app, "handle_chat on_event callback begin type=", type)
-        if (!isTRUE(request$active)) return(invisible(NULL))
-        if (type %in% c("tool_request", "tool_result")) {
-          request$received_provider_output = TRUE
-        }
-        ullme_chat_debug(app, "handle_chat on_event callback end type=", type)
-        invisible(NULL)
-      },
+      on_update=stream_on_update,
+      on_event=stream_on_event,
       app=app
     )
     if (identical(app$catch_chat_errors, FALSE)) {

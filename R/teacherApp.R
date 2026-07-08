@@ -1,8 +1,24 @@
+
+
 example = function() {
   library(ullme)
   restore.point.options(display.restore.point = TRUE)
   main_dir = "C:/libraries/ullme/ullme_main"
-  app = teacherApp(main_dir, api_key_file = "C:/libraries/ullme/nvidia_api_key.txt", api_provider="nvidia")
+  api_key_file = "C:/libraries/ullme/nvidia_api_key.txt"
+  app = teacherApp(
+    main_dir,
+    api_key_file = api_key_file,
+    api_provider = "nvidia",
+    stream_chat = TRUE,
+    stream_backend = "custom",
+    sync_chat = FALSE,
+    catch_chat_errors = FALSE,
+    chat_debug = TRUE,
+    enable_ai_tools = FALSE,
+    show_chat_thinking = FALSE
+  )
+
+  #app = teacherApp(main_dir, api_key_file = "C:/libraries/ullme/nvidia_api_key.txt", api_provider="nvidia")
   viewApp(app,launch.browser = TRUE)
 }
 
@@ -13,6 +29,7 @@ teacherApp = function(main_dir, userid="skranz",
                        api_model=NULL, api_base_url=NULL,
                        render_chat_markdown=TRUE,
                        stream_chat=TRUE,
+                       stream_backend=c("ellmer", "custom"),
                        catch_chat_errors=TRUE,
                        chat_debug=FALSE,
                        sync_chat=FALSE,
@@ -35,6 +52,7 @@ teacherApp = function(main_dir, userid="skranz",
     api_model=api_model,
     api_base_url=api_base_url,
     stream_chat=stream_chat,
+    stream_backend=stream_backend,
     catch_chat_errors=catch_chat_errors,
     chat_debug=chat_debug,
     sync_chat=sync_chat,
