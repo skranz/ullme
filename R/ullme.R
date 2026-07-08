@@ -39,6 +39,7 @@ ullme_teacherid = function(app=getApp()) {
                       render_chat_markdown=TRUE,
                       stream_chat=TRUE,
                       catch_chat_errors=TRUE,
+                      chat_debug=FALSE,
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
                       never_save_chats=TRUE,
@@ -87,6 +88,11 @@ ullme_teacherid = function(app=getApp()) {
       length(catch_chat_errors) != 1L ||
       is.na(catch_chat_errors)) {
     stop("catch_chat_errors must be TRUE or FALSE.")
+  }
+  if (!is.logical(chat_debug) ||
+      length(chat_debug) != 1L ||
+      is.na(chat_debug)) {
+    stop("chat_debug must be TRUE or FALSE.")
   }
   if (!is.logical(show_chat_thinking) ||
       length(show_chat_thinking) != 1L ||
@@ -149,6 +155,7 @@ ullme_teacherid = function(app=getApp()) {
   app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$stream_chat = isTRUE(stream_chat)
   app$catch_chat_errors = isTRUE(catch_chat_errors)
+  app$chat_debug = isTRUE(chat_debug)
   app$show_chat_thinking =
     identical(role, "teacher") && isTRUE(show_chat_thinking)
   app$store_ai_interactions = isTRUE(store_ai_interactions)
@@ -2023,6 +2030,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   )
 
   if (isTRUE(app$stream_chat)) {
+    ullme_chat_debug(app, "handle_chat stream branch begin")
     start_stream = function() ullme_start_ai_stream(
       input=ai_input,
       model=model,
@@ -2031,6 +2039,12 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       include_thinking=isTRUE(app$show_chat_thinking),
       task_profile=task_profile,
       on_update=function(text, thinking, done) {
+        ullme_chat_debug(
+          app,
+          "handle_chat on_update callback begin done=", done,
+          " text_bytes=", nchar(paste0(text, collapse=""), type="bytes"),
+          " thinking_bytes=", nchar(paste0(thinking, collapse=""), type="bytes")
+        )
         if (!isTRUE(request$active)) return(invisible(NULL))
         if (nzchar(text) || nzchar(thinking)) {
           request$received_provider_output = TRUE
@@ -2045,12 +2059,18 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
           done=done,
           app=app
         )
+        ullme_chat_debug(
+          app,
+          "handle_chat on_update callback end done=", done
+        )
       },
       on_event=function(type, content) {
+        ullme_chat_debug(app, "handle_chat on_event callback begin type=", type)
         if (!isTRUE(request$active)) return(invisible(NULL))
         if (type %in% c("tool_request", "tool_result")) {
           request$received_provider_output = TRUE
         }
+        ullme_chat_debug(app, "handle_chat on_event callback end type=", type)
         invisible(NULL)
       },
       app=app
@@ -2063,6 +2083,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         return(invisible(fail(job)))
       }
     }
+    ullme_chat_debug(app, "handle_chat stream job ready")
     request$controller = job$controller
     request$state = job$state
     ullme_student_stats_attach_chat(
@@ -2113,11 +2134,16 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         is_paused=function() isTRUE(request$waiting_for_approval)
       ),
       onFulfilled=function(value) {
+        ullme_chat_debug(app, "handle_chat promise fulfilled")
         if (!isTRUE(request$active)) return(invisible(NULL))
         finish(text=value$text, thinking=value$thinking)
         value
       },
       onRejected=function(error) {
+        ullme_chat_debug(
+          app,
+          "handle_chat promise rejected message=", conditionMessage(error)
+        )
         if (!isTRUE(request$active)) return(invisible(NULL))
         if (grepl(
           "timed out",
@@ -2131,6 +2157,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       }
     )
   } else {
+    ullme_chat_debug(app, "handle_chat nonstream branch begin")
     start_chat = function() {
       ullme_start_ai_chat(
         input=ai_input,
@@ -2161,6 +2188,11 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         is_paused=function() isTRUE(request$waiting_for_approval)
       ),
       onFulfilled=function(answer) {
+        ullme_chat_debug(
+          app,
+          "handle_chat nonstream promise fulfilled answer_bytes=",
+          nchar(paste0(answer, collapse=""), type="bytes")
+        )
         if (!isTRUE(request$active)) return(invisible(NULL))
         ullme_student_stats_mark_output(stats_request)
         thinking = if (isTRUE(app$show_chat_thinking)) {
@@ -2179,6 +2211,11 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         answer
       },
       onRejected=function(error) {
+        ullme_chat_debug(
+          app,
+          "handle_chat nonstream promise rejected message=",
+          conditionMessage(error)
+        )
         if (!isTRUE(request$active)) return(invisible(NULL))
         if (identical(app$catch_chat_errors, FALSE)) stop(error)
         fail(error)

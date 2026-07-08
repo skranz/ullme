@@ -1,3 +1,20 @@
+ullme_chat_debug = function(app=NULL, ...) {
+  if (is.null(app) || !isTRUE(app$chat_debug)) return(invisible(FALSE))
+  tryCatch({
+    cat(
+      format(Sys.time(), "%Y-%m-%d %H:%M:%OS3"),
+      " ullme chat debug: ",
+      paste0(..., collapse=""),
+      "\n",
+      sep="",
+      file=stderr()
+    )
+    flush.console()
+  }, error=function(e) NULL)
+  invisible(TRUE)
+}
+
+
 ullme_chat_key = function(model, task_profile="", app=getApp()) {
   restore.point("ullme_chat_key")
   paste(
@@ -391,6 +408,13 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
                                   on_update=function(...) NULL,
                                   on_event=function(...) NULL,
                                   app=getApp()) {
+  ullme_chat_debug(
+    app,
+    "start_ai_stream begin role=", app$role %||% "",
+    " task_profile=", task_profile,
+    " model=", paste0(model %||% app$api_config$model %||% "")[1],
+    " input_bytes=", nchar(paste0(input, collapse="\n"), type="bytes")
+  )
   chat = ullme_ai_request_chat(
     model=model,
     context=context,
@@ -398,8 +422,10 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     task_profile=task_profile,
     app=app
   )
+  ullme_chat_debug(app, "start_ai_stream chat ready")
   usage_start = ullme_chat_usage_snapshot(NULL)
   controller = ellmer::stream_controller()
+  ullme_chat_debug(app, "start_ai_stream controller ready")
   stream_args = list(
     input,
     stream="content",
@@ -408,46 +434,114 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
   if (identical(app$role, "teacher")) {
     stream_args$tool_mode = "sequential"
   }
+  ullme_chat_debug(
+    app,
+    "start_ai_stream before stream_async tool_mode=",
+    paste0(stream_args$tool_mode %||% "default")[1]
+  )
   stream = do.call(chat$stream_async, stream_args)
+  ullme_chat_debug(app, "start_ai_stream after stream_async")
   state = new.env(parent=emptyenv())
   state$text = ""
   state$thinking = ""
   state$last_update = 0
+  state$chunk_count = 0L
   await_each = coro::await_each
   runner = coro::async(function() {
-    for (chunk in await_each(stream)) {
-      part = .ullme_stream_chunk_part(chunk)
-      if (identical(part$type, "text")) {
-        state$text = paste0(state$text, part$value)
-      } else if (identical(part$type, "thinking") &&
-                 isTRUE(include_thinking)) {
-        state$thinking = paste0(state$thinking, part$value)
-      } else if (part$type %in% c("tool_request", "tool_result")) {
-        on_event(part$type, part$value)
+    ullme_chat_debug(app, "stream runner begin")
+    tryCatch({
+      for (chunk in await_each(stream)) {
+        state$chunk_count = state$chunk_count + 1L
+        chunk_class = tryCatch(
+          paste(class(chunk), collapse="/"),
+          error=function(e) "<class error>"
+        )
+        ullme_chat_debug(
+          app,
+          "stream chunk begin #", state$chunk_count,
+          " class=", chunk_class
+        )
+        part = .ullme_stream_chunk_part(chunk)
+        value_bytes = if (is.character(part$value)) {
+          nchar(part$value, type="bytes")
+        } else {
+          NA_integer_
+        }
+        ullme_chat_debug(
+          app,
+          "stream chunk part #", state$chunk_count,
+          " type=", part$type,
+          " value_bytes=", paste0(value_bytes)[1]
+        )
+        if (identical(part$type, "text")) {
+          state$text = paste0(state$text, part$value)
+        } else if (identical(part$type, "thinking") &&
+                   isTRUE(include_thinking)) {
+          state$thinking = paste0(state$thinking, part$value)
+        } else if (part$type %in% c("tool_request", "tool_result")) {
+          ullme_chat_debug(
+            app,
+            "stream event begin #", state$chunk_count,
+            " type=", part$type
+          )
+          on_event(part$type, part$value)
+          ullme_chat_debug(
+            app,
+            "stream event end #", state$chunk_count,
+            " type=", part$type
+          )
+        }
+        now = as.numeric(Sys.time())
+        changed = part$type %in% c("text", "thinking") &&
+          nzchar(part$value) &&
+          (!identical(part$type, "thinking") || isTRUE(include_thinking))
+        response_size = nchar(state$text, type="bytes") +
+          nchar(state$thinking, type="bytes")
+        if (response_size < 4000) {
+          update_interval = 0.08
+        } else if (response_size < 12000) {
+          update_interval = 0.14
+        } else {
+          update_interval = 0.25
+        }
+        if (changed && now - state$last_update >= update_interval) {
+          ullme_chat_debug(
+            app,
+            "stream on_update begin #", state$chunk_count,
+            " text_bytes=", nchar(state$text, type="bytes"),
+            " thinking_bytes=", nchar(state$thinking, type="bytes")
+          )
+          on_update(state$text, state$thinking, FALSE)
+          ullme_chat_debug(
+            app,
+            "stream on_update end #", state$chunk_count
+          )
+          state$last_update = now
+        }
       }
-      now = as.numeric(Sys.time())
-      changed = part$type %in% c("text", "thinking") &&
-        nzchar(part$value) &&
-        (!identical(part$type, "thinking") || isTRUE(include_thinking))
-      response_size = nchar(state$text, type="bytes") +
-        nchar(state$thinking, type="bytes")
-      if (response_size < 4000) {
-        update_interval = 0.08
-      } else if (response_size < 12000) {
-        update_interval = 0.14
-      } else {
-        update_interval = 0.25
-      }
-      if (changed && now - state$last_update >= update_interval) {
-        on_update(state$text, state$thinking, FALSE)
-        state$last_update = now
-      }
-    }
-    on_update(state$text, state$thinking, TRUE)
-    list(text=state$text, thinking=state$thinking)
+      ullme_chat_debug(
+        app,
+        "stream final on_update begin chunks=", state$chunk_count,
+        " text_bytes=", nchar(state$text, type="bytes"),
+        " thinking_bytes=", nchar(state$thinking, type="bytes")
+      )
+      on_update(state$text, state$thinking, TRUE)
+      ullme_chat_debug(app, "stream final on_update end")
+      list(text=state$text, thinking=state$thinking)
+    }, error=function(e) {
+      ullme_chat_debug(
+        app,
+        "stream runner error chunks=", state$chunk_count,
+        " message=", conditionMessage(e)
+      )
+      stop(e)
+    })
   })
+  ullme_chat_debug(app, "start_ai_stream before runner")
+  promise = runner()
+  ullme_chat_debug(app, "start_ai_stream after runner")
   list(
-    promise=runner(),
+    promise=promise,
     state=state,
     controller=controller,
     chat=chat,
