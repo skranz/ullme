@@ -38,6 +38,7 @@ ullme_teacherid = function(app=getApp()) {
                       api_model=NULL, api_base_url=NULL,
                       render_chat_markdown=TRUE,
                       stream_chat=TRUE,
+                      catch_chat_errors=TRUE,
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
                       never_save_chats=TRUE,
@@ -81,6 +82,11 @@ ullme_teacherid = function(app=getApp()) {
       length(stream_chat) != 1L ||
       is.na(stream_chat)) {
     stop("stream_chat must be TRUE or FALSE.")
+  }
+  if (!is.logical(catch_chat_errors) ||
+      length(catch_chat_errors) != 1L ||
+      is.na(catch_chat_errors)) {
+    stop("catch_chat_errors must be TRUE or FALSE.")
   }
   if (!is.logical(show_chat_thinking) ||
       length(show_chat_thinking) != 1L ||
@@ -142,6 +148,7 @@ ullme_teacherid = function(app=getApp()) {
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$stream_chat = isTRUE(stream_chat)
+  app$catch_chat_errors = isTRUE(catch_chat_errors)
   app$show_chat_thinking =
     identical(role, "teacher") && isTRUE(show_chat_thinking)
   app$store_ai_interactions = isTRUE(store_ai_interactions)
@@ -1700,6 +1707,12 @@ ullme_handle_chat_submit_safe = function(..., session=NULL, app=getApp()) {
   restore.point("ullme_handle_chat_submit_safe")
   args = list(...)
   message_id = paste0(args$assistantMessageId %||% "")[1]
+  if (identical(app$catch_chat_errors, FALSE)) {
+    return(do.call(
+      ullme_handle_chat_submit,
+      c(args, list(session=session, app=app))
+    ))
+  }
   tryCatch(
     do.call(
       ullme_handle_chat_submit,
@@ -1811,25 +1824,29 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   if (has_instance_builder) {
     tutorid = paste0(instance_builder$tutorid %||% "")[1]
     guidance = paste0(instance_builder$guidance %||% text, collapse="\n")
-    built = tryCatch(
-      ullme_instance_builder_request(tutorid, guidance, app=app),
-      error=function(e) e
-    )
-    if (inherits(built, "error")) {
-      ullme_send_chat_stream_update(
-        message_id=assistantMessageId,
-        done=TRUE,
-        error=conditionMessage(built),
-        app=app
+    if (identical(app$catch_chat_errors, FALSE)) {
+      built = ullme_instance_builder_request(tutorid, guidance, app=app)
+    } else {
+      built = tryCatch(
+        ullme_instance_builder_request(tutorid, guidance, app=app),
+        error=function(e) e
       )
-      if (identical(app$role, "student")) {
-        ullme_student_stats_append(
-          stats_request,
-          error_code="setup_error",
+      if (inherits(built, "error")) {
+        ullme_send_chat_stream_update(
+          message_id=assistantMessageId,
+          done=TRUE,
+          error=conditionMessage(built),
           app=app
         )
+        if (identical(app$role, "student")) {
+          ullme_student_stats_append(
+            stats_request,
+            error_code="setup_error",
+            app=app
+          )
+        }
+        return(invisible(NULL))
       }
-      return(invisible(NULL))
     }
     ai_input = built
     interaction_kind = "instance_builder"
@@ -2006,43 +2023,45 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   )
 
   if (isTRUE(app$stream_chat)) {
-    job = tryCatch(
-      ullme_start_ai_stream(
-        input=ai_input,
-        model=model,
-        context=context %||% list(),
-        system_instructions=system_instructions,
-        include_thinking=isTRUE(app$show_chat_thinking),
-        task_profile=task_profile,
-        on_update=function(text, thinking, done) {
-          if (!isTRUE(request$active)) return(invisible(NULL))
-          if (nzchar(text) || nzchar(thinking)) {
-            request$received_provider_output = TRUE
-          }
-          if (nzchar(trimws(text))) {
-            ullme_student_stats_mark_output(stats_request)
-          }
-          ullme_send_chat_stream_update(
-            message_id=assistantMessageId,
-            text=text,
-            thinking=thinking,
-            done=done,
-            app=app
-          )
-        },
-        on_event=function(type, content) {
-          if (!isTRUE(request$active)) return(invisible(NULL))
-          if (type %in% c("tool_request", "tool_result")) {
-            request$received_provider_output = TRUE
-          }
-          invisible(NULL)
-        },
-        app=app
-      ),
-      error=function(e) e
+    start_stream = function() ullme_start_ai_stream(
+      input=ai_input,
+      model=model,
+      context=context %||% list(),
+      system_instructions=system_instructions,
+      include_thinking=isTRUE(app$show_chat_thinking),
+      task_profile=task_profile,
+      on_update=function(text, thinking, done) {
+        if (!isTRUE(request$active)) return(invisible(NULL))
+        if (nzchar(text) || nzchar(thinking)) {
+          request$received_provider_output = TRUE
+        }
+        if (nzchar(trimws(text))) {
+          ullme_student_stats_mark_output(stats_request)
+        }
+        ullme_send_chat_stream_update(
+          message_id=assistantMessageId,
+          text=text,
+          thinking=thinking,
+          done=done,
+          app=app
+        )
+      },
+      on_event=function(type, content) {
+        if (!isTRUE(request$active)) return(invisible(NULL))
+        if (type %in% c("tool_request", "tool_result")) {
+          request$received_provider_output = TRUE
+        }
+        invisible(NULL)
+      },
+      app=app
     )
-    if (inherits(job, "error")) {
-      return(invisible(fail(job)))
+    if (identical(app$catch_chat_errors, FALSE)) {
+      job = start_stream()
+    } else {
+      job = tryCatch(start_stream(), error=function(e) e)
+      if (inherits(job, "error")) {
+        return(invisible(fail(job)))
+      }
     }
     request$controller = job$controller
     request$state = job$state
@@ -2077,13 +2096,15 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         job$controller$cancel("Model connection timed out"),
         silent=TRUE
       )
-      fail(simpleError(paste0(
+      error = simpleError(paste0(
         "The provider connection opened, but ",
         paste0(model %||% app$api_config$model)[1],
         " did not begin responding within ",
         format(seconds, trim=TRUE),
         " seconds."
-      )))
+      ))
+      if (identical(app$catch_chat_errors, FALSE)) stop(error)
+      fail(error)
     }, delay=app$chat_connect_timeout_seconds %||% 60)
     task = promises::then(
       ullme_promise_timeout(
@@ -2105,11 +2126,12 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         )) {
           try(job$controller$cancel("Model request timed out"), silent=TRUE)
         }
+        if (identical(app$catch_chat_errors, FALSE)) stop(error)
         fail(error, text=job$state$text, thinking=job$state$thinking)
       }
     )
   } else {
-    response = tryCatch(
+    start_chat = function() {
       ullme_start_ai_chat(
         input=ai_input,
         model=model,
@@ -2117,11 +2139,15 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         system_instructions=system_instructions,
         task_profile=task_profile,
         app=app
-      ),
-      error=function(e) e
-    )
-    if (inherits(response, "error")) {
-      return(invisible(fail(response)))
+      )
+    }
+    if (identical(app$catch_chat_errors, FALSE)) {
+      response = start_chat()
+    } else {
+      response = tryCatch(start_chat(), error=function(e) e)
+      if (inherits(response, "error")) {
+        return(invisible(fail(response)))
+      }
     }
     ullme_student_stats_attach_chat(
       stats_request,
@@ -2154,6 +2180,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       },
       onRejected=function(error) {
         if (!isTRUE(request$active)) return(invisible(NULL))
+        if (identical(app$catch_chat_errors, FALSE)) stop(error)
         fail(error)
       }
     )
