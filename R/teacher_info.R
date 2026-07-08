@@ -1,14 +1,17 @@
 ullme_teacher_info_dir = function(main_dir=ullme_main_dir()) {
+  restore.point("ullme_teacher_info_dir")
   file.path(main_dir, "teacher_info")
 }
 
 
 ullme_teacher_info_source_dir = function() {
+  restore.point("ullme_teacher_info_source_dir")
   ullme_package_dir("teacher_info")
 }
 
 
 ullme_init_teacher_info = function(main_dir=ullme_main_dir()) {
+  restore.point("ullme_init_teacher_info")
   source = ullme_teacher_info_source_dir()
   target = ullme_teacher_info_dir(main_dir=main_dir)
   dir.create(target, recursive=TRUE, showWarnings=FALSE)
@@ -34,6 +37,7 @@ ullme_init_teacher_info = function(main_dir=ullme_main_dir()) {
 
 
 ullme_teacher_project_state = function(app=getApp()) {
+  restore.point("ullme_teacher_project_state")
   semester_courses = ullme_user_courseids(
     main_dir=app$glob$main_dir,
     userid=app$userid,
@@ -83,6 +87,7 @@ ullme_teacher_project_state = function(app=getApp()) {
 
 
 ullme_teacher_next_steps = function(state) {
+  restore.point("ullme_teacher_next_steps")
   steps = character(0)
   if (state$courses_this_semester == 0) {
     steps = c(steps, "Create the first course for the selected semester.")
@@ -114,6 +119,7 @@ ullme_teacher_next_steps = function(state) {
 
 
 ullme_teacher_project_state_text = function(app=getApp()) {
+  restore.point("ullme_teacher_project_state_text")
   state = ullme_teacher_project_state(app=app)
   next_steps = ullme_teacher_next_steps(state)
   paste0(
@@ -141,6 +147,7 @@ ullme_teacher_project_state_text = function(app=getApp()) {
 
 
 ullme_teacher_info_documents = function(app=getApp()) {
+  restore.point("ullme_teacher_info_documents")
   root = ullme_teacher_info_dir(app$glob$main_dir)
   if (!dir.exists(root)) return(list())
   files = list.files(
@@ -171,6 +178,7 @@ ullme_teacher_info_documents = function(app=getApp()) {
 
 ullme_teacher_info_search = function(topic="overview", query="", app=getApp(),
                                       max_documents=4L, max_chars=5000L) {
+  restore.point("ullme_teacher_info_search")
   topic = tolower(trimws(paste0(topic %||% "overview")[1]))
   query = trimws(paste0(query %||% "")[1])
   if (topic %in% c("state", "project", "project_state", "next", "next_steps")) {
@@ -221,5 +229,6 @@ ullme_teacher_info_search = function(topic="overview", query="", app=getApp(),
 
 
 utool_teacher_info = function(topic="overview", query="", app=getApp()) {
+  restore.point("utool_teacher_info")
   ullme_teacher_info_search(topic=topic, query=query, app=app)
 }

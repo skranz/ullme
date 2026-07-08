@@ -1,4 +1,5 @@
 ullme_tool_course_dir = function(semester="sel", courseid, app=getApp()) {
+  restore.point("ullme_tool_course_dir")
   semester = ullme_tool_semester(semester, app=app)
   courseid = ullme_clean_courseid(courseid)
   path = ullme_course_dir(
@@ -14,6 +15,7 @@ ullme_tool_course_dir = function(semester="sel", courseid, app=getApp()) {
 
 
 ullme_tool_relative_path = function(path, label="path") {
+  restore.point("ullme_tool_relative_path")
   path = gsub("\\\\", "/", paste0(path)[1])
   if (!ullme_safe_relative_material_path(path)) stop(label, " must be a safe relative path.")
   path
@@ -21,6 +23,7 @@ ullme_tool_relative_path = function(path, label="path") {
 
 
 ullme_tool_change_result = function(result) {
+  restore.point("ullme_tool_change_result")
   list(
     ok=isTRUE(result$ok),
     status=result$status %||% if (isTRUE(result$ok)) "committed" else "error",
@@ -31,6 +34,7 @@ ullme_tool_change_result = function(result) {
 
 
 utool_cur_user = function(app=getApp()) {
+  restore.point("utool_cur_user")
   list(
     userid=app$userid,
     role=app$role,
@@ -40,6 +44,7 @@ utool_cur_user = function(app=getApp()) {
 
 
 utool_list_courses = function(semester="sel", app=getApp()) {
+  restore.point("utool_list_courses")
   semester = ullme_tool_semester(semester, app=app)
   list(
     semester=semester,
@@ -55,6 +60,7 @@ utool_list_courses = function(semester="sel", app=getApp()) {
 
 utool_list_material_files = function(courseid, semester="sel",
                                       category="", app=getApp()) {
+  restore.point("utool_list_material_files")
   course_dir = ullme_tool_course_dir(semester, courseid, app=app)
   files = ullme_course_material_files(course_dir)
   category = paste0(category %||% "")[1]
@@ -68,6 +74,7 @@ utool_list_material_files = function(courseid, semester="sel",
 
 utool_read_definition_yaml = function(kind, definitionid, source,
                                        app=getApp()) {
+  restore.point("utool_read_definition_yaml")
   kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
   if (identical(kind, "tutor")) {
@@ -100,6 +107,7 @@ utool_read_definition_yaml = function(kind, definitionid, source,
 
 
 utool_list_ai_tutors = function(app=getApp()) {
+  restore.point("utool_list_ai_tutors")
   lapply(ullme_course_ai_tutors(app=app), function(tutor) {
     list(
       tutorid=tutor$tutorid,
@@ -115,6 +123,7 @@ utool_list_ai_tutors = function(app=getApp()) {
 
 
 utool_read_tutor_instances_yaml = function(tutorid, app=getApp()) {
+  restore.point("utool_read_tutor_instances_yaml")
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) stop("Select a course first.")
   tutorid = ullme_clean_definition_id(tutorid)
@@ -135,6 +144,7 @@ utool_read_tutor_instances_yaml = function(tutorid, app=getApp()) {
 
 
 utool_list_skills = function(app=getApp()) {
+  restore.point("utool_list_skills")
   lapply(ullme_skill_catalog(app=app), function(skill) {
     list(
       skillid=skill$skillid,
@@ -147,6 +157,7 @@ utool_list_skills = function(app=getApp()) {
 
 
 ullme_tool_course_file_path = function(course_dir, path, must_exist=TRUE) {
+  restore.point("ullme_tool_course_file_path")
   path = ullme_tool_relative_path(path, "path")
   target = normalizePath(file.path(course_dir, path), winslash="/", mustWork=FALSE)
   root = normalizePath(course_dir, winslash="/", mustWork=TRUE)
@@ -162,6 +173,7 @@ ullme_tool_course_file_path = function(course_dir, path, must_exist=TRUE) {
 
 utool_read_course_file = function(courseid, path, semester="sel",
                                    app=getApp()) {
+  restore.point("utool_read_course_file")
   course_dir = ullme_tool_course_dir(semester, courseid, app=app)
   target = ullme_tool_course_file_path(course_dir, path, must_exist=TRUE)
   if (!ullme_file_is_text(target)) stop("The requested course file is binary.")
@@ -177,12 +189,14 @@ utool_read_course_file = function(courseid, path, semester="sel",
 
 
 utool_list_changes = function(limit=20, app=getApp()) {
+  restore.point("utool_list_changes")
   limit = max(1L, min(100L, as.integer(limit)))
   ullme_change_history(app=app, limit=limit)
 }
 
 
 utool_change_status = function(operation_id, app=getApp()) {
+  restore.point("utool_change_status")
   operation_id = paste0(operation_id)[1]
   if (!is.null(app$pending_changes[[operation_id]])) {
     return(list(ok=TRUE, operation_id=operation_id, status="pending_approval"))
@@ -198,6 +212,7 @@ utool_change_status = function(operation_id, app=getApp()) {
 
 
 utool_change_status = function(operation_id, app=getApp()) {
+  restore.point("utool_change_status")
   operation_id = paste0(operation_id)[1]
   if (!is.null(app$pending_changes[[operation_id]])) {
     return(list(ok=TRUE, operation_id=operation_id, status="pending_approval"))
@@ -217,6 +232,7 @@ utool_copy_material = function(source_courseid, source_category, source_path,
                                 source_semester="sel", target_semester="sel",
                                 target_path="", overwrite=FALSE,
                                 app=getApp()) {
+  restore.point("utool_copy_material")
   source_dir = ullme_tool_course_dir(source_semester, source_courseid, app=app)
   target_dir = ullme_tool_course_dir(target_semester, target_courseid, app=app)
   if (!source_category %in% ullme_course_material_categories() ||
@@ -254,6 +270,7 @@ utool_copy_material = function(source_courseid, source_category, source_path,
 
 utool_rewrite_definition_yaml = function(kind, definitionid, source,
                                           yaml_content, app=getApp()) {
+  restore.point("utool_rewrite_definition_yaml")
   kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
@@ -295,6 +312,7 @@ utool_rewrite_definition_yaml = function(kind, definitionid, source,
 
 utool_rewrite_tutor_instances_yaml = function(tutorid, yaml_content,
                                                app=getApp()) {
+  restore.point("utool_rewrite_tutor_instances_yaml")
   result = ullme_save_course_ai_tutor_instances_yaml(
     tutorid=tutorid,
     yaml_content=yaml_content,
@@ -310,6 +328,7 @@ utool_rewrite_tutor_instances_yaml = function(tutorid, yaml_content,
 
 
 ullme_rtutor_instances_yaml_info = function(tutorid, yaml_content) {
+  restore.point("ullme_rtutor_instances_yaml_info")
   parsed = ullme_parse_yaml_text(
     paste0(yaml_content %||% "", collapse="\n"),
     "instances.yml"
@@ -341,6 +360,7 @@ ullme_rtutor_instances_yaml_info = function(tutorid, yaml_content) {
 
 utool_write_rtutor_instances_yaml = function(tutorid, yaml_content,
                                                app=getApp()) {
+  restore.point("utool_write_rtutor_instances_yaml")
   tutorid = ullme_clean_definition_id(tutorid)
   result = ullme_save_course_ai_tutor_instances_yaml(
     tutorid=tutorid,
@@ -361,6 +381,7 @@ utool_convert_material_files = function(courseid, paths, tutorid,
                                          semester="sel", from="",
                                          to="preferred", overwrite=FALSE,
                                          app=getApp()) {
+  restore.point("utool_convert_material_files")
   course_dir = ullme_tool_course_dir(semester, courseid, app=app)
   result = ullme_convert_material_files(
     paths=paths,
@@ -382,6 +403,7 @@ utool_convert_material_files = function(courseid, paths, tutorid,
 
 utool_rewrite_course_text_file = function(courseid, path, content,
                                            semester="sel", app=getApp()) {
+  restore.point("utool_rewrite_course_text_file")
   course_dir = ullme_tool_course_dir(semester, courseid, app=app)
   path = ullme_tool_relative_path(path, "path")
   target = ullme_tool_course_file_path(course_dir, path, must_exist=TRUE)
@@ -411,6 +433,7 @@ utool_rewrite_course_text_file = function(courseid, path, content,
 
 
 utool_undo_change = function(operation_id="last", app=getApp()) {
+  restore.point("utool_undo_change")
   ullme_tool_change_result(ullme_undo_change(
     operation_id=operation_id,
     origin="agent",

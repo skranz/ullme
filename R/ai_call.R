@@ -1,4 +1,5 @@
 ullme_chat_key = function(model, task_profile="", app=getApp()) {
+  restore.point("ullme_chat_key")
   paste(
     app$api_config$provider,
     model,
@@ -15,6 +16,7 @@ ullme_chat_key = function(model, task_profile="", app=getApp()) {
 
 ullme_ai_connection_status = function(model=NULL, waiting=FALSE,
                                        app=getApp()) {
+  restore.point("ullme_ai_connection_status")
   config = app$api_config
   model = paste0(model %||% config$model %||% "configured model")[1]
   provider = switch(
@@ -47,6 +49,7 @@ ullme_ai_connection_status = function(model=NULL, waiting=FALSE,
 
 ullme_await_promise = function(promise, seconds=180,
                                 on_timeout=function() NULL) {
+  restore.point("ullme_await_promise")
   seconds = suppressWarnings(as.numeric(seconds)[1])
   if (is.na(seconds) || seconds <= 0) stop("seconds must be positive.")
   settled = FALSE
@@ -85,6 +88,7 @@ ullme_await_promise = function(promise, seconds=180,
 
 ullme_promise_timeout = function(promise, seconds=180,
                                   is_paused=function() FALSE) {
+  restore.point("ullme_promise_timeout")
   seconds = suppressWarnings(as.numeric(seconds)[1])
   if (is.na(seconds) || seconds <= 0) return(promise)
   promises::promise(function(resolve, reject) {
@@ -135,6 +139,7 @@ ullme_promise_timeout = function(promise, seconds=180,
 
 ullme_teacher_chat = function(model=NULL, system_prompt=NULL,
                                task_profile="", app=getApp()) {
+  restore.point("ullme_teacher_chat")
   config = app$api_config
   model = ullme_model_id(model, app=app)
   key = ullme_chat_key(model, task_profile=task_profile, app=app)
@@ -221,6 +226,7 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 
 
 .ullme_stream_chunk_part = function(chunk) {
+  restore.point(".ullme_stream_chunk_part")
   if (is.character(chunk)) {
     return(list(type="text", value=paste0(chunk, collapse="")))
   }
@@ -244,6 +250,7 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 
 
 .ullme_content_property = function(content, name, default=NULL) {
+  restore.point(".ullme_content_property")
   tryCatch(
     get("prop", envir=asNamespace("S7"))(content, name),
     error=function(e) {
@@ -254,6 +261,7 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
 
 
 ullme_tool_request_record = function(content) {
+  restore.point("ullme_tool_request_record")
   list(
     call_id=paste0(.ullme_content_property(content, "id", ""))[1],
     tool=paste0(.ullme_content_property(content, "name", "unknown_tool"))[1],
@@ -265,6 +273,7 @@ ullme_tool_request_record = function(content) {
 
 
 ullme_tool_result_record = function(content) {
+  restore.point("ullme_tool_result_record")
   request = .ullme_content_property(content, "request", NULL)
   error = .ullme_content_property(content, "error", NULL)
   value = .ullme_content_property(content, "value", NULL)
@@ -292,6 +301,7 @@ ullme_tool_result_record = function(content) {
 
 
 ullme_request_stream_state = function(request) {
+  restore.point("ullme_request_stream_state")
   list(
     text=if (is.null(request$state)) "" else request$state$text %||% "",
     thinking=if (is.null(request$state)) "" else
@@ -303,6 +313,7 @@ ullme_request_stream_state = function(request) {
 ullme_send_tool_activity = function(request, activity="",
                                      waiting_for_approval=FALSE,
                                      app=getApp()) {
+  restore.point("ullme_send_tool_activity")
   if (is.null(request) || !isTRUE(request$active)) return(invisible(FALSE))
   state = ullme_request_stream_state(request)
   ullme_send_chat_stream_update(
@@ -319,6 +330,7 @@ ullme_send_tool_activity = function(request, activity="",
 
 
 ullme_handle_tool_lifecycle_event = function(kind, content, app=getApp()) {
+  restore.point("ullme_handle_tool_lifecycle_event")
   tryCatch({
     request = app$active_chat_request
     if (is.null(request) || !isTRUE(request$active)) return(invisible(NULL))
@@ -354,6 +366,7 @@ ullme_handle_tool_lifecycle_event = function(kind, content, app=getApp()) {
 
 ullme_set_request_approval_wait = function(request, waiting, operation_id="",
                                             app=getApp()) {
+  restore.point("ullme_set_request_approval_wait")
   if (is.null(request)) return(invisible(FALSE))
   request$waiting_for_approval = isTRUE(waiting)
   if (!isTRUE(request$active)) return(invisible(FALSE))
@@ -491,6 +504,7 @@ ullme_chat_last_thinking = function(chat) {
 
 
 ullme_task_chat = function(system_prompt, model=NULL, app=getApp()) {
+  restore.point("ullme_task_chat")
   config = app$api_config
   model = ullme_model_id(model, app=app)
   ullme_api_chat(config, model=model, system_prompt=system_prompt)

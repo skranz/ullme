@@ -1,11 +1,13 @@
 
 ullme_api_provider = function(provider) {
+  restore.point("ullme_api_provider")
   provider = tolower(trimws(paste0(provider)[1]))
   match.arg(provider, c("fake", "nvidia", "local"))
 }
 
 
 ullme_api_key = function(api_key_file, required=TRUE) {
+  restore.point("ullme_api_key")
   path = paste0(api_key_file %||% "")[1]
   if (!nzchar(path)) {
     if (isTRUE(required)) stop("api_key_file is required for this API provider.")
@@ -22,6 +24,7 @@ ullme_api_key = function(api_key_file, required=TRUE) {
 
 
 ullme_api_credentials_file = function(api_key_file, required=TRUE) {
+  restore.point("ullme_api_credentials_file")
   force(api_key_file)
   force(required)
   function() ullme_api_key(api_key_file, required=required)
@@ -30,6 +33,7 @@ ullme_api_credentials_file = function(api_key_file, required=TRUE) {
 
 ullme_api_config = function(api_provider="fake", api_key_file=NULL,
                             api_model=NULL, api_base_url=NULL) {
+  restore.point("ullme_api_config")
   provider = ullme_api_provider(api_provider)
   if (identical(provider, "nvidia")) {
     base_url = paste0(api_base_url %||% ullme_nvidia_base_url())[1]
@@ -66,7 +70,7 @@ ullme_api_config = function(api_provider="fake", api_key_file=NULL,
 
 
 ullme_api_models = function(config, timeout=15, image_and_text=FALSE) {
-  restore.point("ulme_api_models")
+  restore.point("ullme_api_models")
   if (identical(config$provider, "fake")) return("fake")
   request = httr2::request(paste0(sub("/+$", "", config$base_url), "/models"))
   if (identical(config$provider, "nvidia")) {
@@ -93,6 +97,7 @@ ullme_api_models = function(config, timeout=15, image_and_text=FALSE) {
 
 
 ullme_model_id = function(model, app=getApp()) {
+  restore.point("ullme_model_id")
   model = trimws(paste0(model %||% app$api_config$model)[1])
   if (!nzchar(model) || !grepl("^[A-Za-z0-9][A-Za-z0-9._:/+-]*$", model)) {
     stop("Invalid model ID.")
@@ -106,12 +111,14 @@ ullme_model_id = function(model, app=getApp()) {
 
 
 ullme_model_label = function(model) {
+  restore.point("ullme_model_label")
   label = sub("^.*/", "", model)
   if (nchar(label) > 42) paste0(substr(label, 1, 39), "...") else label
 }
 
 
 ullme_model_catalog_payload = function(app=getApp()) {
+  restore.point("ullme_model_catalog_payload")
   models = app$api_models %||% app$api_config$model
   list(
     provider=app$api_config$provider,
@@ -125,6 +132,7 @@ ullme_model_catalog_payload = function(app=getApp()) {
 
 
 ullme_send_model_catalog = function(app=getApp()) {
+  restore.point("ullme_send_model_catalog")
   callJS(
     .fun="window.ullme.updateModelCatalog",
     .args=list(ullme_model_catalog_payload(app=app)),
@@ -135,6 +143,7 @@ ullme_send_model_catalog = function(app=getApp()) {
 
 
 ullme_refresh_model_catalog = function(app=getApp()) {
+  restore.point("ullme_refresh_model_catalog")
   app$api_models = app$api_config$model
   app$api_models_error = NULL
   if (!identical(app$api_config$provider, "fake")) {
@@ -164,6 +173,7 @@ ullme_refresh_model_catalog = function(app=getApp()) {
 
 
 ullme_safe_ai_error = function(error, config=NULL) {
+  restore.point("ullme_safe_ai_error")
   message = tryCatch(
     conditionMessage(error),
     error=function(e) paste0(error, collapse=" ")

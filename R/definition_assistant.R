@@ -51,6 +51,7 @@ ullme_fake_definition_rewrite = function(file, content, instruction) {
 
 
 ullme_definition_rewrite_type = function() {
+  restore.point("ullme_definition_rewrite_type")
   ellmer::type_object(
     content=ellmer::type_string(
       "Complete replacement content for the selected file."
@@ -71,6 +72,7 @@ ullme_definition_rewrite_type = function() {
 ullme_definition_ai_rewrite = function(kind, definitionid, source, file,
                                         content, instruction, context,
                                         model=NULL, app=getApp()) {
+  restore.point("ullme_definition_ai_rewrite")
   values = list(
     kind=kind,
     definitionid=definitionid,

@@ -1,10 +1,12 @@
 ullme_tool_perm = function(course_must_exist=FALSE, only_teacher=TRUE,
                             mutates=FALSE) {
+  restore.point("ullme_tool_perm")
   as.list(environment())
 }
 
 
 ullme_tool_registry = function() {
+  restore.point("ullme_tool_registry")
   list(
     cur_user=list(
       description="Get the current user's ID, role, and allowed roles.",
@@ -84,6 +86,7 @@ ullme_tool_registry = function() {
 
 
 ullme_tool = function(name, descr=NULL, perm=NULL, app=getApp()) {
+  restore.point("ullme_tool")
   registry = ullme_tool_registry()
   spec = registry[[name]]
   if (is.null(spec)) stop("Unknown uLLMe tool: ", name)
@@ -126,6 +129,7 @@ ullme_tool = function(name, descr=NULL, perm=NULL, app=getApp()) {
 
 
 ullme_tools = function(app=getApp()) {
+  restore.point("ullme_tools")
   tool_names = names(ullme_tool_registry())
   tools = lapply(tool_names, ullme_tool, app=app)
   names(tools) = tool_names
@@ -134,6 +138,7 @@ ullme_tools = function(app=getApp()) {
 
 
 ullme_execute_tool = function(implementation, args, perm, app=getApp()) {
+  restore.point("ullme_execute_tool")
   checked = ullme_check_tool_args(args=args, perm=perm, app=app)
   if (!isTRUE(checked$ok)) {
     return(list(ok=FALSE, status="rejected", message=checked$message))
@@ -151,6 +156,7 @@ ullme_execute_tool = function(implementation, args, perm, app=getApp()) {
 
 
 ullme_check_tool_args = function(args, perm=ullme_tool_perm(), app=getApp()) {
+  restore.point("ullme_check_tool_args")
   if (is.null(app$userid) || !nzchar(app$userid)) {
     return(list(ok=FALSE, message="ULLME could not identify the current user."))
   }
@@ -180,6 +186,7 @@ ullme_check_tool_args = function(args, perm=ullme_tool_perm(), app=getApp()) {
 
 ullme_has_course = function(teacherid, semester, courseid,
                              main_dir=ullme_main_dir()) {
+  restore.point("ullme_has_course")
   dir.exists(file.path(
     main_dir, "teachers", ullme_clean_user_name(teacherid),
     "courses", semester, ullme_clean_courseid(courseid)
@@ -188,6 +195,7 @@ ullme_has_course = function(teacherid, semester, courseid,
 
 
 ullme_tool_semester = function(semester="sel", app=getApp()) {
+  restore.point("ullme_tool_semester")
   semester = toupper(paste0(semester %||% "SEL")[1])
   if (semester %in% c("", "SEL")) return(app$semester)
   ullme_semester_index(semester)
@@ -196,6 +204,7 @@ ullme_tool_semester = function(semester="sel", app=getApp()) {
 
 
 ullme_tool_arg_defs = function(args, specs=list()) {
+  restore.point("ullme_tool_arg_defs")
   definitions = ullme_tool_arg_spec(args=args, specs=specs)
   lapply(definitions, function(spec) {
     description = spec$description
@@ -212,6 +221,7 @@ ullme_tool_arg_defs = function(args, specs=list()) {
 
 
 ullme_tool_arg_spec = function(args, specs=list()) {
+  restore.point("ullme_tool_arg_spec")
   defaults = ullme_default_tool_arg_spec()
   fields = c("type", "description", "required")
   result = lapply(args, function(arg) {
@@ -229,6 +239,7 @@ ullme_tool_arg_spec = function(args, specs=list()) {
 
 
 ullme_default_tool_arg_spec = function() {
+  restore.point("ullme_default_tool_arg_spec")
   list(
     semester=list(type="string", description="Semester such as WS2526 or SS27. Use 'sel' for the selected semester.", required=FALSE),
     topic=list(type="string", description="Information topic, for example overview, materials, tutors, skills, safety, project_state, or next_steps.", required=FALSE),

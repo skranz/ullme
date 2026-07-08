@@ -1,4 +1,5 @@
 ullme_prompts_dir = function() {
+  restore.point("ullme_prompts_dir")
   path = system.file("prompts", package="ullme")
   if (nzchar(path)) return(path)
   source_path = file.path(getwd(), "inst", "prompts")
@@ -10,6 +11,7 @@ ullme_prompts_dir = function() {
 
 
 ullme_read_prompt = function(name) {
+  restore.point("ullme_read_prompt")
   name = paste0(name)[1]
   if (!grepl("^[A-Za-z][A-Za-z0-9_-]*$", name)) stop("Invalid prompt name.")
   path = file.path(ullme_prompts_dir(), paste0(name, ".txt"))
@@ -19,6 +21,7 @@ ullme_read_prompt = function(name) {
 
 
 ullme_render_prompt = function(text, values=list(), strict=TRUE) {
+  restore.point("ullme_render_prompt")
   text = paste0(text, collapse="\n")
   pattern = "\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}"
   repeat {
@@ -46,11 +49,13 @@ ullme_render_prompt = function(text, values=list(), strict=TRUE) {
 
 
 ullme_prompt = function(name, values=list(), strict=TRUE) {
+  restore.point("ullme_prompt")
   ullme_render_prompt(ullme_read_prompt(name), values=values, strict=strict)
 }
 
 
 ullme_prompt_with_literal_values = function(name, values=list()) {
+  restore.point("ullme_prompt_with_literal_values")
   open = "__ULLME_LITERAL_OPEN_BRACES__"
   close = "__ULLME_LITERAL_CLOSE_BRACES__"
   escaped = lapply(values, function(value) {
@@ -64,6 +69,7 @@ ullme_prompt_with_literal_values = function(name, values=list()) {
 
 
 ullme_tool_prompt_summary = function(tool_names=NULL) {
+  restore.point("ullme_tool_prompt_summary")
   registry = ullme_tool_registry()
   if (!is.null(tool_names)) {
     unknown = setdiff(tool_names, names(registry))
@@ -79,6 +85,7 @@ ullme_tool_prompt_summary = function(tool_names=NULL) {
 
 
 ullme_skill_prompt_summary = function(app=getApp()) {
+  restore.point("ullme_skill_prompt_summary")
   skills = ullme_skill_catalog(app=app)
   if (length(skills) == 0) return("- No Skill definitions are currently available.")
   paste(vapply(skills, function(skill) {
@@ -92,6 +99,7 @@ ullme_skill_prompt_summary = function(app=getApp()) {
 
 ullme_teacher_prompt_values = function(app=getApp(), context=list(),
                                         tool_names=NULL) {
+  restore.point("ullme_teacher_prompt_values")
   course = tryCatch(ullme_course_summary(app=app)$course, error=function(e) NULL)
   coursename = paste0(course$coursename %||% app$courseid %||% "")[1]
   active = ullme_active_skill(app=app)
@@ -120,6 +128,7 @@ ullme_teacher_prompt_values = function(app=getApp(), context=list(),
 
 ullme_teacher_system_prompt = function(app=getApp(), context=list(),
                                         tool_names=NULL) {
+  restore.point("ullme_teacher_system_prompt")
   values = ullme_teacher_prompt_values(
     app=app,
     context=context,
