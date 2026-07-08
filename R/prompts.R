@@ -144,7 +144,7 @@ ullme_teacher_system_prompt = function(app=getApp(), context=list(),
   )
   paste(vapply(
     fragments,
-    ullme_prompt,
+    ullme_prompt_with_literal_values,
     character(1),
     values=values
   ), collapse="\n\n")
