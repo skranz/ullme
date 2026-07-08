@@ -29,6 +29,7 @@
     materialSort: "name",
     materialSortDirection: "asc",
     materialConversionBusy: false,
+    materialUploadBusy: false,
     materialUploadDestination: "",
     pendingMaterialDrop: null,
     studioView: "usage",
@@ -461,6 +462,7 @@
       inputElement.addEventListener("change", function () {
         if (inputElement.files && inputElement.files.length) {
           state.pendingMaterialInputId = inputElement.id;
+          setMaterialUploadBusy(true, materialUploadLabel("Uploading", inputElement.files.length));
         }
       });
     });
@@ -2310,6 +2312,7 @@
     var isFolderUpload = Array.isArray(relativePaths);
     if (!input || (!files.length && !directories.length) ||
         typeof DataTransfer === "undefined") return;
+    setMaterialUploadBusy(true, materialUploadLabel("Preparing", files.length, directories.length));
 
     var uploadFiles = files;
     var tree = null;
@@ -2344,18 +2347,50 @@
     if (!pending || pending.destination !== result.path) return;
     state.pendingMaterialDrop = null;
     if (!result.ok) {
+      setMaterialUploadBusy(false);
       window.alert(result.message || "The upload folder is no longer available.");
       return;
     }
     var input = byId(pending.inputId);
-    if (!input) return;
-    if (!pending.files.length) return;
+    if (!input) {
+      setMaterialUploadBusy(false);
+      return;
+    }
+    if (!pending.files.length) {
+      setMaterialUploadBusy(false);
+      renderMaterialTree();
+      return;
+    }
     var transfer = new DataTransfer();
     pending.files.forEach(function (file) {
       transfer.items.add(file);
     });
     input.files = transfer.files;
+    setMaterialUploadBusy(true, materialUploadLabel("Uploading", pending.files.length));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function materialUploadLabel(phase, fileCount, directoryCount) {
+    fileCount = Number(fileCount || 0);
+    directoryCount = Number(directoryCount || 0);
+    var parts = [];
+    if (fileCount) parts.push(fileCount + " file" + (fileCount === 1 ? "" : "s"));
+    if (directoryCount) parts.push(directoryCount + " folder" + (directoryCount === 1 ? "" : "s"));
+    return phase + " material" + (parts.length ? " (" + parts.join(", ") + ")" : "") + "...";
+  }
+
+  function setMaterialUploadBusy(active, label) {
+    state.materialUploadBusy = Boolean(active);
+    var status = byId("ullme_material_upload_status");
+    var text = byId("ullme_material_upload_status_text");
+    var uploadButton = byId("ullme_material_upload_btn");
+    var inlineUpload = byId("ullme_material_inline_upload");
+    if (status) {
+      status.classList.toggle("ullme-material-upload-status-active", state.materialUploadBusy);
+    }
+    if (text && label) text.textContent = label;
+    if (uploadButton) uploadButton.disabled = state.materialUploadBusy;
+    if (inlineUpload) inlineUpload.disabled = state.materialUploadBusy;
   }
 
   function courseFileRecord(path) {
@@ -3506,6 +3541,8 @@
     if (result && result.ok === false) {
       window.alert(result.message || "The material upload failed.");
     }
+    setMaterialUploadBusy(false);
+    renderMaterialTree();
   }
 
   function scrollMessagesToBottom() {

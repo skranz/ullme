@@ -988,6 +988,14 @@ ullme_material_ui = function(app=getApp()) {
           )
         ),
         tags$div(
+          id="ullme_material_upload_status",
+          class="ullme-material-upload-status",
+          role="status",
+          `aria-live`="polite",
+          tags$div(class="ullme-material-upload-track", tags$div(class="ullme-material-upload-bar")),
+          tags$span(id="ullme_material_upload_status_text", "Uploading materials...")
+        ),
+        tags$div(
           id="ullme_material_batch_bar",
           class="ullme-material-batch-bar",
           tags$select(
