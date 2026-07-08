@@ -462,10 +462,9 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
           " class=", chunk_class
         )
         part = .ullme_stream_chunk_part(chunk)
-        value_bytes = if (is.character(part$value)) {
-          nchar(part$value, type="bytes")
-        } else {
-          NA_integer_
+        value_bytes = NA_integer_
+        if (is.character(part$value)) {
+          value_bytes = nchar(part$value, type="bytes")
         }
         ullme_chat_debug(
           app,
