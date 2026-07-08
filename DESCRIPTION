@@ -11,7 +11,7 @@ Authors@R: c(
   )
 Description: Experimental app. See README.md for details
 Depends: shinyEvents, restorepoint, stringi, stringtools, ellmer (>= 0.4.1), yaml, httr2, commonmark, coro, promises, later
-Suggests: plumber, jsonlite, rstudioapi, pandoc, shinyEventsLogin, digest
+Suggests: plumber, jsonlite, curl, rstudioapi, pandoc, shinyEventsLogin, digest
 Remotes: skranz/shinyEventsLogin
 License: GPL 3.0 (all non-R stuff also MIT)
 Encoding: UTF-8

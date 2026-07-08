@@ -2094,17 +2094,21 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       ullme_chat_debug(app, "handle_chat on_event callback end type=", type)
       invisible(NULL)
     }
-    start_stream = function() stream_fun(
-      input=ai_input,
-      model=model,
-      context=context %||% list(),
-      system_instructions=system_instructions,
-      include_thinking=isTRUE(app$show_chat_thinking),
-      task_profile=task_profile,
-      on_update=stream_on_update,
-      on_event=stream_on_event,
-      app=app
-    )
+    start_stream = function() {
+      stream_args = list(
+        input=ai_input,
+        model=model,
+        context=context %||% list(),
+        system_instructions=system_instructions,
+        include_thinking=isTRUE(app$show_chat_thinking),
+        task_profile=task_profile,
+        on_update=stream_on_update,
+        on_event=stream_on_event,
+        app=app
+      )
+      if (isTRUE(use_custom_stream)) stream_args$uploads = uploads
+      do.call(stream_fun, stream_args)
+    }
     if (identical(app$catch_chat_errors, FALSE)) {
       job = start_stream()
     } else {

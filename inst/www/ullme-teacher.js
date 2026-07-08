@@ -596,7 +596,8 @@
           id: upload.serverId || upload.localId,
           name: upload.name,
           size: upload.size,
-          type: upload.type
+          type: upload.type,
+          data_url: upload.previewUrl || ""
         };
       }),
       nonce: Math.random()

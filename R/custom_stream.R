@@ -1,8 +1,7 @@
 ullme_custom_stream_supported = function(app=getApp(), task_profile="") {
   provider = paste0(app$api_config$provider %||% "")[1]
   identical(task_profile, "") &&
-    provider %in% c("nvidia", "local") &&
-    !isTRUE(app$enable_ai_tools)
+    provider %in% c("nvidia", "local")
 }
 
 
@@ -17,7 +16,10 @@ ullme_custom_stream_system_prompt = function(context=list(),
   prompt = ullme_teacher_system_prompt(
     app=app,
     context=context,
-    tool_names=character(0)
+    tool_names=ullme_custom_stream_tool_names(
+      task_profile=task_profile,
+      app=app
+    )
   )
   if (!is.null(system_instructions) && nzchar(system_instructions)) {
     prompt = paste(prompt, system_instructions, sep="\n\n")
@@ -42,9 +44,212 @@ ullme_custom_stream_messages = function(input, system_prompt=NULL) {
 }
 
 
+ullme_custom_stream_upload_path = function(upload, app=getApp()) {
+  id = paste0(upload$id %||% "")[1]
+  if (!nzchar(id) || grepl("[^A-Za-z0-9._-]", id)) return(NULL)
+  root = app$uploads_dir %||% ""
+  if (!nzchar(root) || !dir.exists(root)) return(NULL)
+  candidates = list.files(
+    root,
+    recursive=TRUE,
+    full.names=TRUE,
+    all.files=FALSE,
+    no..=TRUE
+  )
+  if (!length(candidates)) return(NULL)
+  candidates = candidates[
+    file.exists(candidates) &
+      !dir.exists(candidates) &
+      startsWith(basename(candidates), paste0(id, "_"))
+  ]
+  if (!length(candidates)) return(NULL)
+  size = suppressWarnings(as.numeric(upload$size %||% NA_real_)[1])
+  if (!is.na(size)) {
+    sizes = suppressWarnings(file.info(candidates)$size)
+    matches = candidates[!is.na(sizes) & sizes == size]
+    if (length(matches)) candidates = matches
+  }
+  normalizePath(candidates[[length(candidates)]], winslash="/", mustWork=FALSE)
+}
+
+
+ullme_custom_stream_image_mime = function(upload, path) {
+  mime = paste0(upload$type %||% "")[1]
+  if (grepl("^image/[A-Za-z0-9.+-]+$", mime)) return(mime)
+  ext = tolower(tools::file_ext(path))
+  switch(
+    ext,
+    jpg="image/jpeg",
+    jpeg="image/jpeg",
+    png="image/png",
+    gif="image/gif",
+    webp="image/webp",
+    "image/png"
+  )
+}
+
+
+ullme_custom_stream_image_part = function(upload, app=getApp()) {
+  path = ullme_custom_stream_upload_path(upload, app=app)
+  if (is.null(path) || !file.exists(path) || dir.exists(path)) {
+    return(ullme_custom_stream_data_url_image_part(upload))
+  }
+  size = suppressWarnings(file.info(path)$size)
+  if (is.na(size) || size > 12 * 1024^2) {
+    stop("Uploaded image is too large for the custom stream backend.")
+  }
+  mime = ullme_custom_stream_image_mime(upload, path)
+  bytes = readBin(path, what="raw", n=size)
+  list(
+    type="image_url",
+    image_url=list(
+      url=paste0(
+        "data:",
+        mime,
+        ";base64,",
+        jsonlite::base64_enc(bytes)
+      )
+    )
+  )
+}
+
+
+ullme_custom_stream_data_url_image_part = function(upload) {
+  data_url = paste0(upload$data_url %||% "")[1]
+  if (!nzchar(data_url)) return(NULL)
+  if (!grepl(
+    "^data:image/(png|jpeg|jpg|gif|webp);base64,",
+    data_url,
+    ignore.case=TRUE
+  )) {
+    return(NULL)
+  }
+  if (nchar(data_url, type="bytes") > 16 * 1024^2) {
+    stop("Uploaded image is too large for the custom stream backend.")
+  }
+  list(
+    type="image_url",
+    image_url=list(url=data_url)
+  )
+}
+
+
+ullme_custom_stream_user_message = function(input, uploads=NULL,
+                                            app=getApp()) {
+  text = paste0(input, collapse="\n")
+  uploads = uploads %||% list()
+  if (!length(uploads)) {
+    return(list(role="user", content=text))
+  }
+  content = list()
+  if (nzchar(text) && !identical(text, "[uploaded image]")) {
+    content[[length(content) + 1L]] = list(type="text", text=text)
+  } else {
+    content[[length(content) + 1L]] = list(type="text", text="Please inspect the uploaded image.")
+  }
+  for (upload in uploads) {
+    image_part = ullme_custom_stream_image_part(upload, app=app)
+    if (!is.null(image_part)) content[[length(content) + 1L]] = image_part
+  }
+  list(role="user", content=content)
+}
+
+
+ullme_custom_stream_initial_messages = function(input, system_prompt=NULL,
+                                                uploads=NULL,
+                                                app=getApp()) {
+  messages = list()
+  if (!is.null(system_prompt) && nzchar(system_prompt)) {
+    messages[[length(messages) + 1L]] = list(
+      role="system",
+      content=system_prompt
+    )
+  }
+  messages[[length(messages) + 1L]] = ullme_custom_stream_user_message(
+    input=input,
+    uploads=uploads,
+    app=app
+  )
+  messages
+}
+
+
+ullme_custom_stream_tool_names = function(task_profile="", app=getApp()) {
+  if (!isTRUE(app$enable_ai_tools)) return(character(0))
+  if (!identical(app$role, "teacher")) return(character(0))
+  if (identical(task_profile, "instance_builder")) {
+    return("write_rtutor_instances_yaml")
+  }
+  names(ullme_tool_registry())
+}
+
+
+ullme_custom_stream_tool_arg_schema = function(arg_spec) {
+  schema_type = switch(
+    arg_spec$type,
+    string="string",
+    boolean="boolean",
+    number="number",
+    "string"
+  )
+  list(
+    type=schema_type,
+    description=arg_spec$description
+  )
+}
+
+
+ullme_custom_stream_tool_schema = function(name, app=getApp()) {
+  registry = ullme_tool_registry()
+  spec = registry[[name]]
+  if (is.null(spec)) stop("Unknown uLLMe tool: ", name)
+  implementation = get(
+    paste0("utool_", name),
+    envir=environment(ullme_tool),
+    inherits=FALSE
+  )
+  hidden = c("app", "userid", "teacherid")
+  args = setdiff(names(formals(implementation)), hidden)
+  arg_specs = ullme_tool_arg_spec(
+    args=args,
+    specs=spec$arguments %||% list()
+  )
+  properties = lapply(arg_specs, ullme_custom_stream_tool_arg_schema)
+  if (!length(properties)) {
+    properties = structure(list(), names=character(0))
+  }
+  required = names(Filter(function(value) isTRUE(value$required), arg_specs))
+  parameters = list(
+    type="object",
+    properties=properties,
+    additionalProperties=FALSE
+  )
+  if (length(required)) parameters$required = as.list(required)
+  list(
+    type="function",
+    `function`=list(
+      name=name,
+      description=spec$description,
+      parameters=parameters
+    )
+  )
+}
+
+
+ullme_custom_stream_tools = function(task_profile="", app=getApp()) {
+  tool_names = ullme_custom_stream_tool_names(
+    task_profile=task_profile,
+    app=app
+  )
+  lapply(tool_names, ullme_custom_stream_tool_schema, app=app)
+}
+
+
 ullme_custom_stream_body = function(input, model, context=list(),
                                     system_instructions=NULL,
                                     task_profile="",
+                                    messages=NULL,
+                                    uploads=NULL,
                                     app=getApp()) {
   system_prompt = ullme_custom_stream_system_prompt(
     context=context,
@@ -60,10 +265,13 @@ ullme_custom_stream_body = function(input, model, context=list(),
   body = c(
     list(
       model=model,
-      messages=ullme_custom_stream_messages(
-        input,
-        system_prompt=system_prompt
-      ),
+      messages=messages %||%
+        ullme_custom_stream_initial_messages(
+          input,
+          system_prompt=system_prompt,
+          uploads=uploads,
+          app=app
+        ),
       temperature=1,
       top_p=0.95,
       max_tokens=profile$max_tokens,
@@ -71,6 +279,11 @@ ullme_custom_stream_body = function(input, model, context=list(),
     ),
     profile$api_args
   )
+  tools = ullme_custom_stream_tools(task_profile=task_profile, app=app)
+  if (length(tools)) {
+    body$tools = tools
+    body$tool_choice = "auto"
+  }
   body
 }
 
@@ -110,6 +323,199 @@ ullme_custom_stream_extract_delta = function(event) {
 }
 
 
+ullme_custom_stream_tool_index = function(call) {
+  index = suppressWarnings(as.integer(call$index %||% NA_integer_)[1])
+  if (is.na(index)) index = 0L
+  paste0(index)
+}
+
+
+ullme_custom_stream_accumulate_tool_calls = function(event, state) {
+  choices = event$choices %||% list()
+  if (!length(choices)) return(invisible(FALSE))
+  choice = choices[[1]]
+  delta = choice$delta %||% list()
+  calls = delta$tool_calls %||% list()
+  if (!length(calls)) return(invisible(FALSE))
+  if (is.null(state$tool_calls)) state$tool_calls = list()
+  for (call in calls) {
+    key = ullme_custom_stream_tool_index(call)
+    existing = state$tool_calls[[key]] %||% list(
+      index=suppressWarnings(as.integer(key)),
+      id="",
+      type="function",
+      `function`=list(name="", arguments="")
+    )
+    if (nzchar(paste0(call$id %||% "")[1])) {
+      existing$id = paste0(call$id)[1]
+    }
+    if (nzchar(paste0(call$type %||% "")[1])) {
+      existing$type = paste0(call$type)[1]
+    }
+    fn = call$`function` %||% list()
+    if (nzchar(paste0(fn$name %||% "")[1])) {
+      existing$`function`$name = paste0(fn$name)[1]
+    }
+    if (nzchar(paste0(fn$arguments %||% "")[1])) {
+      existing$`function`$arguments = paste0(
+        existing$`function`$arguments %||% "",
+        paste0(fn$arguments, collapse="")
+      )
+    }
+    state$tool_calls[[key]] = existing
+  }
+  invisible(TRUE)
+}
+
+
+ullme_custom_stream_normalize_tool_calls = function(tool_calls) {
+  if (!length(tool_calls)) return(list())
+  calls = tool_calls[order(as.integer(names(tool_calls)))]
+  lapply(calls, function(call) {
+    call$index = NULL
+    call$type = call$type %||% "function"
+    call
+  })
+}
+
+
+ullme_custom_stream_tool_args = function(call) {
+  text = paste0(call$`function`$arguments %||% "")[1]
+  if (!nzchar(trimws(text))) return(list())
+  parsed = jsonlite::fromJSON(text, simplifyVector=FALSE)
+  if (!is.list(parsed)) return(list())
+  parsed
+}
+
+
+ullme_custom_stream_tool_request_event = function(call, app=getApp()) {
+  request = app$active_chat_request
+  if (is.null(request) || !isTRUE(request$active)) return(invisible(FALSE))
+  record = list(
+    event="request",
+    call_id=paste0(call$id %||% "")[1],
+    tool=paste0(call$`function`$name %||% "unknown_tool")[1],
+    arguments=tryCatch(
+      ullme_custom_stream_tool_args(call),
+      error=function(e) paste0(call$`function`$arguments %||% "")[1]
+    ),
+    at=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
+  )
+  request$received_provider_output = TRUE
+  ullme_ai_interaction_tool_event(
+    request$interaction_dir,
+    record,
+    request=request
+  )
+  tool_label = gsub("_", " ", record$tool, fixed=TRUE)
+  ullme_send_tool_activity(
+    request,
+    activity=paste0("Running ", tool_label, "..."),
+    app=app
+  )
+  invisible(TRUE)
+}
+
+
+ullme_custom_stream_tool_result_event = function(call, result, app=getApp()) {
+  request = app$active_chat_request
+  if (is.null(request) || !isTRUE(request$active)) return(invisible(FALSE))
+  status = if (is.list(result)) {
+    paste0(result$status %||% "")[1]
+  } else {
+    ""
+  }
+  if (!nzchar(status)) status = "completed"
+  record = list(
+    event="result",
+    call_id=paste0(call$id %||% "")[1],
+    tool=paste0(call$`function`$name %||% "unknown_tool")[1],
+    status=status,
+    value=ullme_tool_trace_value(result),
+    at=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
+  )
+  ullme_ai_interaction_tool_event(
+    request$interaction_dir,
+    record,
+    request=request
+  )
+  tool_label = gsub("_", " ", record$tool, fixed=TRUE)
+  activity = if (status %in% c(
+    "error", "rejected", "denied", "cancelled", "failed"
+  )) {
+    paste0("The ", tool_label, " tool failed. Continuing...")
+  } else {
+    paste0("Finished ", tool_label, ". Continuing...")
+  }
+  ullme_send_tool_activity(request, activity=activity, app=app)
+  invisible(TRUE)
+}
+
+
+ullme_custom_stream_execute_tool = function(call, app=getApp()) {
+  name = paste0(call$`function`$name %||% "")[1]
+  registry = ullme_tool_registry()
+  spec = registry[[name]]
+  if (is.null(spec)) {
+    return(list(ok=FALSE, status="error", message=paste0(
+      "Unknown uLLMe tool: ",
+      name
+    )))
+  }
+  args = tryCatch(
+    ullme_custom_stream_tool_args(call),
+    error=function(e) {
+      list(.parse_error=conditionMessage(e))
+    }
+  )
+  if (!is.null(args$.parse_error)) {
+    return(list(ok=FALSE, status="error", message=paste0(
+      "Could not parse tool arguments: ",
+      args$.parse_error
+    )))
+  }
+  implementation = get(
+    paste0("utool_", name),
+    envir=environment(ullme_tool),
+    inherits=FALSE
+  )
+  ullme_custom_stream_tool_request_event(call, app=app)
+  result = ullme_execute_tool(
+    implementation=implementation,
+    args=args,
+    perm=spec$perm,
+    app=app
+  )
+  wrap_result = function(value) {
+    ullme_custom_stream_tool_result_event(call, value, app=app)
+    value
+  }
+  if (inherits(result, "promise")) {
+    return(promises::then(result, onFulfilled=wrap_result))
+  }
+  wrap_result(result)
+}
+
+
+ullme_custom_stream_tool_result_message = function(call, result) {
+  content = tryCatch(
+    paste0(jsonlite::toJSON(result, auto_unbox=TRUE, null="null", digits=NA)),
+    error=function(e) paste0(result, collapse="\n")
+  )
+  list(
+    role="tool",
+    tool_call_id=paste0(call$id %||% "")[1],
+    name=paste0(call$`function`$name %||% "")[1],
+    content=content
+  )
+}
+
+
+ullme_custom_stream_promise_value = function(value) {
+  promises::promise(function(resolve, reject) resolve(value))
+}
+
+
 ullme_custom_stream_process_event = function(payload, state, on_update,
                                              include_thinking=FALSE,
                                              app=getApp()) {
@@ -127,6 +533,7 @@ ullme_custom_stream_process_event = function(payload, state, on_update,
     }
   )
   if (is.null(event)) return(invisible(FALSE))
+  ullme_custom_stream_accumulate_tool_calls(event, state)
   delta = ullme_custom_stream_extract_delta(event)
   changed = FALSE
   if (nzchar(delta$text)) {
@@ -198,6 +605,7 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
                                         system_instructions=NULL,
                                         include_thinking=FALSE,
                                         task_profile="",
+                                        uploads=NULL,
                                         on_update=function(...) NULL,
                                         on_event=function(...) NULL,
                                         app=getApp()) {
@@ -210,7 +618,7 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
   if (!ullme_custom_stream_supported(app=app, task_profile=task_profile)) {
     stop(
       "The custom stream backend currently supports only ordinary ",
-      "OpenAI-compatible chat without AI tools."
+      "OpenAI-compatible chat."
     )
   }
   model = ullme_model_id(model, app=app)
@@ -230,38 +638,27 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
   state$seen_done = FALSE
   state$parse_errors = character(0)
   state$chunk_count = 0L
+  state$request_count = 0L
+  state$tool_calls = list()
   state$active = TRUE
   state$settled = FALSE
 
   config = app$api_config
   url = paste0(sub("/+$", "", config$base_url), "/chat/completions")
-  body = ullme_custom_stream_body(
-    input=input,
-    model=model,
+  system_prompt = ullme_custom_stream_system_prompt(
     context=context,
     system_instructions=system_instructions,
     task_profile=task_profile,
     app=app
   )
-  body_json = jsonlite::toJSON(
-    body,
-    auto_unbox=TRUE,
-    null="null",
-    digits=NA
-  )
-  handle = curl::new_handle(url=url)
-  curl::handle_setopt(
-    handle,
-    customrequest="POST",
-    postfields=body_json,
-    connecttimeout=app$chat_connect_timeout_seconds %||% 60,
-    timeout=app$chat_timeout_seconds %||% 180
-  )
-  curl::handle_setheaders(
-    handle,
-    .list=ullme_custom_stream_headers(config)
+  state$messages = ullme_custom_stream_initial_messages(
+    input=input,
+    system_prompt=system_prompt,
+    uploads=uploads,
+    app=app
   )
   pool = curl::new_pool(total_con=1, host_con=1, max_streams=1)
+  current_handle = NULL
   reject_promise = NULL
 
   controller = list()
@@ -269,7 +666,9 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
     if (isTRUE(state$settled)) return(invisible(FALSE))
     state$active = FALSE
     state$settled = TRUE
-    try(curl::multi_cancel(handle), silent=TRUE)
+    if (!is.null(current_handle)) {
+      try(curl::multi_cancel(current_handle), silent=TRUE)
+    }
     if (!is.null(reject_promise)) {
       reject_promise(simpleError(paste0(reason %||% "Request cancelled")))
     }
@@ -292,71 +691,178 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
       reject(simpleError(message))
       invisible(NULL)
     }
-    data_callback = function(data, final=FALSE) {
-      if (!isTRUE(state$active)) return(invisible(NULL))
-      if (length(data)) {
-        state$chunk_count = state$chunk_count + 1L
-        text = rawToChar(data)
-        state$raw = paste0(state$raw, text)
-        state$buffer = paste0(state$buffer, text)
-        ullme_chat_debug(
-          app,
-          "custom stream chunk #", state$chunk_count,
-          " bytes=", length(data)
-        )
-        ullme_custom_stream_process_buffer(
-          state,
-          on_update=on_update,
-          include_thinking=include_thinking,
-          app=app
-        )
-      }
-      invisible(NULL)
-    }
-    done_callback = function(response) {
-      status = suppressWarnings(as.integer(response$status %||% 0L))
-      ullme_chat_debug(
-        app,
-        "custom stream done status=", status,
-        " chunks=", state$chunk_count,
-        " text_bytes=", nchar(state$text, type="bytes")
-      )
-      if (status >= 300L || status < 200L) {
-        message = paste0(
-          "Custom stream request failed with HTTP status ",
-          status,
-          "."
-        )
-        if (nzchar(state$raw)) {
-          message = paste(message, substr(state$raw, 1L, 1000L))
-        }
-        settle_error(message)
+    start_request = NULL
+    continue_after_tools = function(calls) {
+      if (!isTRUE(state$active) || isTRUE(state$settled)) {
         return(invisible(NULL))
       }
-      if (nzchar(state$buffer)) {
-        state$buffer = paste0(state$buffer, "\n")
-        ullme_custom_stream_process_buffer(
-          state,
-          on_update=on_update,
-          include_thinking=include_thinking,
-          app=app
-        )
-      }
-      on_update(state$text, state$thinking, TRUE)
-      settle_ok(list(text=state$text, thinking=state$thinking))
+      assistant_message = list(
+        role="assistant",
+        content=if (nzchar(state$current_text %||% "")) {
+          state$current_text
+        } else {
+          NULL
+        },
+        tool_calls=ullme_custom_stream_normalize_tool_calls(calls)
+      )
+      state$messages[[length(state$messages) + 1L]] = assistant_message
+      tool_promises = lapply(assistant_message$tool_calls, function(call) {
+        result = ullme_custom_stream_execute_tool(call, app=app)
+        if (inherits(result, "promise")) return(result)
+        ullme_custom_stream_promise_value(result)
+      })
+      promises::then(
+        promises::promise_all(.list=tool_promises),
+        onFulfilled=function(results) {
+          for (i in seq_along(assistant_message$tool_calls)) {
+            state$messages[[length(state$messages) + 1L]] =
+              ullme_custom_stream_tool_result_message(
+                assistant_message$tool_calls[[i]],
+                results[[i]]
+              )
+          }
+          start_request()
+          invisible(NULL)
+        },
+        onRejected=function(error) {
+          settle_error(conditionMessage(error))
+          invisible(NULL)
+        }
+      )
       invisible(NULL)
     }
-    fail_callback = function(message) {
-      ullme_chat_debug(app, "custom stream failed message=", message)
-      settle_error(paste0(message)[1])
+    start_request = function() {
+      if (!isTRUE(state$active) || isTRUE(state$settled)) {
+        return(invisible(NULL))
+      }
+      state$request_count = state$request_count + 1L
+      state$buffer = ""
+      state$raw = ""
+      state$current_text = ""
+      state$tool_calls = list()
+      body = ullme_custom_stream_body(
+        input=input,
+        model=model,
+        context=context,
+        system_instructions=system_instructions,
+        task_profile=task_profile,
+        messages=state$messages,
+        uploads=uploads,
+        app=app
+      )
+      body_json = jsonlite::toJSON(
+        body,
+        auto_unbox=TRUE,
+        null="null",
+        digits=NA
+      )
+      handle = curl::new_handle(url=url)
+      current_handle <<- handle
+      curl::handle_setopt(
+        handle,
+        customrequest="POST",
+        postfields=body_json,
+        connecttimeout=app$chat_connect_timeout_seconds %||% 60,
+        timeout=app$chat_timeout_seconds %||% 180
+      )
+      curl::handle_setheaders(
+        handle,
+        .list=ullme_custom_stream_headers(config)
+      )
+      data_callback = function(data, final=FALSE) {
+        if (!isTRUE(state$active)) return(invisible(NULL))
+        if (length(data)) {
+          state$chunk_count = state$chunk_count + 1L
+          text = rawToChar(data)
+          state$raw = paste0(state$raw, text)
+          state$buffer = paste0(state$buffer, text)
+          ullme_chat_debug(
+            app,
+            "custom stream chunk #", state$chunk_count,
+            " request=", state$request_count,
+            " bytes=", length(data)
+          )
+          before_text = state$text
+          ullme_custom_stream_process_buffer(
+            state,
+            on_update=on_update,
+            include_thinking=include_thinking,
+            app=app
+          )
+          if (!identical(before_text, state$text)) {
+            state$current_text = paste0(
+              state$current_text,
+              substring(state$text, nchar(before_text) + 1L)
+            )
+          }
+        }
+        invisible(NULL)
+      }
+      done_callback = function(response) {
+        status = suppressWarnings(as.integer(
+          response$status_code %||% response$status %||% 0L
+        ))
+        ullme_chat_debug(
+          app,
+          "custom stream done status=", status,
+          " request=", state$request_count,
+          " chunks=", state$chunk_count,
+          " text_bytes=", nchar(state$text, type="bytes"),
+          " tool_calls=", length(state$tool_calls)
+        )
+        if (status >= 300L || status < 200L) {
+          message = paste0(
+            "Custom stream request failed with HTTP status ",
+            status,
+            "."
+          )
+          if (nzchar(state$raw)) {
+            message = paste(message, substr(state$raw, 1L, 1000L))
+          }
+          settle_error(message)
+          return(invisible(NULL))
+        }
+        if (nzchar(state$buffer)) {
+          before_text = state$text
+          state$buffer = paste0(state$buffer, "\n")
+          ullme_custom_stream_process_buffer(
+            state,
+            on_update=on_update,
+            include_thinking=include_thinking,
+            app=app
+          )
+          if (!identical(before_text, state$text)) {
+            state$current_text = paste0(
+              state$current_text,
+              substring(state$text, nchar(before_text) + 1L)
+            )
+          }
+        }
+        if (length(state$tool_calls)) {
+          continue_after_tools(state$tool_calls)
+          return(invisible(NULL))
+        }
+        state$messages[[length(state$messages) + 1L]] = list(
+          role="assistant",
+          content=state$current_text
+        )
+        on_update(state$text, state$thinking, TRUE)
+        settle_ok(list(text=state$text, thinking=state$thinking))
+        invisible(NULL)
+      }
+      fail_callback = function(message) {
+        ullme_chat_debug(app, "custom stream failed message=", message)
+        settle_error(paste0(message)[1])
+      }
+      curl::multi_add(
+        handle,
+        done=done_callback,
+        fail=fail_callback,
+        data=data_callback,
+        pool=pool
+      )
+      invisible(TRUE)
     }
-    curl::multi_add(
-      handle,
-      done=done_callback,
-      fail=fail_callback,
-      data=data_callback,
-      pool=pool
-    )
     pump = NULL
     pump = function() {
       if (!isTRUE(state$active) || isTRUE(state$settled)) {
@@ -371,6 +877,7 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
       }
       invisible(NULL)
     }
+    start_request()
     later::later(pump, delay=0)
   })
   ullme_chat_debug(app, "start_custom_ai_stream after schedule")
