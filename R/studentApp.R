@@ -482,7 +482,6 @@ ullme_student_system_prompt = function(app=getApp()) {
 
 
 ullme_student_chat = function(model=NULL, app=getApp()) {
-  restore.point("ullme_student_chat")
   model = ullme_model_id(model, app=app)
   prompt = ullme_student_system_prompt(app=app)
   key = ullme_chat_key(model, task_profile="student_tutor", app=app)

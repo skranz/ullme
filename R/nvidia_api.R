@@ -160,8 +160,7 @@ ullme_nvidia_chat_profile = function(model, task_profile="") {
     return(list(
       max_tokens=16384,
       api_args=list(
-        chat_template_kwargs=list(enable_thinking=TRUE),
-        reasoning_budget=16384
+        chat_template_kwargs=list(enable_thinking=FALSE)
       )
     ))
   }
@@ -174,7 +173,6 @@ ullme_nvidia_chat = function(model=ullme_nvidia_default_model(),
                               base_url=ullme_nvidia_base_url(),
                               system_prompt=NULL,
                               task_profile="") {
-  restore.point("ullme_nvidia_chat")
   profile = ullme_nvidia_chat_profile(model, task_profile=task_profile)
   ellmer::chat_openai_compatible(
     base_url=sub("/+$", "", base_url),
@@ -196,7 +194,6 @@ ullme_nvidia_chat = function(model=ullme_nvidia_default_model(),
 
 ullme_api_chat = function(config, model=config$model, system_prompt=NULL,
                            task_profile="") {
-  restore.point("ullme_api_chat")
   if (identical(config$provider, "fake")) return(NULL)
   if (identical(config$provider, "nvidia")) {
     return(ullme_nvidia_chat(

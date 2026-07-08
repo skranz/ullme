@@ -49,7 +49,6 @@ ullme_ai_connection_status = function(model=NULL, waiting=FALSE,
 
 ullme_await_promise = function(promise, seconds=180,
                                 on_timeout=function() NULL) {
-  restore.point("ullme_await_promise")
   seconds = suppressWarnings(as.numeric(seconds)[1])
   if (is.na(seconds) || seconds <= 0) stop("seconds must be positive.")
   settled = FALSE
@@ -88,7 +87,6 @@ ullme_await_promise = function(promise, seconds=180,
 
 ullme_promise_timeout = function(promise, seconds=180,
                                   is_paused=function() FALSE) {
-  restore.point("ullme_promise_timeout")
   seconds = suppressWarnings(as.numeric(seconds)[1])
   if (is.na(seconds) || seconds <= 0) return(promise)
   promises::promise(function(resolve, reject) {
@@ -139,7 +137,6 @@ ullme_promise_timeout = function(promise, seconds=180,
 
 ullme_teacher_chat = function(model=NULL, system_prompt=NULL,
                                task_profile="", app=getApp()) {
-  restore.point("ullme_teacher_chat")
   config = app$api_config
   model = ullme_model_id(model, app=app)
   key = ullme_chat_key(model, task_profile=task_profile, app=app)
@@ -174,7 +171,6 @@ ullme_teacher_chat = function(model=NULL, system_prompt=NULL,
 
 ullme_ask_ai = function(input, model=NULL, context=list(),
                          system_instructions=NULL, app=getApp()) {
-  restore.point("ullme_ask_ai")
   if (ullme_uses_fake_ai(app=app)) {
     return(paste0("Fake AI answer to:\n", input))
   }
@@ -395,7 +391,6 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
                                   on_update=function(...) NULL,
                                   on_event=function(...) NULL,
                                   app=getApp()) {
-  restore.point("ullme_start_ai_stream")
   chat = ullme_ai_request_chat(
     model=model,
     context=context,
@@ -403,7 +398,7 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     task_profile=task_profile,
     app=app
   )
-  usage_start = ullme_chat_usage_snapshot(chat)
+  usage_start = ullme_chat_usage_snapshot(NULL)
   controller = ellmer::stream_controller()
   stream_args = list(
     input,
@@ -465,7 +460,6 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
                                 system_instructions=NULL,
                                 task_profile="",
                                 app=getApp()) {
-  restore.point("ullme_start_ai_chat")
   chat = ullme_ai_request_chat(
     model=model,
     context=context,
@@ -473,7 +467,7 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
     task_profile=task_profile,
     app=app
   )
-  usage_start = ullme_chat_usage_snapshot(chat)
+  usage_start = ullme_chat_usage_snapshot(NULL)
   chat_args = list(input)
   if (identical(app$role, "teacher")) {
     chat_args$tool_mode = "sequential"
@@ -487,7 +481,6 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
 
 
 ullme_chat_last_thinking = function(chat) {
-  restore.point("ullme_chat_last_thinking")
   turn = tryCatch(chat$last_turn(), error=function(e) NULL)
   contents = tryCatch(turn@contents, error=function(e) list())
   thinking = vapply(contents, function(content) {
@@ -499,7 +492,6 @@ ullme_chat_last_thinking = function(chat) {
 
 
 ullme_task_chat = function(system_prompt, model=NULL, app=getApp()) {
-  restore.point("ullme_task_chat")
   config = app$api_config
   model = ullme_model_id(model, app=app)
   ullme_api_chat(config, model=model, system_prompt=system_prompt)
