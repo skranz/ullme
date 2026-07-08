@@ -1,5 +1,11 @@
 # uLLMe Architecture
 
+## Scratch Files
+
+`my_prompt.Rmd` and `ai_resp.md` are temporary files used to interact with
+other AI tools. Ignore them during repository changes; they never need to be
+read, updated, or kept in sync with source files.
+
 ## Runtime And State Ownership
 
 uLLMe is an R package built on Shiny and shinyEvents. `teacherApp()` and
@@ -251,14 +257,9 @@ Its logical structure is:
 ```yaml
 courseid: Umwelt
 coursename: Umweltökonomik
-times:
-  - weekday: monday
-    start: "10:00"
-    end: "12:00"
 ```
 
-Up to three time slots are retained. Settings are normalized before writing,
-and missing `times` become an empty list.
+Settings are normalized before writing.
 
 The intended JSON Schema, expressed as YAML, is stored at:
 
@@ -266,10 +267,7 @@ The intended JSON Schema, expressed as YAML, is stored at:
 inst/specs/course.schema.yaml
 ```
 
-Runtime YAML reads and writes do not currently invoke schema validation. There
-is also a known contract mismatch to resolve before enabling validation: the UI
-writes full lowercase weekday names such as `monday`, while the schema
-currently enumerates two-letter values such as `mo`.
+Runtime YAML reads and writes do not currently invoke schema validation.
 
 ## Temporary directories
 
@@ -281,33 +279,35 @@ links or tree entries resolving outside that exact temporary directory.
 
 Non-temporary user paths scheduled for deletion are first checked against the
 user's authorized roots and atomically moved into one of these guarded
-temporary directories. The guarded temporary-directory remover is the only
-place where recursive `unlink()` is called.
+temporary directories. Do not add direct `unlink` calls in application code,
+tests, examples, or documentation snippets. Directory-tree removal must go
+through checked helper functions such as `ullme_remove_tempdir()`,
+`ullme_remove_course_dir()`, `ullme_remove_teacher_dir()`, or the lower-level
+`ullme_remove_checked_directory()` wrapper.
 
 ## Materials
 
 Each course stores material below one common root:
 
 ```text
-<course-dir>/materials/general
+<course-dir>/materials
 <course-dir>/materials/slides
 <course-dir>/materials/ps
-<course-dir>/materials/quiz
-<course-dir>/materials/background
 ```
 
-`general` is the destination for material that has not yet been classified.
-Existing files found in legacy top-level category directories are copied into
-the corresponding new directory when material storage is initialized.
+New courses create only `slides` and `ps` below the root by default. Existing
+files found in legacy top-level category directories are copied into the
+corresponding material subdirectory when material storage is initialized.
 
-The Materials tab renders these categories and their subdirectories as a file
+The Materials tab renders material folders and files as a file
 tree. Clicking the Name or Modified heading sorts siblings and toggles the sort
-direction. Folder checkboxes select their descendant files. Selected files can
-be dragged onto another folder to move them, while files or complete folder
-trees dragged from the local computer onto a folder are uploaded directly into
-that directory. Folder traversal preserves nested and empty directories. Compact
-move, copy, and delete controls remain available as keyboard-friendly
-alternatives.
+direction. Folder checkboxes select descendant files; empty folder checkboxes
+select the folder itself so it can be deleted. Selected files can be dragged
+onto another folder to move them, while files or complete folder trees dragged
+from the local computer onto a folder are uploaded directly into that directory.
+Drops on the material file area itself upload into the main `materials` root.
+Folder traversal preserves nested and empty directories. Compact move, copy,
+and delete controls remain available as keyboard-friendly alternatives.
 
 `inst/www/ullme-materials.js` owns pointer and drag gestures for the tree:
 rectangle selection (with Ctrl/Cmd additive selection), multi-file dragging,
@@ -321,24 +321,22 @@ directory to `delete_material_file()`, `move_material_file()`,
 Those helpers derive the material root from the active app and course,
 canonicalize it, reject absolute and parent paths,
 check existing ancestors (including resolved links), and re-check containment
-before changing the filesystem. The delete helper accepts files only and does
-not provide recursive directory deletion.
+before changing the filesystem. Batch deletion accepts files and empty
+directories, but never the `materials` root and never recursively deletes a
+non-empty directory.
 
 The browser supports the upload icon, clicking the drop area, and drag and
-drop. The selected category determines which hidden Shiny file input receives
-the files. After R stores an upload, it refreshes course state and calls
+drop. The selected destination determines which hidden Shiny file input receives
+the files, with a dedicated root input for `materials` itself. After R stores an
+upload, it refreshes course state and calls
 `window.ullme.materialUploadComplete(...)`; the browser then clears both the
 DOM file input and its Shiny value so later uploads are treated as new input.
 
 Normal files are copied with cleaned filenames. German filename characters are
 transliterated (`Ü` to `Ue`, `ä` to `ae`, `ß` to `ss`, and so on) before the
 ASCII safety filter is applied. ZIP files are unpacked into the
-selected category. ZIP entries with absolute paths or parent-directory
+selected destination. ZIP entries with absolute paths or parent-directory
 traversal are rejected.
-
-Deletion accepts a category and relative path. R rejects absolute paths and
-parent traversal, normalizes the target, verifies that it remains inside the
-category directory, and only then deletes the file.
 
 `teacherApp(max_upload_mb=100)` and `studentApp(max_upload_mb=100)` raise
 Shiny's process-wide request-size option

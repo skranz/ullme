@@ -76,31 +76,6 @@ ullme_validate_course_value = function(course) {
   coursename = paste0(course$coursename %||% "")[1]
   if (!nzchar(trimws(coursename))) warnings = c(warnings, "coursename is empty.")
 
-  times = course$times %||% list()
-  if (!is.list(times)) {
-    errors = c(errors, "times must be a list.")
-  } else {
-    if (length(times) > 3) errors = c(errors, "times may contain at most three entries.")
-    valid_days = c("monday", "tuesday", "wednesday", "thursday", "friday",
-                   "saturday", "sunday", "mo", "tu", "we", "th", "fr", "sa", "su")
-    for (i in seq_along(times)) {
-      item = times[[i]]
-      if (!is.list(item)) {
-        errors = c(errors, paste0("times[", i, "] must be a mapping."))
-        next
-      }
-      day = tolower(paste0(item$weekday %||% "")[1])
-      start = paste0(item$start %||% "")[1]
-      end = paste0(item$end %||% "")[1]
-      if (!day %in% valid_days) errors = c(errors, paste0("times[", i, "].weekday is invalid."))
-      time_pattern = "^([01][0-9]|2[0-3]):[0-5][0-9]$"
-      if (!grepl(time_pattern, start)) errors = c(errors, paste0("times[", i, "].start must use HH:MM."))
-      if (!grepl(time_pattern, end)) errors = c(errors, paste0("times[", i, "].end must use HH:MM."))
-      if (grepl(time_pattern, start) && grepl(time_pattern, end) && start >= end) {
-        errors = c(errors, paste0("times[", i, "] must end after it starts."))
-      }
-    }
-  }
   ullme_validation_result(length(errors) == 0, errors, warnings, course)
 }
 

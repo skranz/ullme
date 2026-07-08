@@ -208,4 +208,9 @@ missing_result = try(
 )
 stopifnot(inherits(missing_result, "try-error"))
 
-unlink(main_dir, recursive=TRUE)
+ullme_remove_checked_directory(
+  main_dir,
+  root=dirname(main_dir),
+  expected_name=basename(main_dir),
+  label="student app test directory"
+)

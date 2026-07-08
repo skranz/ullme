@@ -179,8 +179,8 @@ ullme_teacherid = function(app=getApp()) {
   } else {
     app$courseids = if (is.null(app$courseid)) character(0) else app$courseid
   }
-  app$material_category = "general"
-  app$material_upload_directory = "general"
+  app$material_category = "root"
+  app$material_upload_directory = ""
   app$material_upload_tree = NULL
   app$active_skillid = ""
 
@@ -219,22 +219,26 @@ ullme_add_resource_paths = function(app=getApp()) {
 
   existing = shiny::resourcePaths()
   add_path = function(prefix, directory) {
-    if (prefix %in% names(existing)) {
-      existing_path = normalizePath(
-        existing[[prefix]],
-        winslash="/",
-        mustWork=FALSE
-      )
-      requested_path = normalizePath(
-        directory,
-        winslash="/",
-        mustWork=FALSE
-      )
-      if (!identical(existing_path, requested_path)) {
-        stop("The resource prefix ", prefix, " is already in use.")
-      }
-      return(invisible(FALSE))
-    }
+    # Don't make these checks throws error if add is started
+    # multiple times
+
+    # if (prefix %in% names(existing)) {
+    #   existing_path = normalizePath(
+    #     existing[[prefix]],
+    #     winslash="/",
+    #     mustWork=FALSE
+    #   )
+    #   requested_path = normalizePath(
+    #     directory,
+    #     winslash="/",
+    #     mustWork=FALSE
+    #   )
+    #
+    #   #if (!identical(existing_path, requested_path)) {
+    #   #  stop("The resource prefix ", prefix, " is already in use.")
+    #   #}
+    #   return(invisible(FALSE))
+    # }
     shiny::addResourcePath(prefix=prefix, directoryPath=directory)
     existing[[prefix]] <<- directory
     invisible(TRUE)
@@ -330,7 +334,7 @@ ullme_register_handlers = function(app=getApp()) {
     ullme_register_audio_handlers(app=app)
     return(invisible(TRUE))
   }
-  lapply(ullme_course_material_categories(), function(category) {
+  lapply(c("root", ullme_course_material_categories()), function(category) {
     changeHandler(
       id = paste0("ullme_material_upload_", category),
       fun = ullme_handle_material_upload,
@@ -567,7 +571,7 @@ ullme_app_ui = function(app=getApp()) {
             type = "file",
             accept = ".zip,application/zip"
           ),
-          lapply(ullme_course_material_categories(), function(category) {
+          lapply(c("root", ullme_course_material_categories()), function(category) {
             tags$input(
               id = paste0("ullme_material_upload_", category),
               class = "ullme-file-input ullme-material-file-input",
@@ -910,12 +914,6 @@ ullme_course_settings_ui = function(app=getApp()) {
           tags$input(id="ullme_settings_coursename", type="text")
         )
       ),
-      tags$div(class="ullme-field-label", "Times"),
-      tags$div(
-        id = "ullme_course_times",
-        class = "ullme-times-grid",
-        lapply(seq_len(3), function(i) ullme_time_slot_ui(i))
-      ),
       tags$button(
         id = "ullme_course_settings_save",
         class = "ullme-primary-action",
@@ -923,26 +921,6 @@ ullme_course_settings_ui = function(app=getApp()) {
         "Save"
       )
     )
-  )
-}
-
-
-ullme_time_slot_ui = function(i) {
-  restore.point("ullme_time_slot_ui")
-  tags$div(
-    class = "ullme-time-slot",
-    `data-slot` = i,
-    tags$select(
-      class = "ullme-time-weekday",
-      `aria-label` = paste("Weekday", i),
-      tags$option(value="", ""),
-      lapply(
-        c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"),
-        function(day) tags$option(value=day, ullme_title_case(day))
-      )
-    ),
-    tags$input(class="ullme-time-start", type="time", `aria-label`=paste("Start time", i)),
-    tags$input(class="ullme-time-end", type="time", `aria-label`=paste("End time", i))
   )
 }
 
@@ -1368,7 +1346,7 @@ ullme_handle_course_select = function(courseid=NULL, app=getApp(), ...) {
 }
 
 
-ullme_handle_add_course = function(courseid=NULL, coursename="", times=NULL, app=getApp(), ...) {
+ullme_handle_add_course = function(courseid=NULL, coursename="", app=getApp(), ...) {
   restore.point("ullme_handle_add_course")
   if (!app$role %in% c("teacher", "student")) return(invisible(NULL))
   courseid = tryCatch(ullme_clean_courseid(courseid), error=function(e) "")
@@ -1379,7 +1357,6 @@ ullme_handle_add_course = function(courseid=NULL, coursename="", times=NULL, app
       ullme_create_teacher_course(
         courseid=courseid,
         coursename=coursename,
-        times=times,
         app=app
       ),
       error=function(e) NULL
@@ -1403,10 +1380,10 @@ ullme_handle_add_course = function(courseid=NULL, coursename="", times=NULL, app
 }
 
 
-ullme_handle_course_settings_save = function(coursename="", times=NULL, app=getApp(), ...) {
+ullme_handle_course_settings_save = function(coursename="", app=getApp(), ...) {
   restore.point("ullme_handle_course_settings_save")
   if (is.null(app$courseid) || !nzchar(app$courseid)) return(invisible(NULL))
-  course = list(courseid=app$courseid, coursename=coursename, times=times)
+  course = list(courseid=app$courseid, coursename=coursename)
   ullme_save_course_settings(app=app, course=course)
   ullme_send_course_state(app=app)
   invisible(course)
@@ -1416,13 +1393,17 @@ ullme_handle_course_settings_save = function(coursename="", times=NULL, app=getA
 ullme_handle_material_category = function(category="general", app=getApp(), ...) {
   restore.point("ullme_handle_material_category")
   category = paste0(category)[1]
+  if (identical(category, "root")) {
+    app$material_category = "root"
+    return(invisible(app$material_category))
+  }
   if (!category %in% ullme_course_material_categories()) return(invisible(NULL))
   app$material_category = category
   invisible(app$material_category)
 }
 
 
-ullme_handle_material_upload_destination = function(path="general", tree=NULL,
+ullme_handle_material_upload_destination = function(path="", tree=NULL,
                                                      app=getApp(), ...) {
   restore.point("ullme_handle_material_upload_destination")
   app$material_upload_directory = ""
@@ -1431,13 +1412,23 @@ ullme_handle_material_upload_destination = function(path="general", tree=NULL,
   result = tryCatch({
     course_dir = ullme_active_course_dir(app=app)
     if (is.null(course_dir)) stop("Select a course first.")
-    path = .ullme_material_relative_path(path)
-    category = strsplit(path, "/", fixed=TRUE)[[1]][[1]]
-    if (!category %in% ullme_course_material_categories()) {
+    path = .ullme_material_relative_path(path, allow_root=TRUE)
+    category = if (nzchar(path)) {
+      strsplit(path, "/", fixed=TRUE)[[1]][[1]]
+    } else {
+      "root"
+    }
+    if (!identical(category, "root") &&
+        !category %in% ullme_course_material_categories()) {
       stop("Invalid material upload category.")
     }
     material_dir = file.path(course_dir, "materials")
-    target = .ullme_material_path(material_dir, path, must_exist=TRUE)
+    target = .ullme_material_path(
+      material_dir,
+      path,
+      must_exist=TRUE,
+      allow_root=TRUE
+    )
     if (!dir.exists(target)) stop("The material upload destination is not a directory.")
     app$material_category = category
     app$material_upload_directory = path
@@ -1466,19 +1457,31 @@ ullme_handle_material_upload = function(id, value, app=getApp(), ...) {
   restore.point("ullme_handle_material_upload")
   if (is.null(value) || NROW(value) == 0) return(invisible(NULL))
   category = sub("^ullme_material_upload_", "", paste0(id)[1])
-  if (!category %in% ullme_course_material_categories()) category = app$material_category
-  if (is.null(category) || !category %in% ullme_course_material_categories()) category = "general"
+  if (!identical(category, "root") &&
+      !category %in% ullme_course_material_categories()) {
+    category = app$material_category
+  }
+  if (is.null(category) ||
+      (!identical(category, "root") &&
+       !category %in% ullme_course_material_categories())) {
+    category = "root"
+  }
   app$material_category = category
   on.exit({
-    app$material_upload_directory = category
+    app$material_upload_directory = if (identical(category, "root")) "" else category
     app$material_upload_tree = NULL
   }, add=TRUE)
   result = tryCatch({
     destination = paste0(app$material_upload_directory %||% "")[1]
-    if (is.na(destination) || !nzchar(destination)) {
+    if (is.na(destination)) {
       stop("No valid material upload destination was selected.")
     }
-    destination_category = strsplit(destination, "/", fixed=TRUE)[[1]][[1]]
+    destination = .ullme_material_relative_path(destination, allow_root=TRUE)
+    destination_category = if (nzchar(destination)) {
+      strsplit(destination, "/", fixed=TRUE)[[1]][[1]]
+    } else {
+      "root"
+    }
     if (!identical(destination_category, category)) {
       stop("The upload destination does not match the selected material category.")
     }
@@ -2383,7 +2386,7 @@ ullme_prepare_material_upload_tree = function(tree, destination, material_dir) {
     for (directory in directories) {
       target = .ullme_material_path(
         material_dir,
-        paste(destination, directory, sep="/")
+        ullme_material_child_path(destination, directory)
       )
       if (!dir.exists(target) &&
           !dir.create(target, recursive=TRUE, showWarnings=FALSE)) {

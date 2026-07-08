@@ -29,4 +29,9 @@ stopifnot(
   identical(readLines(output, warn=FALSE), "PDF text")
 )
 
-unlink(root, recursive=TRUE)
+ullme_remove_checked_directory(
+  root,
+  root=dirname(root),
+  expected_name=basename(root),
+  label="PDF conversion test directory"
+)

@@ -42,7 +42,7 @@ writeLines(
 
 course_settings = ullme_save_course_settings(
   app=app,
-  course=list(coursename="Microeconomics", times=list())
+  course=list(coursename="Microeconomics")
 )
 stopifnot(
   course_settings$ok,

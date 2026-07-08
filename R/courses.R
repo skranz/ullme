@@ -81,6 +81,42 @@ ullme_course_dir = function(main_dir, userid, role, semester, courseid) {
 }
 
 
+ullme_remove_course_dir = function(course_dir, courseid) {
+  restore.point("ullme_remove_course_dir")
+  courseid = ullme_clean_courseid(courseid)
+  course_dir = paste0(course_dir)[1]
+  if (is.na(course_dir) || !nzchar(course_dir)) {
+    stop("course_dir must not be empty.")
+  }
+  ullme_remove_checked_directory(
+    directory=course_dir,
+    root=dirname(course_dir),
+    expected_name=courseid,
+    label="course directory"
+  )
+}
+
+
+ullme_remove_teacher_dir = function(teacher_dir, teacherid) {
+  restore.point("ullme_remove_teacher_dir")
+  teacher_dir = paste0(teacher_dir)[1]
+  teacherid = paste0(teacherid)[1]
+  if (is.na(teacher_dir) || !nzchar(teacher_dir)) {
+    stop("teacher_dir must not be empty.")
+  }
+  if (is.na(teacherid) || !nzchar(teacherid) ||
+      grepl("[/\\\\]|^[.]$|^[.][.]$", teacherid)) {
+    stop("teacherid must be a single directory name.")
+  }
+  ullme_remove_checked_directory(
+    directory=teacher_dir,
+    root=dirname(teacher_dir),
+    expected_name=teacherid,
+    label="teacher directory"
+  )
+}
+
+
 ullme_clean_courseid = function(courseid) {
   restore.point("ullme_clean_courseid")
   courseid = paste0(courseid)[1]
@@ -100,6 +136,12 @@ ullme_course_material_categories = function() {
 }
 
 
+ullme_default_course_material_categories = function() {
+  restore.point("ullme_default_course_material_categories")
+  c("slides", "ps")
+}
+
+
 ullme_course_material_dir = function(course_dir, category) {
   restore.point("ullme_course_material_dir")
   category = paste0(category)[1]
@@ -110,14 +152,22 @@ ullme_course_material_dir = function(course_dir, category) {
 
 ullme_init_course_material_dirs = function(course_dir, app=NULL) {
   restore.point("ullme_init_course_material_dirs")
+  material_root = file.path(course_dir, "materials")
+  dir.create(material_root, recursive=TRUE, showWarnings=FALSE)
+  for (category in ullme_default_course_material_categories()) {
+    dir.create(
+      ullme_course_material_dir(course_dir=course_dir, category=category),
+      recursive=TRUE,
+      showWarnings=FALSE
+    )
+  }
   categories = ullme_course_material_categories()
   legacy_changes = list()
   for (category in categories) {
-    target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
-    dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
-
     legacy_dir = file.path(course_dir, category)
     if (!dir.exists(legacy_dir)) next
+    target_dir = ullme_course_material_dir(course_dir=course_dir, category=category)
+    dir.create(target_dir, recursive=TRUE, showWarnings=FALSE)
     files = list.files(legacy_dir, recursive=TRUE, full.names=FALSE, no..=TRUE)
     files = files[!dir.exists(file.path(legacy_dir, files))]
     for (file in files) {
@@ -159,8 +209,7 @@ ullme_default_course = function(courseid="", coursename="") {
   restore.point("ullme_default_course")
   list(
     courseid = paste0(courseid)[1],
-    coursename = paste0(coursename)[1],
-    times = list()
+    coursename = paste0(coursename)[1]
   )
 }
 
@@ -209,18 +258,10 @@ ullme_normalize_course = function(course) {
   if (is.null(course)) course = list()
   course$courseid = paste0(course$courseid %||% "")[1]
   course$coursename = paste0(course$coursename %||% "")[1]
-  times = course$times
-  if (is.null(times)) times = list()
-  if (is.data.frame(times)) times = split(times, seq_len(NROW(times)))
-  times = lapply(times, function(time) {
-    list(
-      weekday = paste0(time$weekday %||% "")[1],
-      start = paste0(time$start %||% "")[1],
-      end = paste0(time$end %||% "")[1]
-    )
-  })
-  course$times = times[seq_len(min(length(times), 3))]
-  course
+  list(
+    courseid = course$courseid,
+    coursename = course$coursename
+  )
 }
 
 
@@ -313,15 +354,20 @@ ullme_store_material_uploads = function(app, value, category,
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir) || is.null(value) || NROW(value) == 0) return(character(0))
   material_dir = file.path(course_dir, "materials")
-  destination = .ullme_material_relative_path(destination)
-  destination_category = strsplit(destination, "/", fixed=TRUE)[[1]][[1]]
+  destination = .ullme_material_relative_path(destination, allow_root=TRUE)
+  destination_category = if (nzchar(destination)) {
+    strsplit(destination, "/", fixed=TRUE)[[1]][[1]]
+  } else {
+    "root"
+  }
   if (!identical(destination_category, category)) {
     stop("The upload destination does not match its material category.")
   }
   target_dir = .ullme_material_path(
     material_dir,
     destination,
-    must_exist=TRUE
+    must_exist=TRUE,
+    allow_root=TRUE
   )
   if (!dir.exists(target_dir)) stop("The upload destination is not a directory.")
   upload_tree = app$material_upload_tree
@@ -343,7 +389,7 @@ ullme_store_material_uploads = function(app, value, category,
         ullme_clean_file_name(upload_name)
       }
       source = value$datapath[[i]]
-      relative_target = paste(destination, name, sep="/")
+      relative_target = ullme_material_child_path(destination, name)
       if (tolower(tools::file_ext(name)) == "zip") {
         extract_dir = file.path(stage, paste0("zip_", i))
         dir.create(extract_dir, recursive=TRUE, showWarnings=FALSE)
@@ -351,13 +397,19 @@ ullme_store_material_uploads = function(app, value, category,
         for (entry in entries) {
           from = file.path(extract_dir, entry)
           if (!file.exists(from) || dir.exists(from)) next
-          entry_target = paste(dirname(relative_target), entry, sep="/")
+          entry_parent = dirname(relative_target)
+          if (identical(entry_parent, ".")) entry_parent = ""
+          entry_target = ullme_material_child_path(entry_parent, entry)
           changes[[length(changes) + 1L]] = ullme_change_copy(
             from,
             .ullme_material_path(material_dir, entry_target),
             overwrite=TRUE
           )
-          stored = c(stored, sub(paste0("^", destination, "/"), "", entry_target))
+          stored = c(stored, if (nzchar(destination)) {
+            sub(paste0("^", destination, "/"), "", entry_target)
+          } else {
+            entry_target
+          })
         }
       } else {
         changes[[length(changes) + 1L]] = ullme_change_copy(
@@ -369,10 +421,11 @@ ullme_store_material_uploads = function(app, value, category,
       }
     }
     if (length(changes) == 0) return(character(0))
+    destination_label = if (nzchar(destination)) destination else "materials root"
     operation = ullme_new_change(
       action="material_upload",
       summary=paste0("Upload ", length(changes), " material file",
-                     if (length(changes) == 1) "" else "s", " to ", category),
+                     if (length(changes) == 1) "" else "s", " to ", destination_label),
       origin="ui",
       details=list(
         courseid=app$courseid,
@@ -396,7 +449,7 @@ ullme_store_material_uploads = function(app, value, category,
       ullme_clean_file_name(upload_name)
     }
     source = value$datapath[[i]]
-    relative_target = paste(destination, name, sep="/")
+    relative_target = ullme_material_child_path(destination, name)
     target = .ullme_material_path(material_dir, relative_target)
     dir.create(dirname(target), recursive=TRUE, showWarnings=FALSE)
     if (tolower(tools::file_ext(name)) == "zip") {
@@ -436,8 +489,7 @@ ullme_delete_material_file = function(app, category, path) {
 }
 
 
-ullme_create_teacher_course = function(courseid, coursename="", times=NULL,
-                                        app=getApp()) {
+ullme_create_teacher_course = function(courseid, coursename="", app=getApp()) {
   courseid = ullme_clean_courseid(courseid)
   target = ullme_course_dir(
     main_dir=app$glob$main_dir,
@@ -453,8 +505,7 @@ ullme_create_teacher_course = function(courseid, coursename="", times=NULL,
   ullme_init_course_material_dirs(stage)
   course = ullme_normalize_course(list(
     courseid=courseid,
-    coursename=paste0(coursename)[1],
-    times=times
+    coursename=paste0(coursename)[1]
   ))
   content = trimws(yaml::as.yaml(course))
   ullme_validation_stop(ullme_validate_course_yaml(content))

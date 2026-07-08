@@ -268,5 +268,10 @@ stopifnot(
   ))
 )
 
-unlink(root, recursive=TRUE)
+ullme_remove_checked_directory(
+  root,
+  root=dirname(root),
+  expected_name=basename(root),
+  label="conversion test directory"
+)
 ullme_remove_tempdir(managed_root, app=cleanup_app)

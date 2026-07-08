@@ -1435,9 +1435,7 @@ body {
   font-weight: 600;
 }
 
-.ullme-field input,
-.ullme-time-slot input,
-.ullme-time-slot select {
+.ullme-field input {
   box-sizing: border-box;
   width: 100%;
   height: 36px;
@@ -1451,22 +1449,8 @@ body {
   padding: 0 9px;
 }
 
-.ullme-field input:focus,
-.ullme-time-slot input:focus,
-.ullme-time-slot select:focus {
+.ullme-field input:focus {
   border-color: #999999;
-}
-
-.ullme-times-grid {
-  display: grid;
-  gap: 8px;
-  margin: 8px 0 18px;
-}
-
-.ullme-time-slot {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
 }
 
 .ullme-primary-action,
@@ -3352,8 +3336,7 @@ body {
     padding: 12px;
   }
 
-  .ullme-settings-grid,
-  .ullme-time-slot {
+  .ullme-settings-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

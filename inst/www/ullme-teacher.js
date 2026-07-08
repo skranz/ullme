@@ -29,7 +29,7 @@
     materialSort: "name",
     materialSortDirection: "asc",
     materialConversionBusy: false,
-    materialUploadDestination: "general",
+    materialUploadDestination: "",
     pendingMaterialDrop: null,
     studioView: "usage",
     previousStudioView: "usage",
@@ -43,6 +43,7 @@
   var renderAttachments = chatCommon.renderAttachments;
 
   var materialLabels = {
+    root: "Materials root",
     general: "General",
     slides: "Slides",
     ps: "Problem Sets",
@@ -478,7 +479,7 @@
         selectionComplete: renderMaterialTree,
         movePaths: moveMaterialPathsTo,
         uploadFiles: queueMaterialFiles,
-        currentDestination: currentMaterialDestination
+        currentDestination: function () { return ""; }
       });
     }
     if (materialSortName) {
@@ -2064,8 +2065,7 @@
       }
       sendSidebarEvent("ullme_add_course_event", {
         courseid: courseid,
-        coursename: nameField.input.value.trim(),
-        times: []
+        coursename: nameField.input.value.trim()
       });
       closeAddCourseDialog();
       showCoursePanel("settings");
@@ -2214,33 +2214,14 @@
   function gatherCourseSettings() {
     var name = byId("ullme_settings_coursename");
     return {
-      coursename: name ? name.value.trim() : "",
-      times: gatherCourseTimes()
+      coursename: name ? name.value.trim() : ""
     };
-  }
-
-  function gatherCourseTimes() {
-    var rows = document.querySelectorAll(".ullme-time-slot");
-    return Array.prototype.map.call(rows, function (row) {
-      return {
-        weekday: valueOf(row.querySelector(".ullme-time-weekday")),
-        start: valueOf(row.querySelector(".ullme-time-start")),
-        end: valueOf(row.querySelector(".ullme-time-end"))
-      };
-    }).filter(function (time) {
-      return time.weekday || time.start || time.end;
-    }).slice(0, 3);
-  }
-
-  function valueOf(input) {
-    return input ? input.value : "";
   }
 
   function fillCourseSettings(course) {
     course = course || {};
     setInputValue("ullme_settings_courseid", course.courseid || "");
     setInputValue("ullme_settings_coursename", course.coursename || "");
-    fillCourseTimes(course.times || []);
   }
 
   function fillEditHistoryControls(scope, history) {
@@ -2260,20 +2241,6 @@
     if (input) input.value = value || "";
   }
 
-  function fillCourseTimes(times) {
-    var rows = document.querySelectorAll(".ullme-time-slot");
-    Array.prototype.forEach.call(rows, function (row, index) {
-      var time = times[index] || {};
-      setElementValue(row.querySelector(".ullme-time-weekday"), time.weekday || "");
-      setElementValue(row.querySelector(".ullme-time-start"), time.start || "");
-      setElementValue(row.querySelector(".ullme-time-end"), time.end || "");
-    });
-  }
-
-  function setElementValue(element, value) {
-    if (element) element.value = value || "";
-  }
-
   function selectMaterialCategory(category) {
     var categories = byId("ullme_material_categories");
     if (!categories) return;
@@ -2287,23 +2254,29 @@
   }
 
   function currentMaterialCategory() {
-    return currentMaterialDestination().split("/")[0] || "general";
+    return materialDestinationCategory(currentMaterialDestination());
   }
 
   function materialInputForCategory(category) {
     return byId("ullme_material_upload_" + category);
   }
 
+  function materialDestinationCategory(destination) {
+    destination = destination == null ? "" : String(destination);
+    return destination ? destination.split("/")[0] : "root";
+  }
+
   function currentMaterialDestination() {
     var destination = byId("ullme_material_destination");
-    return destination && destination.value
-      ? destination.value
-      : state.materialUploadDestination || "general";
+    if (destination && destination.options && destination.options.length) {
+      return destination.value || "";
+    }
+    return state.materialUploadDestination || "";
   }
 
   function prepareMaterialUpload(destination) {
-    destination = destination || "general";
-    var category = destination.split("/")[0] || "general";
+    destination = destination == null ? "" : String(destination);
+    var category = materialDestinationCategory(destination);
     var input = materialInputForCategory(category);
     if (!input) return null;
     state.materialUploadDestination = destination;
@@ -2330,8 +2303,8 @@
   }
 
   function queueMaterialFiles(files, destination, relativePaths, directories) {
-    destination = destination || "general";
-    var category = destination.split("/")[0] || "general";
+    destination = destination == null ? "" : String(destination);
+    var category = materialDestinationCategory(destination);
     var input = materialInputForCategory(category);
     directories = Array.isArray(directories) ? directories : [];
     var isFolderUpload = Array.isArray(relativePaths);
@@ -2619,16 +2592,37 @@
     });
   }
 
+  function materialEmptyDirectoryPaths(records, children) {
+    var empty = {};
+    records.forEach(function (record) {
+      if (record.type === "directory" && !(children[record.path] || []).length) {
+        empty[record.path] = true;
+      }
+    });
+    return empty;
+  }
+
+  function selectedMaterialFilePaths() {
+    var files = {};
+    (state.materialTree || []).forEach(function (record) {
+      if (record.type === "file") files[record.path] = true;
+    });
+    return selectedMaterialPaths().filter(function (path) {
+      return Boolean(files[path]);
+    });
+  }
+
   function updateMaterialBatchControls() {
     var selected = selectedMaterialPaths();
+    var selectedFiles = selectedMaterialFilePaths();
     var count = byId("ullme_material_selection_count");
     var apply = byId("ullme_material_apply_operation");
     var convert = byId("ullme_material_convert");
     var remove = byId("ullme_material_delete_selected");
     var batch = byId("ullme_material_batch_bar");
     if (count) count.textContent = selected.length + " selected";
-    if (apply) apply.disabled = selected.length === 0;
-    if (convert) convert.disabled = selected.length === 0 || state.materialConversionBusy;
+    if (apply) apply.disabled = selectedFiles.length === 0;
+    if (convert) convert.disabled = selectedFiles.length === 0 || state.materialConversionBusy;
     if (remove) remove.disabled = selected.length === 0;
     if (batch) {
       batch.classList.toggle("ullme-material-batch-bar-active", selected.length > 0);
@@ -2638,7 +2632,9 @@
   function updateMaterialDestinations(records) {
     var select = byId("ullme_material_destination");
     if (!select) return;
-    var previous = select.value || currentMaterialCategory();
+    var previous = select.options && select.options.length
+      ? select.value
+      : state.materialUploadDestination || "";
     var directories = records.filter(function (record) {
       return record.type === "directory";
     }).sort(function (left, right) {
@@ -2648,17 +2644,21 @@
       });
     });
     select.innerHTML = "";
+    var root = document.createElement("option");
+    root.value = "";
+    root.textContent = "Materials root";
+    select.appendChild(root);
     directories.forEach(function (record) {
       var option = document.createElement("option");
       option.value = record.path;
       option.textContent = record.path;
       select.appendChild(option);
     });
-    var available = directories.some(function (record) {
+    var available = previous === "" || directories.some(function (record) {
       return record.path === previous;
     });
     if (available) select.value = previous;
-    if (!select.value && directories.length) select.value = directories[0].path;
+    state.materialUploadDestination = select.value || "";
   }
 
   function moveMaterialPathsTo(paths, destination) {
@@ -2679,6 +2679,9 @@
     (children[parent] || []).forEach(function (record) {
       var isDirectory = record.type === "directory";
       var descendants = isDirectory ? materialDescendantFiles(record.path) : [];
+      var directChildren = isDirectory ? (children[record.path] || []) : [];
+      var selectableEmptyDirectory = isDirectory && directChildren.length === 0;
+      var affectedSelection = selectableEmptyDirectory ? [record.path] : descendants;
       var selectedDescendants = descendants.filter(function (path) {
         return Boolean(state.materialSelection[path]);
       });
@@ -2717,14 +2720,16 @@
       checkbox.className = "ullme-material-tree-check";
       checkbox.setAttribute("aria-label", "Select " + record.path);
       checkbox.checked = isDirectory
-        ? descendants.length > 0 && selectedDescendants.length === descendants.length
+        ? (selectableEmptyDirectory
+          ? Boolean(state.materialSelection[record.path])
+          : descendants.length > 0 && selectedDescendants.length === descendants.length)
         : Boolean(state.materialSelection[record.path]);
-      checkbox.indeterminate = isDirectory &&
+      checkbox.indeterminate = isDirectory && !selectableEmptyDirectory &&
         selectedDescendants.length > 0 &&
         selectedDescendants.length < descendants.length;
-      checkbox.disabled = isDirectory && descendants.length === 0;
+      checkbox.disabled = isDirectory && affectedSelection.length === 0;
       checkbox.addEventListener("change", function () {
-        var affected = isDirectory ? descendants : [record.path];
+        var affected = isDirectory ? affectedSelection : [record.path];
         affected.forEach(function (path) {
           if (checkbox.checked) state.materialSelection[path] = true;
           else delete state.materialSelection[path];
@@ -2781,12 +2786,16 @@
     var list = byId("ullme_material_files");
     if (!list) return;
     var records = Array.isArray(state.materialTree) ? state.materialTree : [];
+    var children = materialChildrenByParent(records);
+    var emptyDirectories = materialEmptyDirectoryPaths(records, children);
     var validFiles = {};
     records.forEach(function (record) {
       if (record.type === "file") validFiles[record.path] = true;
     });
     Object.keys(state.materialSelection || {}).forEach(function (path) {
-      if (!validFiles[path]) delete state.materialSelection[path];
+      if (!validFiles[path] && !emptyDirectories[path]) {
+        delete state.materialSelection[path];
+      }
     });
     list.innerHTML = "";
     updateMaterialDestinations(records);
@@ -2800,15 +2809,15 @@
       updateMaterialBatchControls();
       return;
     }
-    appendMaterialTreeRows(list, materialChildrenByParent(records), "", 0);
+    appendMaterialTreeRows(list, children, "", 0);
     updateMaterialBatchControls();
   }
 
   function applySelectedMaterialOperation() {
-    var paths = selectedMaterialPaths();
+    var paths = selectedMaterialFilePaths();
     var operation = byId("ullme_material_operation");
     var destination = byId("ullme_material_destination");
-    if (!paths.length || !operation || !destination || !destination.value) return;
+    if (!paths.length || !operation || !destination) return;
     sendSidebarEvent("ullme_material_operation_event", {
       action: operation.value,
       paths: paths,
@@ -2820,7 +2829,7 @@
     var paths = selectedMaterialPaths();
     if (!paths.length) return;
     if (!window.confirm(
-      "Permanently delete " + paths.length + " selected material file" +
+      "Permanently delete " + paths.length + " selected material item" +
       (paths.length === 1 ? "?" : "s?")
     )) return;
     sendSidebarEvent("ullme_material_operation_event", {
@@ -2842,7 +2851,7 @@
   }
 
   function convertSelectedMaterials(mode) {
-    var paths = selectedMaterialPaths();
+    var paths = selectedMaterialFilePaths();
     if (!paths.length || state.materialConversionBusy) return;
     setMaterialConversionBusy(true);
     sendSidebarEvent("ullme_material_convert_event", {
@@ -2853,12 +2862,14 @@
 
   function createMaterialDirectory() {
     var destination = byId("ullme_material_destination");
-    if (!destination || !destination.value) return;
-    var name = window.prompt("Name for the new folder inside " + destination.value + ":");
+    if (!destination) return;
+    var parent = destination.value || "";
+    var parentLabel = parent || "Materials root";
+    var name = window.prompt("Name for the new folder inside " + parentLabel + ":");
     if (name == null || !String(name).trim()) return;
     name = String(name).trim();
     sendSidebarEvent("ullme_material_create_directory_event", {
-      path: destination.value + "/" + name
+      path: parent ? parent + "/" + name : name
     });
   }
 

@@ -64,4 +64,9 @@ stopifnot(
   identical(choices$user[[1]]$text, "Personal instruction 4")
 )
 
-unlink(main, recursive=TRUE)
+ullme_remove_checked_directory(
+  main,
+  root=dirname(main),
+  expected_name=basename(main),
+  label="form inputs test directory"
+)

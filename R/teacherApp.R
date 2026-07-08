@@ -14,7 +14,7 @@ teacherApp = function(main_dir, userid="skranz",
                        render_chat_markdown=TRUE,
                        stream_chat=TRUE,
                        show_chat_thinking=TRUE,
-                       store_ai_interactions=TRUE,
+                       store_ai_interactions=FALSE,
                        login_check=c("none", "sel"),
                        login_args=list()) {
   restore.point("teacherApp")

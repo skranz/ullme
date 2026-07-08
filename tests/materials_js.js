@@ -99,7 +99,7 @@ surface.listeners.drop({
 
 setTimeout(() => {
   assert(uploaded);
-  assert.strictEqual(uploaded.destination, "general");
+  assert.strictEqual(uploaded.destination, "");
   assert.deepStrictEqual(uploaded.paths, ["Übungen/Woche 1/Übung1.pdf"]);
   assert.deepStrictEqual(uploaded.directories, [
     "Übungen",

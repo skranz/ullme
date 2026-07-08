@@ -117,4 +117,9 @@ if (requireNamespace("shinyEventsLogin", quietly=TRUE)) {
   )
 }
 
-unlink(main_dir, recursive=TRUE)
+ullme_remove_checked_directory(
+  main_dir,
+  root=dirname(main_dir),
+  expected_name=basename(main_dir),
+  label="login test directory"
+)

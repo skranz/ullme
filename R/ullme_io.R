@@ -1,7 +1,7 @@
 # File operations for course materials deliberately live in this small module.
 # Every public operation derives the active user's material root from the app
-# and accepts relative paths only. Directory deletion is not supported: an
-# accidental recursive delete should be impossible here.
+# and accepts relative paths only. Directory deletion is limited to empty
+# directories and never allows deleting the materials root.
 
 ullme_safe_relative_material_path = function(path) {
   restore.point("ullme_safe_relative_material_path")
@@ -46,6 +46,52 @@ ullme_tempdir = function(pattern=".ullme-", app=getApp()) {
 }
 
 
+ullme_remove_checked_directory = function(directory, root, expected_name=NULL,
+                                          expected_prefix=NULL,
+                                          label="directory",
+                                          allow_root=FALSE) {
+  directory = paste0(directory)[1]
+
+  # From Sebastian: my own extra security check please keep for
+  # the time being
+  if (!isTRUE(stri_detect_fixed(directory, "/ullme_main/"))) {
+    stop("It is currently only possibly to remove directory that are subdirectories of our main_dir and currently we expect the main_dir to have an /ullme_main/ in its path.")
+  }
+
+
+  root = paste0(root)[1]
+  label = paste0(label)[1]
+  if (is.na(directory) || !nzchar(directory)) stop(label, " must not be empty.")
+  if (is.na(root) || !nzchar(root) || !dir.exists(root)) {
+    stop("The trusted root for ", label, " removal does not exist.")
+  }
+  if (!dir.exists(directory)) return(invisible(FALSE))
+  link = Sys.readlink(directory)
+  if (length(link) == 1 && !is.na(link) && nzchar(link)) {
+    stop("Refusing to remove a symbolic-link ", label, ".")
+  }
+  target = normalizePath(directory, winslash="/", mustWork=TRUE)
+  root = normalizePath(root, winslash="/", mustWork=TRUE)
+  if (!.ullme_material_path_is_within(target, root, allow_root=allow_root)) {
+    stop("Refusing to remove a ", label, " outside its trusted root.")
+  }
+  name = basename(target)
+  if (!is.null(expected_name) &&
+      !identical(name, paste0(expected_name)[1])) {
+    stop("Refusing to remove a ", label, " with an unexpected name.")
+  }
+  if (!is.null(expected_prefix) &&
+      !startsWith(name, paste0(expected_prefix)[1])) {
+    stop("Refusing to remove a ", label, " without the expected name prefix.")
+  }
+  unlink(target, recursive=TRUE, force=FALSE)
+  if (file.exists(target) || dir.exists(target)) {
+    stop("Could not remove the ", label, ".")
+  }
+  invisible(TRUE)
+}
+
+
 ullme_remove_tempdir = function(temp_dir, app=getApp()) {
   restore.point("ulme_remove_tempdir")
   root = .ullme_temp_root(app=app)
@@ -68,11 +114,11 @@ ullme_remove_tempdir = function(temp_dir, app=getApp()) {
     stop("Refusing to remove a directory outside the uLLMe temp root.")
   }
 
-  unlink(target, recursive=TRUE, force=FALSE)
-  if (file.exists(target) || dir.exists(target)) {
-    stop("Could not remove the uLLMe temporary directory.")
-  }
-  invisible(TRUE)
+  ullme_remove_checked_directory(
+    target,
+    root=root,
+    label="uLLMe temporary directory"
+  )
 }
 
 
@@ -92,8 +138,9 @@ ullme_remove_tempdir = function(temp_dir, app=getApp()) {
 }
 
 
-.ullme_material_relative_path = function(path) {
+.ullme_material_relative_path = function(path, allow_root=FALSE) {
   path = gsub("\\\\", "/", paste0(path)[1])
+  if (isTRUE(allow_root) && !is.na(path) && path %in% c("", ".")) return("")
   if (is.na(path) || !nzchar(path) || grepl("^/|^[A-Za-z]:", path)) {
     stop("Material paths must be non-empty relative paths.")
   }
@@ -112,6 +159,13 @@ ullme_remove_tempdir = function(temp_dir, app=getApp()) {
   )
   if (any(reserved)) stop("The material path uses a reserved filename.")
   paste(parts, collapse="/")
+}
+
+
+ullme_material_child_path = function(parent, child) {
+  parent = .ullme_material_relative_path(parent, allow_root=TRUE)
+  child = .ullme_material_relative_path(child)
+  if (nzchar(parent)) paste(parent, child, sep="/") else child
 }
 
 
@@ -138,9 +192,11 @@ ullme_remove_tempdir = function(temp_dir, app=getApp()) {
 }
 
 
-.ullme_material_path = function(material_dir, path, must_exist=FALSE) {
+.ullme_material_path = function(material_dir, path, must_exist=FALSE,
+                                 allow_root=FALSE) {
   root = .ullme_material_root(material_dir)
-  relative = .ullme_material_relative_path(path)
+  relative = .ullme_material_relative_path(path, allow_root=allow_root)
+  if (!nzchar(relative)) return(root)
   candidate = file.path(root, relative)
   current = root
   for (part in strsplit(relative, "/", fixed=TRUE)[[1]]) {
@@ -195,6 +251,52 @@ delete_material_file = function(path, app=getApp()) {
   if (!file.remove(target)) stop("Could not delete the material file.")
   if (file.exists(target) || dir.exists(target)) {
     stop("The material file still exists after the delete operation.")
+  }
+  invisible(TRUE)
+}
+
+
+.ullme_material_deletable_path = function(material_dir, path) {
+  target = .ullme_material_path(material_dir, path, must_exist=TRUE)
+  root = .ullme_material_root(material_dir)
+  if (identical(normalizePath(target, winslash="/", mustWork=TRUE), root)) {
+    stop("The materials directory itself cannot be deleted.")
+  }
+  if (dir.exists(target)) {
+    entries = list.files(target, all.files=TRUE, no..=TRUE)
+    if (length(entries) > 0) {
+      stop("Only empty material directories can be deleted.")
+    }
+  }
+  target
+}
+
+
+.ullme_remove_empty_material_directory = function(material_dir, path) {
+  target = .ullme_material_deletable_path(material_dir, path)
+  if (!dir.exists(target)) stop("The selected material path is not a directory.")
+  entries = list.files(target, all.files=TRUE, no..=TRUE)
+  if (length(entries) > 0) {
+    stop("Only empty material directories can be deleted.")
+  }
+  ullme_remove_checked_directory(
+    directory=target,
+    root=.ullme_material_root(material_dir),
+    expected_name=basename(target),
+    label="empty material directory"
+  )
+}
+
+
+.ullme_delete_material_path = function(material_dir, path) {
+  target = .ullme_material_deletable_path(material_dir, path)
+  if (dir.exists(target)) {
+    .ullme_remove_empty_material_directory(material_dir, path)
+  } else {
+    if (!file.remove(target)) stop("Could not delete the material file.")
+  }
+  if (file.exists(target) || dir.exists(target)) {
+    stop("The material path still exists after the delete operation.")
   }
   invisible(TRUE)
 }
@@ -318,21 +420,30 @@ ullme_apply_material_file_operation = function(action, paths, destination=NULL,
   ))
   if (length(paths) == 0) stop("Select at least one material file.")
 
-  # Validate every source before performing the first operation.
-  invisible(lapply(paths, function(path) .ullme_material_file(material_dir, path)))
   if (identical(action, "delete")) {
-    for (path in paths) .ullme_delete_material_file(material_dir, path)
+    invisible(lapply(paths, function(path) {
+      .ullme_material_deletable_path(material_dir, path)
+    }))
+    for (path in paths) .ullme_delete_material_path(material_dir, path)
     return(invisible(TRUE))
   }
 
-  destination = .ullme_material_relative_path(destination)
+  # Validate every source before performing the first operation.
+  invisible(lapply(paths, function(path) .ullme_material_file(material_dir, path)))
+  destination = .ullme_material_relative_path(destination, allow_root=TRUE)
   destination_dir = .ullme_material_path(
     material_dir,
     destination,
-    must_exist=TRUE
+    must_exist=TRUE,
+    allow_root=TRUE
   )
   if (!dir.exists(destination_dir)) stop("The destination must be a material directory.")
-  targets = paste0(destination, "/", basename(paths))
+  targets = vapply(
+    basename(paths),
+    function(name) ullme_material_child_path(destination, name),
+    character(1),
+    USE.NAMES=FALSE
+  )
   if (anyDuplicated(if (identical(.Platform$OS.type, "windows")) {
     tolower(targets)
   } else targets)) {

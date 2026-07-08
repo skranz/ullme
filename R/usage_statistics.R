@@ -127,17 +127,21 @@ ullme_usage_write_csv = function(value, path) {
     na=""
   )
   backup = paste0(path, ".previous")
-  if (file.exists(backup)) unlink(backup, force=TRUE)
+  if (file.exists(backup) && !file.remove(backup)) {
+    stop("Could not remove the previous statistics backup.")
+  }
   if (file.exists(path) && !file.rename(path, backup)) {
-    unlink(temporary, force=TRUE)
+    if (file.exists(temporary)) file.remove(temporary)
     stop("Could not prepare the previous statistics file for replacement.")
   }
   if (!file.rename(temporary, path)) {
     if (file.exists(backup)) file.rename(backup, path)
-    unlink(temporary, force=TRUE)
+    if (file.exists(temporary)) file.remove(temporary)
     stop("Could not replace the statistics file.")
   }
-  if (file.exists(backup)) unlink(backup, force=TRUE)
+  if (file.exists(backup) && !file.remove(backup)) {
+    stop("Could not remove the previous statistics backup.")
+  }
   invisible(path)
 }
 
@@ -152,7 +156,7 @@ ullme_usage_lock_acquire = function(directory, stale_seconds=600) {
       units="secs"
     ))
     if (!is.na(age) && age > stale_seconds) {
-      unlink(lock, recursive=TRUE, force=TRUE)
+      ullme_usage_lock_release(lock)
     }
   }
   if (!dir.create(lock, showWarnings=FALSE)) return(NULL)
@@ -162,7 +166,12 @@ ullme_usage_lock_acquire = function(directory, stale_seconds=600) {
 
 ullme_usage_lock_release = function(lock) {
   if (!is.null(lock) && dir.exists(lock)) {
-    unlink(lock, recursive=TRUE, force=TRUE)
+    ullme_remove_checked_directory(
+      directory=lock,
+      root=dirname(lock),
+      expected_name=".aggregation-lock",
+      label="usage statistics lock directory"
+    )
   }
   invisible(TRUE)
 }
@@ -455,7 +464,7 @@ ullme_usage_statistics_process_file = function(state, record) {
     if (NROW(rows)) {
       ullme_usage_write_csv(rows, cache_path)
     } else if (file.exists(cache_path)) {
-      unlink(cache_path, force=TRUE)
+      if (!file.remove(cache_path)) stop("Could not remove the usage cache file.")
     }
     new_keys = if (NROW(rows)) {
       unique(ullme_usage_course_key(rows$semester, rows$courseid))
@@ -512,7 +521,9 @@ ullme_usage_statistics_process_file_batch = function(state, batch_size=25L) {
 ullme_usage_statistics_prepare_courses = function(state) {
   for (source_file in state$deleted) {
     cache_path = ullme_usage_cache_path(state, source_file)
-    if (file.exists(cache_path)) unlink(cache_path, force=TRUE)
+    if (file.exists(cache_path) && !file.remove(cache_path)) {
+      stop("Could not remove the usage cache file.")
+    }
   }
   if (length(state$deleted)) {
     state$manifest = state$manifest[
@@ -540,7 +551,9 @@ ullme_usage_statistics_prepare_courses = function(state) {
     full.names=TRUE
   )
   orphaned = existing_files[!basename(existing_files) %in% valid_files]
-  if (length(orphaned)) unlink(orphaned, force=TRUE)
+  if (length(orphaned) && any(!file.remove(orphaned))) {
+    stop("Could not remove an orphaned usage course file.")
+  }
   state$course_keys = sort(unique(state$affected[nzchar(state$affected)]))
   state$course_index = 0L
   invisible(state$course_keys)
@@ -568,7 +581,9 @@ ullme_usage_statistics_rebuild_course = function(state, course_key) {
   }
   path = ullme_usage_course_path(state, course_key)
   if (is.null(records) || !NROW(records)) {
-    if (file.exists(path)) unlink(path, force=TRUE)
+    if (file.exists(path) && !file.remove(path)) {
+      stop("Could not remove the usage course file.")
+    }
     return(invisible(FALSE))
   }
   ullme_usage_write_csv(ullme_usage_aggregate_records(records), path)

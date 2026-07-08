@@ -73,7 +73,7 @@
   }
 
   function rowDestination(row, fallback) {
-    if (!row) return fallback();
+    if (!row) return "";
     return row.getAttribute("data-type") === "directory"
       ? row.getAttribute("data-path")
       : row.getAttribute("data-parent");

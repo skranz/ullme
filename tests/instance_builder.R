@@ -120,4 +120,9 @@ stopifnot(
   )
 )
 
-unlink(main, recursive=TRUE)
+ullme_remove_checked_directory(
+  main,
+  root=dirname(main),
+  expected_name=basename(main),
+  label="instance builder test directory"
+)

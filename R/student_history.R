@@ -170,8 +170,12 @@ ullme_student_chat_history_delete = function(chat_id, app=getApp()) {
   if (deleting_current && isTRUE(app$chat_response_active)) {
     stop("Wait for the current response to finish before deleting this chat.")
   }
-  unlink(directory, recursive=TRUE, force=TRUE)
-  if (dir.exists(directory)) stop("The chat history could not be deleted.")
+  ullme_remove_checked_directory(
+    directory=directory,
+    root=root,
+    expected_name=basename(directory),
+    label="chat history directory"
+  )
   if (deleting_current) {
     model = ullme_model_id(NULL, app=app)
     key = ullme_chat_key(model, task_profile="student_tutor", app=app)

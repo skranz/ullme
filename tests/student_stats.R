@@ -81,4 +81,9 @@ stopifnot(
   is.na(second_rows$total_sec[[1]])
 )
 
-unlink(main_dir, recursive=TRUE)
+ullme_remove_checked_directory(
+  main_dir,
+  root=dirname(main_dir),
+  expected_name=basename(main_dir),
+  label="student stats test directory"
+)

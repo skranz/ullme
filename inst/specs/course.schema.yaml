@@ -7,7 +7,6 @@ additionalProperties: false
 required:
   - courseid
   - coursename
-  - times
 properties:
   courseid:
     type: string
@@ -22,47 +21,6 @@ properties:
     description: "Human-readable course name."
     examples:
       - Microeconomics
-  times:
-    type: array
-    description: "Regular teaching times for the course."
-    maxItems: 3
-    items:
-      type: object
-      additionalProperties: false
-      required:
-        - weekday
-        - start
-        - end
-      properties:
-        weekday:
-          type: string
-          description: "Full lowercase weekday name."
-          enum:
-            - monday
-            - tuesday
-            - wednesday
-            - thursday
-            - friday
-            - saturday
-            - sunday
-          examples:
-            - monday
-        start:
-          type: string
-          description: "Start time in 24-hour HH:MM format."
-          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
-          examples:
-            - "10:00"
-        end:
-          type: string
-          description: "End time in 24-hour HH:MM format."
-          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
-          examples:
-            - "11:30"
 examples:
   - courseid: micro
     coursename: Microeconomics
-    times:
-      - weekday: monday
-        start: "10:00"
-        end: "11:30"

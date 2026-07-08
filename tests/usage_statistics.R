@@ -96,7 +96,7 @@ stopifnot(
   totals$sessions[[1]] == 2L
 )
 
-unlink(file.path(source_dir, "BBBBBBBBBBBBBBBB.csv"))
+file.remove(file.path(source_dir, "BBBBBBBBBBBBBBBB.csv"))
 deleted = ullme_usage_statistics_update(app=app)
 totals = utils::read.csv(totals_path, stringsAsFactors=FALSE)
 stopifnot(
@@ -172,4 +172,9 @@ stopifnot(
   grepl('studioView: "usage"', teacher_js, fixed=TRUE)
 )
 
-unlink(main_dir, recursive=TRUE)
+ullme_remove_checked_directory(
+  main_dir,
+  root=dirname(main_dir),
+  expected_name=basename(main_dir),
+  label="usage statistics test directory"
+)
