@@ -16,82 +16,33 @@ ullme_login_email = function(value) {
 
 ullme_login_student_userid = function(email) {
   email = ullme_login_email(email)
-  if (!requireNamespace("digest", quietly=TRUE)) {
-    stop("Student login requires the digest package.", call.=FALSE)
+  userid = ullme_email2userid(email)
+  if (is.null(userid)) {
+    stop("This email address is not allowed for uLLMe.", call.=FALSE)
   }
-  paste0(
-    "email_",
-    substr(
-      digest::digest(email, algo="sha256", serialize=FALSE),
-      1,
-      32
-    )
-  )
+  userid
 }
 
 
 ullme_allowed_teachers_path = function(main_dir) {
-  yaml_path = file.path(main_dir, "allowed_teachers.yaml")
-  yml_path = file.path(main_dir, "allowed_teachers.yml")
-  if (file.exists(yaml_path)) return(yaml_path)
-  if (file.exists(yml_path)) return(yml_path)
-  yaml_path
+  ullme_teachers_yaml_path(main_dir)
 }
 
 
 ullme_allowed_teachers = function(main_dir) {
-  path = ullme_allowed_teachers_path(main_dir)
-  if (!file.exists(path)) {
-    stop(
-      "Teacher login requires ", path,
-      ". Add entries such as 'teacher@example.org: teacher_id'.",
-      call.=FALSE
-    )
-  }
-  value = yaml::read_yaml(path, eval.expr=FALSE)
-  if (is.list(value) &&
-      length(value) == 1L &&
-      !is.null(names(value)) &&
-      names(value)[[1]] %in% c("allowed_teachers", "teachers")) {
-    value = value[[1]]
-  }
-  if (is.null(value) || !is.list(value) || is.null(names(value))) {
-    stop(
-      "allowed_teachers.yaml must map email addresses to teacher IDs.",
-      call.=FALSE
-    )
-  }
-  emails = vapply(names(value), ullme_login_email, character(1))
-  teacherids = vapply(value, function(teacherid) {
-    teacherid = paste0(teacherid %||% "")[1]
-    clean = ullme_clean_user_name(teacherid)
-    if (!nzchar(teacherid) || !identical(clean, teacherid)) {
-      stop(
-        "Invalid teacher ID in allowed_teachers.yaml: ",
-        teacherid,
-        call.=FALSE
-      )
-    }
-    clean
-  }, character(1))
-  if (anyDuplicated(emails)) {
-    stop(
-      "Each email address may occur only once in allowed_teachers.yaml.",
-      call.=FALSE
-    )
-  }
-  setNames(teacherids, emails)
+  ullme_read_teachers(main_dir=main_dir, required=TRUE)
 }
 
 
 ullme_teacherid_for_email = function(email, app=getApp()) {
   email = ullme_login_email(email)
-  teachers = app$allowed_teachers %||% character()
-  teacherid = unname(teachers[email])
-  if (!length(teacherid) || is.na(teacherid) || !nzchar(teacherid)) {
-    return(NULL)
-  }
-  teacherid[[1]]
+  userid = app$email2userid(email)
+  if (is.null(userid)) return(NULL)
+  teacherids = ullme_allowed_teacherids_for_userid(
+    main_dir=app$glob$main_dir,
+    userid=userid
+  )
+  if (length(teacherids) == 1L) teacherids[[1]] else NULL
 }
 
 
@@ -195,9 +146,18 @@ ullme_resource_token = function(length=16L) {
 ullme_set_app_user_paths = function(app=getApp(), unique_resources=FALSE) {
   main_dir = app$glob$main_dir
   app$user_dir = ullme_user_dir(main_dir=main_dir, userid=app$userid)
+  if (identical(app$role, "student") &&
+      !identical(app$userid, "login_pending")) {
+    app$studentid = ullme_user_studentid(
+      main_dir=main_dir,
+      userid=app$userid,
+      create=TRUE
+    )
+  }
+  storage_id = ullme_app_role_storage_id(app=app)
   app$role_user_dir = ullme_role_user_dir(
     main_dir=main_dir,
-    userid=app$userid,
+    userid=storage_id,
     role=app$role
   )
   app$cur_session_dir = ullme_cur_session_dir(user_dir=app$user_dir)
@@ -248,47 +208,154 @@ ullme_login_failed = function(msg="Log-in failed.", lop, app=getApp(), ...) {
 }
 
 
+ullme_teacher_selection_ui = function(userid, teacherids, app=getApp()) {
+  restore.point("ullme_teacher_selection_ui")
+  tags$main(
+    class="ullme-login-choice",
+    style=paste0(
+      "max-width:520px;margin:12vh auto;padding:24px;",
+      "border:1px solid #dfe7e2;border-radius:12px;",
+      "background:#fff;color:#1f2924;font-family:sans-serif;"
+    ),
+    tags$h2("Choose teacher workspace"),
+    tags$p("Your account has access to more than one teacher workspace."),
+    tags$div(
+      style="display:grid;gap:8px;margin-top:16px;",
+      lapply(teacherids, function(teacherid) {
+        tags$button(
+          type="button",
+          style=paste0(
+            "min-height:38px;border:1px solid #cad7d0;border-radius:8px;",
+            "background:#f6faf8;color:#173d30;font:inherit;"
+          ),
+          onclick=paste0(
+            "Shiny.setInputValue('ullme_teacher_select_event',{teacherid:'",
+            htmltools::htmlEscape(teacherid),
+            "',nonce:Math.random()},{priority:'event'});"
+          ),
+          teacherid
+        )
+      })
+    )
+  )
+}
+
+
+ullme_activate_authenticated_user = function(userid, teacherid=NULL,
+                                             app=getApp()) {
+  restore.point("ullme_activate_authenticated_user")
+  app$userid = userid
+  if (file.exists(ullme_teachers_yaml_path(app$glob$main_dir))) {
+    try(
+      ullme_sync_user_teacherids(main_dir=app$glob$main_dir, userid=userid),
+      silent=TRUE
+    )
+  }
+  if (identical(app$role, "teacher")) {
+    app$teacherid = teacherid
+  }
+  ullme_set_app_user_paths(app=app, unique_resources=TRUE)
+  if (identical(app$role, "teacher")) {
+    app$courseids = ullme_user_courseids(
+      main_dir=app$glob$main_dir,
+      userid=app$teacherid,
+      role=app$role,
+      semester=app$semester
+    )
+    app$courseid = ullme_selected_courseid(
+      app$courseids,
+      preferred=app$courseid
+    )
+  }
+  ullme_add_resource_paths(app=app)
+  ullme_set_app_authenticated(TRUE, app=app)
+  setUI("mainUI", ullme_app_ui(app=app))
+  ullme_init_app(session=app$session, app=app)
+  invisible(TRUE)
+}
+
+
 ullme_login_success = function(userid, app=getApp(), ...) {
   result = tryCatch({
     email = ullme_login_email(userid)
+    clean_userid = app$email2userid(email)
+    if (is.null(clean_userid)) {
+      stop("This email address is not allowed for uLLMe.", call.=FALSE)
+    }
+    app$login_email = email
+    ullme_write_user_email(
+      main_dir=app$glob$main_dir,
+      userid=clean_userid,
+      email=email
+    )
     if (identical(app$role, "teacher")) {
-      teacherid = ullme_teacherid_for_email(email, app=app)
-      if (is.null(teacherid)) {
+      ullme_make_teacher_dirs(main_dir=app$glob$main_dir)
+      teacherids = ullme_allowed_teacherids_for_userid(
+        main_dir=app$glob$main_dir,
+        userid=clean_userid
+      )
+      if (length(teacherids) == 0) {
         stop(
-          "The email address ", email,
-          " is not listed in allowed_teachers.yaml.",
+          "The user ", clean_userid,
+          " is not listed in any teacher allowed_users.yaml.",
           call.=FALSE
         )
       }
-      app$userid = teacherid
-      app$teacherid = teacherid
+      if (length(teacherids) > 1L) {
+        app$pending_teacher_userid = clean_userid
+        app$pending_teacherids = teacherids
+        setUI(
+          "mainUI",
+          ullme_teacher_selection_ui(
+            userid=clean_userid,
+            teacherids=teacherids,
+            app=app
+          )
+        )
+        return(list(ok=TRUE, message="Choose teacher workspace."))
+      }
+      ullme_activate_authenticated_user(
+        userid=clean_userid,
+        teacherid=teacherids[[1]],
+        app=app
+      )
     } else {
-      app$userid = ullme_login_student_userid(email)
-    }
-    app$login_email = email
-    ullme_set_app_user_paths(app=app, unique_resources=TRUE)
-    if (identical(app$role, "teacher")) {
-      app$courseids = ullme_user_courseids(
-        main_dir=app$glob$main_dir,
-        userid=app$userid,
-        role=app$role,
-        semester=app$semester
-      )
-      app$courseid = ullme_selected_courseid(
-        app$courseids,
-        preferred=app$courseid
+      ullme_activate_authenticated_user(
+        userid=clean_userid,
+        app=app
       )
     }
-    ullme_add_resource_paths(app=app)
-    ullme_set_app_authenticated(TRUE, app=app)
-    setUI("mainUI", ullme_app_ui(app=app))
-    ullme_init_app(session=app$session, app=app)
     list(ok=TRUE, message="")
   }, error=function(e) {
     ullme_set_app_authenticated(FALSE, app=app)
     message = conditionMessage(e)
     setUI("mainUI", ullme_login_denied_ui(message))
     list(ok=FALSE, message=message)
+  })
+  invisible(result)
+}
+
+
+ullme_handle_teacher_select = function(teacherid=NULL, app=getApp(), ...) {
+  restore.point("ullme_handle_teacher_select")
+  result = tryCatch({
+    teacherid = ullme_clean_user_name(teacherid)
+    userid = app$pending_teacher_userid %||% ""
+    allowed = app$pending_teacherids %||% character(0)
+    if (!nzchar(userid) || !teacherid %in% allowed) {
+      stop("This teacher workspace is not available for the active login.")
+    }
+    ullme_activate_authenticated_user(
+      userid=userid,
+      teacherid=teacherid,
+      app=app
+    )
+    app$pending_teacher_userid = NULL
+    app$pending_teacherids = NULL
+    list(ok=TRUE, message="")
+  }, error=function(e) {
+    setUI("mainUI", ullme_login_denied_ui(conditionMessage(e)))
+    list(ok=FALSE, message=conditionMessage(e))
   })
   invisible(result)
 }
@@ -311,12 +378,7 @@ ullme_make_login_module = function(app=getApp()) {
     )
   }
   if (identical(app$role, "teacher")) {
-    allowed = names(app$allowed_teachers)
-    if (!is.null(login_args$allowed.userids)) {
-      configured = tolower(trimws(paste0(login_args$allowed.userids)))
-      allowed = intersect(allowed, configured)
-    }
-    login_args$allowed.userids = allowed
+    ullme_make_teacher_dirs(main_dir=app$glob$main_dir)
   }
   arguments = utils::modifyList(
     list(

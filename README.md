@@ -30,11 +30,15 @@
 Create fixed-role applications with:
 
 ```r
-teacher_app = teacherApp(main_dir, userid="teacher_id")
+teacher_app = teacherApp(
+  main_dir,
+  userid="sebastian_kranz",
+  teacherid="skranz"
+)
 student_app = studentApp(
   main_dir,
-  userid="student_id",
-  teacherid="teacher_id",
+  userid="student_userid",
+  teacherid="skranz",
   courseid="course_id",
   tutorid="optional_tutor_id",
   instanceid="optional_instance_id"
@@ -44,14 +48,23 @@ student_app = studentApp(
 Roles are fixed by the constructor and cannot be switched inside an app.
 Both constructors accept `login_check="none"` (the default) or
 `login_check="sel"` for the optional shinyEventsLogin integration. See
-[LOGIN.md](LOGIN.md) for configuration, teacher email authorization, and the
+[LOGIN.md](LOGIN.md) for configuration, user identity, teacher authorization, and the
 security limitations.
+Both constructors accept an `email2userid` function. The default
+`ullme_email2userid()` accepts `@uni-ulm.de` email addresses and normalizes the
+local part by replacing non-alphanumeric runs with `_`. The original email is
+stored in `main_dir/users/<userid>/email.txt`.
+Teacher workspaces are identified by `teacherid`, usually different from the
+main teacher's `userid`. Configure them in
+`main_dir/general/teachers.yaml`, then run `ullme_make_teacher_dirs(main_dir)`
+or let teacher login initialize missing config directories. Per-teacher access
+lives in `main_dir/teachers/<teacherid>/config/allowed_users.yaml` and can be
+edited in Teacher Studio through the bottom-left Users settings view.
 For student apps, `teacherid`, `courseid`, `tutorid`, and `instanceid` can
 instead be supplied as URL query parameters. A constructor argument always
 takes precedence over the corresponding URL value. `teacherid` and `courseid`
 are required; when no tutor or instance is specified, the student can switch
-it in the sidebar. `userid` is currently accepted only as a `studentApp()`
-argument.
+it in the sidebar.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait

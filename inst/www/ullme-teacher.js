@@ -36,7 +36,8 @@
     previousStudioView: "usage",
     courseFile: null,
     courseFileOriginalContent: "",
-    selectedCourseid: ""
+    selectedCourseid: "",
+    allowedUsers: null
   };
   var chatCommon = window.ullmeChat;
   var typesetMath = chatCommon.typesetMath;
@@ -203,6 +204,8 @@
     var courseFileBack = byId("ullme_course_file_back");
     var courseFileSave = byId("ullme_course_file_save");
     var courseFileEditor = byId("ullme_course_file_editor");
+    var allowedUsersAdd = byId("ullme_allowed_users_add");
+    var allowedUsersSave = byId("ullme_allowed_users_save");
     var editHistoryControls = document.querySelectorAll(
       ".ullme-edit-history-controls[data-edit-history-scope]"
     );
@@ -430,6 +433,19 @@
     if (settingsSave) {
       settingsSave.addEventListener("click", function () {
         sendSidebarEvent("ullme_course_settings_save_event", gatherCourseSettings());
+      });
+    }
+    if (allowedUsersAdd) {
+      allowedUsersAdd.addEventListener("click", function () {
+        appendAllowedUserRow({ email: "", userid: "", can_set_users: false });
+      });
+    }
+    if (allowedUsersSave) {
+      allowedUsersSave.addEventListener("click", function () {
+        allowedUsersSave.disabled = true;
+        sendSidebarEvent("ullme_allowed_users_save_event", {
+          users: collectAllowedUserRows()
+        });
       });
     }
     Array.prototype.forEach.call(editHistoryControls, function (controls) {
@@ -786,6 +802,7 @@
       materials: "Materials",
       "ai-tutors": "AI Tutors",
       settings: "Course settings",
+      "allowed-users": "Allowed users",
       file: "File editor"
     };
     setStudioNavigation(view, titles[view] || "Course studio");
@@ -3502,6 +3519,7 @@
       : [];
     var activeSkill = summary ? summary.active_skill : null;
     var courseFiles = summary && Array.isArray(summary.course_files) ? summary.course_files : [];
+    var allowedUsers = summary ? summary.allowed_users : null;
     var editHistory = summary && summary.edit_history ? summary.edit_history : {};
     var courseWorkspace = byId("ullme_course_workspace");
     state.courseMaterial = material;
@@ -3511,6 +3529,7 @@
     state.skills = skills;
     state.courseSkills = courseSkills;
     state.courseFiles = courseFiles;
+    state.allowedUsers = allowedUsers || null;
     if (courseWorkspace) {
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
@@ -3518,10 +3537,13 @@
     fillEditHistoryControls("course_settings", editHistory.course_settings);
     renderMaterialTree();
     renderCourseFileTree(courseFiles);
+    renderAllowedUsers(allowedUsers);
     renderAITutors(aiTutors);
     renderActiveSkill(activeSkill);
     updateAIContext();
-    if (!selectedCourseid && state.studioView !== "usage") {
+    if (!selectedCourseid &&
+        state.studioView !== "usage" &&
+        state.studioView !== "allowed-users") {
       activateStudioView("usage");
     }
   }
@@ -3556,6 +3578,115 @@
     chatCommon.updateModelCatalog(payload);
   }
 
+  function renderAllowedUsers(data) {
+    var body = byId("ullme_allowed_user_rows");
+    var teacher = byId("ullme_allowed_users_teacher");
+    var notice = byId("ullme_allowed_users_notice");
+    var add = byId("ullme_allowed_users_add");
+    var save = byId("ullme_allowed_users_save");
+    if (!body) return;
+    data = data || {};
+    var users = Array.isArray(data.users) ? data.users : [];
+    var canEdit = Boolean(data.can_set_users);
+    body.innerHTML = "";
+    if (teacher) {
+      teacher.textContent = data.teacherid ? "Teacher ID: " + data.teacherid : "";
+    }
+    if (notice) {
+      notice.textContent = canEdit
+        ? ""
+        : "You can view this list, but only users with permission can edit it.";
+    }
+    users.forEach(function (user) {
+      appendAllowedUserRow(user, !canEdit);
+    });
+    if (!users.length) {
+      appendAllowedUserRow({ email: "", userid: "", can_set_users: false }, !canEdit);
+    }
+    if (add) add.disabled = !canEdit;
+    if (save) save.disabled = !canEdit;
+  }
+
+  function appendAllowedUserRow(user, readonly) {
+    var body = byId("ullme_allowed_user_rows");
+    if (!body) return;
+    user = user || {};
+    readonly = Boolean(readonly);
+    var row = document.createElement("tr");
+    var mainTeacher = Boolean(user.main_teacher);
+    var canEdit = !readonly && !mainTeacher;
+    row.className = mainTeacher ? "ullme-allowed-user-main-row" : "";
+
+    var identityCell = document.createElement("td");
+    var identity = document.createElement("input");
+    identity.className = "ullme-doc-spec-input";
+    identity.setAttribute("data-field", "email_or_userid");
+    identity.value = user.email || user.userid || "";
+    identity.placeholder = "name@uni-ulm.de";
+    identity.readOnly = readonly || mainTeacher;
+    identityCell.appendChild(identity);
+    row.appendChild(identityCell);
+
+    var useridCell = document.createElement("td");
+    var userid = document.createElement("code");
+    userid.textContent = user.userid || "";
+    useridCell.appendChild(userid);
+    if (mainTeacher) {
+      var badge = document.createElement("span");
+      badge.className = "ullme-allowed-user-badge";
+      badge.textContent = "Main teacher";
+      useridCell.appendChild(badge);
+    }
+    row.appendChild(useridCell);
+
+    var canSetCell = document.createElement("td");
+    var canSet = document.createElement("input");
+    canSet.type = "checkbox";
+    canSet.setAttribute("data-field", "can_set_users");
+    canSet.checked = mainTeacher || Boolean(user.can_set_users);
+    canSet.disabled = readonly || mainTeacher;
+    canSetCell.appendChild(canSet);
+    row.appendChild(canSetCell);
+
+    var removeCell = document.createElement("td");
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ullme-text-action";
+    remove.textContent = "Remove";
+    remove.disabled = !canEdit;
+    remove.addEventListener("click", function () {
+      row.remove();
+    });
+    removeCell.appendChild(remove);
+    row.appendChild(removeCell);
+    body.appendChild(row);
+  }
+
+  function collectAllowedUserRows() {
+    var body = byId("ullme_allowed_user_rows");
+    if (!body) return [];
+    return Array.prototype.map.call(body.querySelectorAll("tr"), function (row) {
+      var identity = row.querySelector('[data-field="email_or_userid"]');
+      var canSet = row.querySelector('[data-field="can_set_users"]');
+      return {
+        email_or_userid: identity ? identity.value.trim() : "",
+        can_set_users: Boolean(canSet && canSet.checked)
+      };
+    }).filter(function (row) {
+      return row.email_or_userid;
+    });
+  }
+
+  function allowedUsersSaveComplete(result) {
+    var save = byId("ullme_allowed_users_save");
+    if (save && state.allowedUsers && state.allowedUsers.can_set_users) {
+      save.disabled = false;
+    }
+    if (!result || result.ok === false) {
+      window.alert((result && result.message) || "Allowed users could not be saved.");
+    }
+  }
+
   window.ullme = window.ullme || {};
   window.ullme.receiveAssistantMessage = receiveAssistantMessage;
   window.ullme.receiveAssistantStream = receiveAssistantStream;
@@ -3566,6 +3697,7 @@
   window.ullme.materialOperationComplete = materialOperationComplete;
   window.ullme.materialConversionComplete = materialConversionComplete;
   window.ullme.updateCourseList = updateCourseList;
+  window.ullme.allowedUsersSaveComplete = allowedUsersSaveComplete;
   window.ullme.openCatalogDialog = openCatalogDialog;
   window.ullme.aiTutorAddComplete = aiTutorAddComplete;
   window.ullme.openDefinitionWorkspace = openDefinitionWorkspace;

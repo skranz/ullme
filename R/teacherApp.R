@@ -15,14 +15,16 @@ example = function() {
     catch_chat_errors = FALSE,
     chat_debug = TRUE,
     enable_ai_tools = FALSE,
-    show_chat_thinking = FALSE
+    show_chat_thinking = FALSE,
+    userid="sebastian_kranz",
+    teacherid = "skranz"
   )
 
   #app = teacherApp(main_dir, api_key_file = "C:/libraries/ullme/nvidia_api_key.txt", api_provider="nvidia")
   viewApp(app,launch.browser = TRUE)
 }
 
-teacherApp = function(main_dir, userid="skranz",
+teacherApp = function(main_dir, userid="skranz", teacherid=NULL,
                        uses_fake_ai=NULL, max_upload_mb=100,
                        api_key_file=NULL,
                        api_provider=c("fake", "nvidia", "local"),
@@ -37,13 +39,15 @@ teacherApp = function(main_dir, userid="skranz",
                        show_chat_thinking=TRUE,
                        store_ai_interactions=FALSE,
                        login_check=c("none", "sel"),
-                       login_args=list()) {
+                       login_args=list(),
+                       email2userid=ullme_email2userid) {
   restore.point("teacherApp")
+  if (is.null(teacherid)) teacherid = userid
   .ullme_app(
     main_dir=main_dir,
     userid=userid,
     role="teacher",
-    teacherid=userid,
+    teacherid=teacherid,
     uses_fake_ai=uses_fake_ai,
     max_upload_mb=max_upload_mb,
     render_chat_markdown=render_chat_markdown,
@@ -60,7 +64,8 @@ teacherApp = function(main_dir, userid="skranz",
     show_chat_thinking=show_chat_thinking,
     store_ai_interactions=store_ai_interactions,
     login_check=login_check,
-    login_args=login_args
+    login_args=login_args,
+    email2userid=email2userid
   )
 }
 

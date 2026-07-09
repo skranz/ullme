@@ -687,6 +687,10 @@ body {
   display: block;
 }
 
+.ullme-course-workspace-empty .ullme-allowed-users.ullme-course-content-panel-active {
+  display: block;
+}
+
 .ullme-usage-statistics {
   min-width: 0;
   overflow-y: auto;
@@ -1003,6 +1007,7 @@ body {
 }
 
 .ullme-course-settings,
+.ullme-allowed-users,
 .ullme-material,
 .ullme-ai-tutors {
   overflow-y: auto;
@@ -3473,6 +3478,16 @@ body {
   display: none;
 }
 
+.ullme-studio-nav-spacer {
+  flex: 1 1 auto;
+  min-height: 8px;
+}
+
+.ullme-studio-settings-nav {
+  display: grid;
+  gap: 2px;
+}
+
 .ullme-dynamic-nav-item span {
   width: 100%;
   overflow: hidden;
@@ -3882,6 +3897,73 @@ body {
 
 .ullme-doc-spec-table-wrap td:nth-child(2) .ullme-doc-spec-input {
   min-width: 180px;
+}
+
+.ullme-panel-subtitle {
+  display: block;
+  color: #7c827e;
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.ullme-settings-note {
+  min-height: 18px;
+  color: #7b4f16;
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+.ullme-allowed-users-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e3e8e5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ullme-allowed-users-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ullme-allowed-users-table-wrap th,
+.ullme-allowed-users-table-wrap td {
+  border-bottom: 1px solid #eef1ef;
+  padding: 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ullme-allowed-users-table-wrap th {
+  color: #69706c;
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.ullme-allowed-users-table-wrap tr:last-child td {
+  border-bottom: 0;
+}
+
+.ullme-allowed-users-table-wrap code {
+  color: #27302b;
+  font-size: 11px;
+}
+
+.ullme-allowed-user-badge {
+  display: inline-block;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #dfe9e4;
+  color: #1f5744;
+  font-size: 10px;
+  font-weight: 650;
+  padding: 2px 7px;
+}
+
+.ullme-allowed-users-actions {
+  margin-top: 14px;
 }
 
 .ullme-tutor-form-help {

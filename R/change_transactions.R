@@ -72,9 +72,10 @@ ullme_path_is_within = function(path, root, allow_root=FALSE) {
 
 
 ullme_authorized_write_roots = function(app=getApp()) {
+  teacherid = app$teacherid %||% app$userid
   roots = c(
     app$user_dir,
-    ullme_role_user_dir(app$glob$main_dir, app$userid, "teacher")
+    ullme_role_user_dir(app$glob$main_dir, teacherid, "teacher")
   )
   unique(vapply(
     roots,

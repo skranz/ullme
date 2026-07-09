@@ -19,6 +19,8 @@ Each Shiny app instance has its own `app` object. User- and session-specific
 state therefore lives directly on `app`, including:
 
 - `app$userid`
+- `app$teacherid` for active teacher workspaces
+- `app$studentid` for student-role storage
 - the fixed `app$role` and `app$app_kind`
 - `app$semester`
 - `app$courseids` and `app$courseid`
@@ -72,7 +74,10 @@ work surface, and a resizable AI assistant pane. The global Usage dashboard is
 the initial view; Materials and Settings are fixed course rail entries. Each
 installed AI Tutor and each course Skill receive a dynamic rail entry. The
 active Skill is highlighted. The Add menu opens the Tutor-template or Skill
-catalog.
+catalog. A bottom settings group currently contains the Users view, where
+authorized teachers edit `allowed_users.yaml` through a table rather than a raw
+YAML editor. The main teacher listed in `general/teachers.yaml` is shown as a
+protected row and cannot be removed.
 
 Selecting a Tutor opens one course-local Tutor with Instances, Definition, and
 YAML tabs. `course/ai_tutors/<tutorid>/tutor.yml` is always a complete,
@@ -143,10 +148,17 @@ while keeping its constructor and workspace markup separate.
 With `login_check="sel"`, the initial UI contains only the
 shinyEventsLogin output container. Course state, user directories, dynamic
 resource paths, and the full teacher/student UI are initialized only after the
-login callback succeeds. Teacher email-to-ID authorization is loaded from
-`main_dir/allowed_teachers.yaml`; students receive a stable hashed internal
-user ID. Upload, audio, and download resource prefixes are random per
-authenticated Shiny session and are removed when that session ends.
+login callback succeeds. Authenticated emails are converted to normalized
+userids through the constructor's `email2userid` function, defaulting to
+`ullme_email2userid()` for `@uni-ulm.de` addresses. The original email is
+stored as `main_dir/users/<userid>/email.txt`. Teacher workspaces are declared
+in `main_dir/general/teachers.yaml`, while per-teacher access is read from
+`main_dir/teachers/<teacherid>/config/allowed_users.yaml`. If a userid has
+access to multiple teacher IDs, the teacher app shows a workspace chooser
+before initializing course state. Students receive a stable random
+`studentid` stored in `main_dir/users/<userid>/studentid.txt`. Upload, audio,
+and download resource prefixes are random per authenticated Shiny session and
+are removed when that session ends.
 
 `ullme_register_handlers()` registers the main application boundary:
 
@@ -157,6 +169,8 @@ authenticated Shiny session and are removed when that session ends.
 - `ullme_course_select_event`: updates `app$courseid`.
 - `ullme_add_course_event`: creates and selects a course.
 - `ullme_course_settings_save_event`: writes course settings to `course.yaml`.
+- `ullme_allowed_users_save_event`: validates and writes the active teacher's
+  `config/allowed_users.yaml`.
 - `ullme_usage_statistics_refresh_event`: starts an incremental deferred usage
   aggregation.
 - `ullme_material_category_event`: records the active material category.
@@ -189,8 +203,9 @@ material lists without rebuilding the UI.
 
 ## Users, Roles, And Semesters
 
-`teacherApp()` accepts a teacher `userid`; `studentApp()` accepts a student
-`userid` plus `teacherid`, `courseid`, and optional `tutorid` and
+`teacherApp()` accepts a human `userid` and a teacher workspace `teacherid`;
+when `teacherid` is omitted in no-login mode it defaults to `userid`.
+`studentApp()` accepts a student `userid` plus `teacherid`, `courseid`, and optional `tutorid` and
 `instanceid`. The four course-tutor identifiers can also come from URL query
 parameters when the matching constructor argument is `NULL`; constructor
 arguments always win. An app's role cannot be changed after construction.
@@ -201,14 +216,29 @@ The role-independent user directory is:
 main_dir/users/<userid>
 ```
 
-Role-specific directories are:
+User mapping files are:
 
 ```text
-main_dir/teachers/<userid>
-main_dir/students/<userid>
+main_dir/users/<userid>/email.txt
+main_dir/users/<userid>/studentid.txt
+main_dir/users/<userid>/teacherids.txt
 ```
 
-Course storage is available for teacher and student apps.
+Teacher workspace directories are:
+
+```text
+main_dir/teachers/<teacherid>
+main_dir/teachers/<teacherid>/config/allowed_users.yaml
+```
+
+Student role storage uses the random student ID:
+
+```text
+main_dir/students/<studentid>
+```
+
+Course storage is available for teacher and student apps. Teacher courses are
+owned by `teacherid`, not by the human `userid`.
 
 Semesters use these abbreviations:
 
@@ -227,7 +257,8 @@ sequence around that semester, while R validates every selected abbreviation.
 Courses are discovered directly from directory names:
 
 ```text
-main_dir/<role>s/<userid>/courses/<semester>/<courseid>
+main_dir/teachers/<teacherid>/courses/<semester>/<courseid>
+main_dir/students/<studentid>/courses/<semester>/<courseid>
 ```
 
 For example:

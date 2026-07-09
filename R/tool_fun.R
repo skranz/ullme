@@ -4,7 +4,7 @@ ullme_tool_course_dir = function(semester="sel", courseid, app=getApp()) {
   courseid = ullme_clean_courseid(courseid)
   path = ullme_course_dir(
     main_dir=app$glob$main_dir,
-    userid=app$userid,
+    userid=app$teacherid %||% app$userid,
     role="teacher",
     semester=semester,
     courseid=courseid
@@ -50,7 +50,7 @@ utool_list_courses = function(semester="sel", app=getApp()) {
     semester=semester,
     courseids=as.list(ullme_user_courseids(
       main_dir=app$glob$main_dir,
-      userid=app$userid,
+      userid=app$teacherid %||% app$userid,
       role="teacher",
       semester=semester
     ))

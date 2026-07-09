@@ -40,12 +40,12 @@ ullme_teacher_project_state = function(app=getApp()) {
   restore.point("ullme_teacher_project_state")
   semester_courses = ullme_user_courseids(
     main_dir=app$glob$main_dir,
-    userid=app$userid,
+    userid=app$teacherid,
     role="teacher",
     semester=app$semester
   )
   all_courses = ullme_list_courses(
-    teacherid=app$userid,
+    teacherid=app$teacherid,
     main_dir=app$glob$main_dir
   )
   course_dir = ullme_active_course_dir(app=app)

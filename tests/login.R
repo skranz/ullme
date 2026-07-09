@@ -1,35 +1,71 @@
 library(ullme)
 
 main_dir = tempfile("ullme-login-")
-dir.create(main_dir, recursive=TRUE)
+dir.create(file.path(main_dir, "general"), recursive=TRUE)
 
 yaml::write_yaml(
   list(
-    "teacher.one@example.org"="teacher_one",
-    "teacher.two@example.org"="teacher_two",
-    "delegate@example.org"="teacher_one"
+    skranz="sebastian_kranz",
+    esol="erin_solstice"
   ),
-  file.path(main_dir, "allowed_teachers.yaml")
+  file.path(main_dir, "general", "teachers.yaml")
 )
-
-teachers = ullme_allowed_teachers(main_dir)
-app = new.env(parent=emptyenv())
-app$allowed_teachers = teachers
 
 stopifnot(
   identical(
-    ullme_allowed_teachers_path(main_dir),
-    file.path(main_dir, "allowed_teachers.yaml")
+    ullme_email2userid("Sebastian.Kranz@uni-ulm.de"),
+    "sebastian_kranz"
   ),
+  is.null(ullme_email2userid("sebastian.kranz@example.org"))
+)
+
+teacher_dirs = ullme_make_teacher_dirs(main_dir)
+stopifnot(
+  dir.exists(file.path(main_dir, "teachers", "skranz", "config")),
+  file.exists(file.path(
+    main_dir, "teachers", "skranz", "config", "allowed_users.yaml"
+  )),
+  length(teacher_dirs) == 2L
+)
+
+skranz_users = ullme_read_allowed_users(main_dir, "skranz")
+stopifnot(
+  isTRUE(skranz_users$sebastian_kranz$main_teacher),
+  isTRUE(skranz_users$sebastian_kranz$can_set_users)
+)
+
+ullme_write_allowed_users(
+  main_dir=main_dir,
+  teacherid="esol",
+  users=list(
+    erin_solstice=list(main_teacher=TRUE, can_set_users=TRUE),
+    sebastian_kranz=list(can_set_users=FALSE)
+  )
+)
+
+ullme_write_user_email(
+  main_dir=main_dir,
+  userid="sebastian_kranz",
+  email="sebastian.kranz@uni-ulm.de"
+)
+studentid = ullme_user_studentid(main_dir, "sebastian_kranz")
+teacherids = ullme_allowed_teacherids_for_userid(
+  main_dir=main_dir,
+  userid="sebastian_kranz"
+)
+
+app = new.env(parent=emptyenv())
+app$glob = list(main_dir=main_dir)
+app$email2userid = ullme_email2userid
+
+stopifnot(
+  ullme_valid_studentid(studentid),
   identical(
-    ullme_teacherid_for_email("TEACHER.ONE@example.org", app=app),
-    "teacher_one"
+    ullme_read_user_email(main_dir, "sebastian_kranz"),
+    "sebastian.kranz@uni-ulm.de"
   ),
-  identical(
-    ullme_teacherid_for_email("delegate@example.org", app=app),
-    "teacher_one"
-  ),
-  is.null(ullme_teacherid_for_email("unknown@example.org", app=app))
+  identical(sort(teacherids), c("esol", "skranz")),
+  is.null(ullme_teacherid_for_email("unknown@uni-ulm.de", app=app))
 )
 
 fixed = ullme_validate_sel_login_args(list(fixed.password="test-secret"))
@@ -58,36 +94,42 @@ stopifnot(
   inherits(bad_email, "try-error")
 )
 
-if (requireNamespace("digest", quietly=TRUE)) {
-  first = ullme_login_student_userid("student.one@example.org")
-  second = ullme_login_student_userid("student.two@example.org")
-  stopifnot(
-    grepl("^email_[a-f0-9]{32}$", first),
-    identical(first, ullme_login_student_userid(
-      "STUDENT.ONE@example.org"
-    )),
-    !identical(first, second)
-  )
-}
-
 path_app = new.env(parent=emptyenv())
 path_app$glob = list(main_dir=main_dir)
-path_app$userid = "student_one"
+path_app$userid = "sebastian_kranz"
+path_app$studentid = studentid
 path_app$role = "student"
 ullme_set_app_user_paths(path_app, unique_resources=TRUE)
 stopifnot(
   startsWith(path_app$user_dir, file.path(main_dir, "users")),
+  identical(
+    path_app$role_user_dir,
+    file.path(main_dir, "students", studentid)
+  ),
   grepl("^ullme-uploads-[A-Za-z0-9]{16}$",
         path_app$uploads_resource_prefix),
   grepl("^ullme-audio-[A-Za-z0-9]{16}$",
         path_app$audio_resource_prefix)
 )
 
+teacher_app = new.env(parent=emptyenv())
+teacher_app$glob = list(main_dir=main_dir)
+teacher_app$userid = "sebastian_kranz"
+teacher_app$teacherid = "skranz"
+teacher_app$role = "teacher"
+ullme_set_app_user_paths(teacher_app, unique_resources=TRUE)
+stopifnot(
+  identical(
+    teacher_app$role_user_dir,
+    file.path(main_dir, "teachers", "skranz")
+  )
+)
+
 if (requireNamespace("shinyEventsLogin", quietly=TRUE)) {
   secret_course = file.path(
     main_dir,
     "teachers",
-    "teacher_one",
+    "skranz",
     "courses",
     ullme_semester(),
     "secret_course"

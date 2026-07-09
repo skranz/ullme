@@ -47,7 +47,8 @@ ullme_teacherid = function(app=getApp()) {
                       store_ai_interactions=TRUE,
                       never_save_chats=TRUE,
                       login_check=c("none", "sel"),
-                      login_args=list()) {
+                      login_args=list(),
+                      email2userid=ullme_email2userid) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
@@ -59,6 +60,9 @@ ullme_teacherid = function(app=getApp()) {
   stream_backend = match.arg(stream_backend)
   login_check = ullme_login_check(login_check)
   if (!is.list(login_args)) stop("login_args must be a list.")
+  if (!is.function(email2userid)) {
+    stop("email2userid must be a function.", call.=FALSE)
+  }
   api_provider = match.arg(api_provider)
   if (!is.null(uses_fake_ai)) {
     if (isTRUE(uses_fake_ai)) {
@@ -153,7 +157,11 @@ ullme_teacherid = function(app=getApp()) {
     instanceid, ullme_clean_tutor_instance_id, "instanceid"
   )
   app$userid = glob$userid
-  app$teacherid = if (identical(role, "teacher")) app$userid else glob$teacherid
+  app$teacherid = if (identical(role, "teacher")) {
+    if (identical(login_check, "sel")) "login_pending" else glob$teacherid
+  } else {
+    glob$teacherid
+  }
   app$courseid = glob$courseid
   app$tutorid = glob$tutorid
   app$instanceid = glob$instanceid
@@ -162,7 +170,9 @@ ullme_teacherid = function(app=getApp()) {
   app$allowed_roles = role
   app$login_check = login_check
   app$login_args = login_args
+  app$email2userid = email2userid
   app$login_email = NULL
+  app$studentid = NULL
   app$is.authenticated = identical(login_check, "none")
   app$semester = ullme_semester()
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
@@ -198,7 +208,7 @@ ullme_teacherid = function(app=getApp()) {
     } else {
       app$courseids = ullme_user_courseids(
         main_dir=main_dir,
-        userid=app$userid,
+        userid=app$teacherid,
         role=app$role,
         semester=app$semester
       )
@@ -218,7 +228,7 @@ ullme_teacherid = function(app=getApp()) {
   if (identical(login_check, "sel")) {
     app$login_args = ullme_validate_sel_login_args(login_args)
     if (identical(role, "teacher")) {
-      app$allowed_teachers = ullme_allowed_teachers(main_dir)
+      app$teachers = ullme_allowed_teachers(main_dir)
     }
     app$login_module = ullme_make_login_module(app=app)
     app$ui = ullme_login_shell_ui()
@@ -401,6 +411,18 @@ ullme_register_handlers = function(app=getApp()) {
     eventId = "ullme_course_settings_save_event",
     id = NULL,
     fun = ullme_handle_course_settings_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_allowed_users_save_event",
+    id = NULL,
+    fun = ullme_handle_allowed_users_save,
+    app = app
+  )
+  eventHandler(
+    eventId = "ullme_teacher_select_event",
+    id = NULL,
+    fun = ullme_handle_teacher_select,
     app = app
   )
   eventHandler(
@@ -778,7 +800,8 @@ ullme_course_workspace_ui = function(app=getApp()) {
     ullme_ai_tutors_ui(app=app),
     ullme_material_ui(app=app),
     ullme_course_file_ui(app=app),
-    ullme_course_settings_ui(app=app)
+    ullme_course_settings_ui(app=app),
+    ullme_allowed_users_ui(app=app)
   )
 }
 
@@ -871,7 +894,19 @@ ullme_studio_navigation_ui = function(app=getApp()) {
         tags$span(item$label)
         )
       )
-    })
+    }),
+    tags$div(class="ullme-studio-nav-spacer"),
+    tags$div(
+      class="ullme-studio-settings-nav",
+      tags$button(
+        class="ullme-studio-nav-item",
+        type="button",
+        `data-studio-view`="allowed-users",
+        title="Allowed users",
+        HTML(ullme_icon_svg("users")),
+        tags$span("Users")
+      )
+    )
   )
 }
 
@@ -950,6 +985,63 @@ ullme_course_settings_ui = function(app=getApp()) {
         class = "ullme-primary-action",
         type = "button",
         "Save"
+      )
+    )
+  )
+}
+
+
+ullme_allowed_users_ui = function(app=getApp()) {
+  restore.point("ullme_allowed_users_ui")
+  tags$section(
+    id = "ullme_allowed_users_panel",
+    class = "ullme-allowed-users ullme-course-content-panel",
+    `data-course-panel` = "allowed-users",
+    tags$div(
+      class = "ullme-panel-inner",
+      tags$div(
+        class="ullme-panel-head ullme-settings-panel-head",
+        tags$div(
+          class="ullme-panel-title",
+          tags$span("Allowed Users"),
+          tags$small(
+            id="ullme_allowed_users_teacher",
+            class="ullme-panel-subtitle"
+          )
+        )
+      ),
+      tags$div(
+        id="ullme_allowed_users_notice",
+        class="ullme-settings-note"
+      ),
+      tags$div(
+        class="ullme-allowed-users-table-wrap",
+        tags$table(
+          tags$thead(
+            tags$tr(
+              tags$th("Email or userid"),
+              tags$th("Userid"),
+              tags$th("Can edit users"),
+              tags$th("")
+            )
+          ),
+          tags$tbody(id="ullme_allowed_user_rows")
+        )
+      ),
+      tags$div(
+        class="ullme-tutor-form-actions ullme-allowed-users-actions",
+        tags$button(
+          id="ullme_allowed_users_add",
+          class="ullme-secondary-action",
+          type="button",
+          "Add user"
+        ),
+        tags$button(
+          id="ullme_allowed_users_save",
+          class="ullme-primary-action",
+          type="button",
+          "Save users"
+        )
       )
     )
   )
@@ -1344,6 +1436,7 @@ ullme_icon_svg = function(name) {
     send = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
     plus = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
     user = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>',
+    users = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 20a6 6 0 0 1 12 0"></path><circle cx="17" cy="9" r="2.5"></circle><path d="M14 16a5 5 0 0 1 7 4"></path></svg>',
     upload = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M5 20h14"></path></svg>',
     sparkles = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>',
     folder = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"></path><path d="M3 7V5h7l2 2"></path></svg>',
@@ -1404,7 +1497,7 @@ ullme_handle_add_course = function(courseid=NULL, coursename="", app=getApp(), .
   } else {
     ullme_make_course(
       main_dir=app$glob$main_dir,
-      userid=app$userid,
+      userid=ullme_app_role_storage_id(app=app),
       role=app$role,
       semester=app$semester,
       courseid=courseid,
@@ -1640,9 +1733,10 @@ ullme_handle_material_create_directory = function(path=NULL, app=getApp(), ...) 
 
 ullme_refresh_course_state = function(app=getApp()) {
   restore.point("ullme_refresh_course_state")
+  userid = ullme_app_role_storage_id(app=app)
   app$courseids = ullme_user_courseids(
     main_dir=app$glob$main_dir,
-    userid=app$userid,
+    userid=userid,
     role=app$role,
     semester=app$semester
   )
@@ -1693,6 +1787,7 @@ ullme_course_summary_for_js = function(app=getApp()) {
     summary$skills = ullme_skill_catalog_for_js(app=app)
     summary$course_skills = ullme_course_skills_for_js(app=app)
     summary$active_skill = ullme_skill_for_js(ullme_active_skill(app=app))
+    summary$allowed_users = ullme_allowed_users_for_js(app=app)
     summary$course_files = if (is.null(course_dir)) list() else
       ullme_course_file_records(course_dir)
     summary$material_tree = if (is.null(course_dir)) list() else

@@ -168,7 +168,7 @@ ullme_check_tool_args = function(args, perm=ullme_tool_perm(), app=getApp()) {
     semester = ullme_tool_semester(args$semester, app=app)
     courseid = tryCatch(ullme_clean_courseid(args$courseid), error=function(e) "")
     if (!nzchar(courseid) || !ullme_has_course(
-      teacherid=app$userid,
+      teacherid=app$teacherid %||% app$userid,
       semester=semester,
       courseid=courseid,
       main_dir=app$glob$main_dir

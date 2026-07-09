@@ -336,9 +336,10 @@ ullme_save_course_settings = function(app, course) {
 ullme_active_course_dir = function(app=getApp()) {
   restore.point("ullme_active_course_dir")
   if (is.null(app$courseid) || !nzchar(app$courseid)) return(NULL)
+  userid = ullme_app_role_storage_id(app=app)
   course_dir = ullme_course_dir(
     main_dir=app$glob$main_dir,
-    userid=app$userid,
+    userid=userid,
     role=app$role,
     semester=app$semester,
     courseid=app$courseid
@@ -493,7 +494,7 @@ ullme_create_teacher_course = function(courseid, coursename="", app=getApp()) {
   courseid = ullme_clean_courseid(courseid)
   target = ullme_course_dir(
     main_dir=app$glob$main_dir,
-    userid=app$userid,
+    userid=app$teacherid,
     role="teacher",
     semester=app$semester,
     courseid=courseid

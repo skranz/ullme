@@ -2,7 +2,7 @@ ullme_usage_statistics_dir = function(app=getApp()) {
   file.path(
     app$glob$main_dir,
     "teachers",
-    ullme_clean_user_name(app$userid),
+    ullme_clean_user_name(app$teacherid %||% app$userid),
     "usage_statistics"
   )
 }
@@ -405,7 +405,7 @@ ullme_usage_statistics_prepare = function(app=getApp()) {
   state$directory = directory
   state$cache_dir = cache_dir
   state$courses_dir = courses_dir
-  state$teacherid = app$userid
+  state$teacherid = app$teacherid %||% app$userid
   state$manifest = manifest
   state$current = current
   state$changed = current[changed, , drop=FALSE]
