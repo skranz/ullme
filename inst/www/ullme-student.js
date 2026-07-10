@@ -87,6 +87,7 @@
     var voiceButton = byId("ullme_voice_btn");
     var settingsButton = byId("ullme_user_settings_btn");
     var settings = byId("ullme_user_settings");
+    var semesterSelect = byId("ullme_student_semester_select");
     var tutorSelect = byId("ullme_student_tutor_select");
     var instanceSelect = byId("ullme_student_instance_select");
     var newChatBtn = byId("ullme_student_new_chat_btn");
@@ -148,9 +149,19 @@
       });
     }
 
+    if (semesterSelect) {
+      semesterSelect.addEventListener("change", function () {
+        sendEvent("ullme_student_context_event", {
+          semester: semesterSelect.value,
+          tutorid: null,
+          instanceid: null
+        });
+      });
+    }
     if (tutorSelect) {
       tutorSelect.addEventListener("change", function () {
         sendEvent("ullme_student_context_event", {
+          semester: semesterSelect ? semesterSelect.value : null,
           tutorid: tutorSelect.value,
           instanceid: null
         });
@@ -159,6 +170,7 @@
     if (instanceSelect) {
       instanceSelect.addEventListener("change", function () {
         sendEvent("ullme_student_context_event", {
+          semester: semesterSelect ? semesterSelect.value : null,
           tutorid: tutorSelect ? tutorSelect.value : null,
           instanceid: instanceSelect.value || null
         });
@@ -669,6 +681,8 @@
     }
 
     var courseSummary = byId("ullme_student_course_summary");
+    var semesterSelect = byId("ullme_student_semester_select");
+    var semesterText = byId("ullme_student_semester_text");
     var tutorSelect = byId("ullme_student_tutor_select");
     var tutorText = byId("ullme_student_tutor_text");
     var instanceSelect = byId("ullme_student_instance_select");
@@ -680,6 +694,21 @@
     if (errorLabel) {
       errorLabel.textContent = payload.error || "";
       errorLabel.style.display = payload.error ? "inline-block" : "none";
+    }
+
+    if (semesterSelect && semesterText) {
+      var semesters = Array.isArray(payload.semesters) ? payload.semesters : [];
+      semesterSelect.innerHTML = "";
+      if (!semesters.length && payload.semester) semesters = [payload.semester];
+      semesters.forEach(function (semester) {
+        semesterSelect.appendChild(option(semester, semester));
+      });
+      if (payload.semester) semesterSelect.value = payload.semester;
+      var showSemesterSelect = semesters.length > 1 &&
+        payload.allow_semester_switch;
+      semesterSelect.style.display = showSemesterSelect ? "" : "none";
+      semesterText.style.display = showSemesterSelect ? "none" : "";
+      semesterText.textContent = payload.semester || "Semester";
     }
 
     var selectedTutor = tutors.find(function (tutor) {

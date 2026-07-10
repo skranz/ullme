@@ -33,7 +33,8 @@ Create fixed-role applications with:
 teacher_app = teacherApp(
   main_dir,
   userid="sebastian_kranz",
-  teacherid="skranz"
+  teacherid="skranz",
+  base_url_student="https://example.org/student"
 )
 student_app = studentApp(
   main_dir,
@@ -65,6 +66,17 @@ instead be supplied as URL query parameters. A constructor argument always
 takes precedence over the corresponding URL value. `teacherid` and `courseid`
 are required; when no tutor or instance is specified, the student can switch
 it in the sidebar.
+When `teacherApp(base_url_student=...)` is set, Course Settings show the
+course's student app URL:
+
+```text
+<base_url_student>/<teacherid>/<courseid>
+```
+
+and one copyable URL per enabled Tutor or Tutor instance using query arguments
+`sem`, `tutor`, and `inst`. `studentApp()` accepts these aliases, chooses a
+default semester for the course when `sem` is missing, and lets students switch
+semester, Tutor, and instance in the header when alternatives exist.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait

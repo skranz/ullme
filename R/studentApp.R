@@ -15,7 +15,8 @@ example_studentApp = function() {
 
 
 studentApp = function(main_dir, userid="student", teacherid=NULL,
-                       courseid=NULL, tutorid=NULL, instanceid=NULL,
+                       courseid=NULL, semester=NULL, tutorid=NULL,
+                       instanceid=NULL,
                        uses_fake_ai=NULL, max_upload_mb=100,
                        api_key_file=NULL,
                        api_provider=c("fake", "nvidia", "local"),
@@ -34,6 +35,7 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
     role="student",
     teacherid=teacherid,
     courseid=courseid,
+    semester=semester,
     tutorid=tutorid,
     instanceid=instanceid,
     uses_fake_ai=uses_fake_ai,
@@ -70,15 +72,46 @@ ullme_student_url_parameters = function(session) {
   restore.point("ullme_student_url_parameters")
   search = tryCatch(session$clientData$url_search, error=function(e) "")
   query = shiny::parseQueryString(paste0(search %||% "")[1])
-  names = c("teacherid", "courseid", "tutorid", "instanceid")
-  result = lapply(names, function(name) {
-    value = query[[name]]
+  specs = list(
+    teacherid=c("teacherid", "teacher"),
+    courseid=c("courseid", "course"),
+    semester=c("sem", "semester"),
+    tutorid=c("tutor", "tutorid"),
+    instanceid=c("inst", "instance", "instanceid")
+  )
+  result = lapply(specs, function(keys) {
+    value = NULL
+    for (key in keys) {
+      if (!is.null(query[[key]])) {
+        value = query[[key]]
+        break
+      }
+    }
     if (is.null(value) || length(value) == 0) return(NULL)
     value = paste0(value)[1]
     if (is.na(value) || !nzchar(trimws(value))) NULL else value
   })
-  names(result) = names
   result
+}
+
+
+ullme_clean_semester_parameter = function(semester) {
+  restore.point("ullme_clean_semester_parameter")
+  semester = toupper(paste0(semester)[1])
+  ullme_semester_index(semester)
+  semester
+}
+
+
+ullme_student_available_semesters = function(app=getApp()) {
+  restore.point("ullme_student_available_semesters")
+  if (is.null(app$teacherid) || is.null(app$courseid)) return(character(0))
+  ullme_course_semesters(
+    main_dir=app$glob$main_dir,
+    teacherid=app$teacherid,
+    courseid=app$courseid,
+    require_tutor=TRUE
+  )
 }
 
 
@@ -88,6 +121,7 @@ ullme_student_resolve_parameters = function(session, app=getApp()) {
   cleaners = list(
     teacherid=ullme_clean_user_name,
     courseid=ullme_clean_courseid,
+    semester=ullme_clean_semester_parameter,
     tutorid=ullme_clean_definition_id,
     instanceid=ullme_clean_tutor_instance_id
   )
@@ -115,8 +149,28 @@ ullme_student_resolve_parameters = function(session, app=getApp()) {
       call.=FALSE
     )
   }
-  app$allow_tutor_switch = is.null(app$tutorid)
-  app$allow_instance_switch = is.null(app$instanceid)
+  if (is.null(app$semester)) {
+    app$semester = ullme_default_course_semester(
+      main_dir=app$glob$main_dir,
+      teacherid=app$teacherid,
+      courseid=app$courseid
+    ) %||% ullme_course_default_semester_for_date()
+  } else if (!app$semester %in% ullme_course_semesters(
+      main_dir=app$glob$main_dir,
+      teacherid=app$teacherid,
+      courseid=app$courseid,
+      require_tutor=FALSE
+    )) {
+    default_semester = ullme_default_course_semester(
+      main_dir=app$glob$main_dir,
+      teacherid=app$teacherid,
+      courseid=app$courseid
+    )
+    if (!is.null(default_semester)) app$semester = default_semester
+  }
+  app$allow_semester_switch = TRUE
+  app$allow_tutor_switch = TRUE
+  app$allow_instance_switch = TRUE
   invisible(app)
 }
 
@@ -243,8 +297,10 @@ ullme_student_context_for_js = function(error="", app=getApp()) {
     teacherid=app$teacherid %||% "",
     courseid=app$courseid %||% "",
     semester=app$semester %||% "",
+    semesters=as.list(ullme_student_available_semesters(app=app)),
     tutorid=app$tutorid %||% "",
     instanceid=app$instanceid %||% "",
+    allow_semester_switch=isTRUE(app$allow_semester_switch),
     allow_tutor_switch=isTRUE(app$allow_tutor_switch),
     allow_instance_switch=isTRUE(app$allow_instance_switch),
     tutors=lapply(tutors, function(tutor) {
@@ -308,21 +364,30 @@ ullme_init_student_app = function(session, app=getApp()) {
 }
 
 
-ullme_handle_student_context = function(tutorid=NULL, instanceid=NULL,
+ullme_handle_student_context = function(semester=NULL, tutorid=NULL,
+                                         instanceid=NULL,
                                          app=getApp(), ...) {
   restore.point("ullme_handle_student_context")
+  old_semester = app$semester
   old_tutorid = app$tutorid
   old_instanceid = app$instanceid
-  if (!isTRUE(app$allow_tutor_switch)) tutorid = old_tutorid
-  if (!isTRUE(app$allow_instance_switch)) instanceid = old_instanceid
   result = tryCatch({
+    semester = ullme_optional_app_parameter(
+      semester, ullme_clean_semester_parameter, "semester"
+    )
     tutorid = ullme_optional_app_parameter(
       tutorid, ullme_clean_definition_id, "tutorid"
     )
     instanceid = ullme_optional_app_parameter(
       instanceid, ullme_clean_tutor_instance_id, "instanceid"
     )
-    if (!identical(tutorid, old_tutorid) &&
+    if (!is.null(semester)) app$semester = semester
+    semester_changed = !identical(app$semester, old_semester)
+    if (isTRUE(semester_changed) && is.null(tutorid)) {
+      app$tutorid = NULL
+      app$instanceid = NULL
+    }
+    if ((!identical(tutorid, old_tutorid) || isTRUE(semester_changed)) &&
         isTRUE(app$allow_instance_switch)) {
       instanceid = NULL
     }
@@ -332,16 +397,19 @@ ullme_handle_student_context = function(tutorid=NULL, instanceid=NULL,
       app=app
     )
     context_changed =
+      !identical(app$semester, old_semester) ||
       !identical(app$tutorid, old_tutorid) ||
       !identical(app$instanceid, old_instanceid)
     if (isTRUE(context_changed)) {
       ullme_student_session_stats_init(app=app)
     }
-    if (!identical(app$tutorid, old_tutorid)) {
+    if (!identical(app$semester, old_semester) ||
+        !identical(app$tutorid, old_tutorid)) {
       ullme_student_chat_history_init(app=app)
     }
     ""
   }, error=function(e) {
+    app$semester = old_semester
     app$tutorid = old_tutorid
     app$instanceid = old_instanceid
     conditionMessage(e)
@@ -540,6 +608,19 @@ ullme_student_context_controls_ui = function(app=getApp()) {
       id="ullme_student_course_summary",
       class="ullme-student-course-summary",
       app$courseid %||% "Course"
+    ),
+    tags$div(
+      class="ullme-student-header-select-wrap",
+      tags$span(
+        id="ullme_student_semester_text",
+        class="ullme-student-header-text",
+        app$semester %||% "Semester"
+      ),
+      tags$select(
+        id="ullme_student_semester_select",
+        class="ullme-student-header-select",
+        style="display: none;"
+      )
     ),
     tags$div(
       class="ullme-student-header-select-wrap",

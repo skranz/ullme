@@ -205,10 +205,32 @@ material lists without rebuilding the UI.
 
 `teacherApp()` accepts a human `userid` and a teacher workspace `teacherid`;
 when `teacherid` is omitted in no-login mode it defaults to `userid`.
-`studentApp()` accepts a student `userid` plus `teacherid`, `courseid`, and optional `tutorid` and
-`instanceid`. The four course-tutor identifiers can also come from URL query
+`teacherApp(base_url_student=...)` records the base Shiny Server URL where
+student course apps are mounted. For teacher `skranz` and course `Umwelt`, the
+course app base URL is:
+
+```text
+<base_url_student>/skranz/Umwelt
+```
+
+Course Settings show that base URL and a plain newline-separated list of
+Tutor/instance URLs using `sem=<semester>`, `tutor=<tutorid>`, and
+`inst=<instanceid>`.
+`studentApp()` accepts a student `userid` plus `teacherid`, `courseid`, and
+optional `semester`, `tutorid`, and `instanceid`. These student-context identifiers can also come from URL query
 parameters when the matching constructor argument is `NULL`; constructor
 arguments always win. An app's role cannot be changed after construction.
+For student apps, `sem`, `tutor`, and `inst` are accepted as aliases for
+`semester`, `tutorid`, and `instanceid`. URL-selected values are initial
+defaults, not permanent locks; the student header can switch semester, Tutor,
+and instance when alternatives exist.
+
+The student app's default semester for a teacher/course is selected only among
+semesters where the course exists, preferring semesters that contain at least
+one enabled Tutor. The calendar target is the winter semester from October 15
+through April 30 and the summer semester otherwise. If the target semester does
+not have a course with an enabled Tutor, the closest available semester is
+chosen.
 
 The role-independent user directory is:
 

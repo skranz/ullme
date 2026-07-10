@@ -2238,10 +2238,13 @@
     };
   }
 
-  function fillCourseSettings(course) {
+  function fillCourseSettings(course, studentUrls) {
     course = course || {};
     setInputValue("ullme_settings_courseid", course.courseid || "");
     setInputValue("ullme_settings_coursename", course.coursename || "");
+    studentUrls = studentUrls || {};
+    setInputValue("ullme_settings_student_base_url", studentUrls.base_url || "");
+    setInputValue("ullme_settings_student_urls", studentUrls.text || "");
   }
 
   function fillEditHistoryControls(scope, history) {
@@ -3533,7 +3536,7 @@
     if (courseWorkspace) {
       courseWorkspace.classList.toggle("ullme-course-workspace-empty", !selectedCourseid);
     }
-    fillCourseSettings(course);
+    fillCourseSettings(course, summary ? summary.student_urls : null);
     fillEditHistoryControls("course_settings", editHistory.course_settings);
     renderMaterialTree();
     renderCourseFileTree(courseFiles);

@@ -14,6 +14,21 @@ ullme_semester = function(date=Sys.Date()) {
 }
 
 
+ullme_course_default_semester_for_date = function(date=Sys.Date()) {
+  restore.point("ullme_course_default_semester_for_date")
+  date = as.Date(date)
+  year = as.integer(format(date, "%Y"))
+  month_day = format(date, "%m-%d")
+  if (month_day >= "10-15") {
+    return(sprintf("WS%02d%02d", year %% 100, (year + 1) %% 100))
+  }
+  if (month_day <= "04-30") {
+    return(sprintf("WS%02d%02d", (year - 1) %% 100, year %% 100))
+  }
+  sprintf("SS%02d", year %% 100)
+}
+
+
 ullme_semester_sequence = function(center=ullme_semester(), before=3, after=4) {
   restore.point("ullme_semester_sequence")
   center_index = ullme_semester_index(center)
@@ -44,6 +59,86 @@ ullme_semester_from_index = function(index) {
     return(sprintf("SS%02d", year %% 100))
   }
   sprintf("WS%02d%02d", year %% 100, (year + 1) %% 100)
+}
+
+
+ullme_course_has_enabled_tutor = function(main_dir, teacherid, semester,
+                                           courseid) {
+  restore.point("ullme_course_has_enabled_tutor")
+  course_dir = ullme_course_dir(
+    main_dir=main_dir,
+    userid=teacherid,
+    role="teacher",
+    semester=semester,
+    courseid=courseid
+  )
+  root = file.path(course_dir, "ai_tutors")
+  if (!dir.exists(root)) return(FALSE)
+  ids = ullme_definition_ids(root)
+  if (length(ids) == 0) return(FALSE)
+  any(vapply(ids, function(tutorid) {
+    path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
+    if (!file.exists(path)) return(FALSE)
+    value = tryCatch(yaml::read_yaml(path, eval.expr=FALSE),
+                     error=function(e) NULL)
+    is.list(value) && !identical(value$enabled, FALSE)
+  }, logical(1)))
+}
+
+
+ullme_course_semesters = function(main_dir, teacherid, courseid,
+                                  require_tutor=FALSE) {
+  restore.point("ullme_course_semesters")
+  semesters = ullme_list_semesters(
+    teacherid=teacherid,
+    courseid=courseid,
+    main_dir=main_dir
+  )
+  semesters = semesters[vapply(semesters, function(semester) {
+    tryCatch({
+      dir.exists(ullme_course_dir(
+        main_dir=main_dir,
+        userid=teacherid,
+        role="teacher",
+        semester=semester,
+        courseid=courseid
+      )) &&
+        (!isTRUE(require_tutor) ||
+           ullme_course_has_enabled_tutor(
+             main_dir=main_dir,
+             teacherid=teacherid,
+             semester=semester,
+             courseid=courseid
+           ))
+    }, error=function(e) FALSE)
+  }, logical(1))]
+  sort(unique(semesters))
+}
+
+
+ullme_default_course_semester = function(main_dir, teacherid, courseid,
+                                          date=Sys.Date()) {
+  restore.point("ullme_default_course_semester")
+  target = ullme_course_default_semester_for_date(date)
+  candidates = ullme_course_semesters(
+    main_dir=main_dir,
+    teacherid=teacherid,
+    courseid=courseid,
+    require_tutor=TRUE
+  )
+  if (length(candidates) == 0) {
+    candidates = ullme_course_semesters(
+      main_dir=main_dir,
+      teacherid=teacherid,
+      courseid=courseid,
+      require_tutor=FALSE
+    )
+  }
+  if (length(candidates) == 0) return(NULL)
+  if (target %in% candidates) return(target)
+  target_index = ullme_semester_index(target)
+  indexes = vapply(candidates, ullme_semester_index, numeric(1))
+  candidates[[which.min(abs(indexes - target_index))]]
 }
 
 

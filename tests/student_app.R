@@ -114,7 +114,7 @@ stopifnot(
 
 url_session = new.env(parent=emptyenv())
 url_session$clientData = list(
-  url_search="?tutorid=tutor_a&instanceid=instance_a"
+  url_search=paste0("?sem=", semester, "&tutor=tutor_a&inst=instance_a")
 )
 url_app = studentApp(
   main_dir=main_dir,
@@ -128,12 +128,24 @@ ullme_student_resolve_parameters(session=url_session, app=url_app)
 stopifnot(
   identical(url_app$teacherid, "teacher_a"),
   identical(url_app$courseid, "course_a"),
+  identical(url_app$semester, semester),
   identical(url_app$tutorid, "tutor_a"),
   identical(url_app$instanceid, "instance_a"),
+  is.null(url_app$global$semester),
   is.null(url_app$global$tutorid),
   is.null(url_app$global$instanceid),
-  !isTRUE(url_app$allow_tutor_switch),
-  !isTRUE(url_app$allow_instance_switch)
+  isTRUE(url_app$allow_semester_switch),
+  isTRUE(url_app$allow_tutor_switch),
+  isTRUE(url_app$allow_instance_switch),
+  identical(
+    ullme_default_course_semester(
+      main_dir=main_dir,
+      teacherid="teacher_a",
+      courseid="course_a",
+      date=Sys.Date()
+    ),
+    semester
+  )
 )
 
 switch_app = studentApp(
@@ -152,6 +164,7 @@ student_context = ullme_student_context_for_js(app=switch_app)
 stopifnot(
   isTRUE(switch_app$allow_tutor_switch),
   isTRUE(switch_app$allow_instance_switch),
+  identical(student_context$semesters, as.list(semester)),
   identical(switch_app$tutorid, "tutor_a"),
   identical(switch_app$instanceid, "instance_a"),
   identical(student_context$tutors[[1]]$shown_text, "Welcome to Tutor A."),

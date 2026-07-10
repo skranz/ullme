@@ -31,7 +31,8 @@ ullme_teacherid = function(app=getApp()) {
 
 .ullme_app = function(main_dir, userid="skranz",
                       role=c("teacher", "student"), teacherid=NULL,
-                      courseid=NULL, tutorid=NULL, instanceid=NULL,
+                      courseid=NULL, semester=NULL, tutorid=NULL,
+                      instanceid=NULL,
                       uses_fake_ai=NULL, max_upload_mb=100,
                       api_key_file=NULL,
                       api_provider=c("fake", "nvidia", "local"),
@@ -46,6 +47,7 @@ ullme_teacherid = function(app=getApp()) {
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
                       never_save_chats=TRUE,
+                      base_url_student="",
                       login_check=c("none", "sel"),
                       login_args=list(),
                       email2userid=ullme_email2userid) {
@@ -150,6 +152,15 @@ ullme_teacherid = function(app=getApp()) {
   glob$courseid = ullme_optional_app_parameter(
     courseid, ullme_clean_courseid, "courseid"
   )
+  glob$semester = ullme_optional_app_parameter(
+    semester,
+    function(value) {
+      value = toupper(paste0(value)[1])
+      ullme_semester_index(value)
+      value
+    },
+    "semester"
+  )
   glob$tutorid = ullme_optional_app_parameter(
     tutorid, ullme_clean_definition_id, "tutorid"
   )
@@ -163,6 +174,7 @@ ullme_teacherid = function(app=getApp()) {
     glob$teacherid
   }
   app$courseid = glob$courseid
+  app$semester = glob$semester %||% ullme_semester()
   app$tutorid = glob$tutorid
   app$instanceid = glob$instanceid
   app$role = role
@@ -174,7 +186,6 @@ ullme_teacherid = function(app=getApp()) {
   app$login_email = NULL
   app$studentid = NULL
   app$is.authenticated = identical(login_check, "none")
-  app$semester = ullme_semester()
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$stream_chat = isTRUE(stream_chat)
@@ -197,6 +208,7 @@ ullme_teacherid = function(app=getApp()) {
   app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
+  app$base_url_student = ullme_normalize_base_url(base_url_student)
   ullme_set_app_user_paths(app=app)
   app$definition_imports = list()
   app$pending_changes = list()
@@ -985,6 +997,27 @@ ullme_course_settings_ui = function(app=getApp()) {
         class = "ullme-primary-action",
         type = "button",
         "Save"
+      ),
+      tags$div(
+        class="ullme-student-url-settings",
+        tags$label(
+          class="ullme-field",
+          tags$span("Student app base URL"),
+          tags$input(
+            id="ullme_settings_student_base_url",
+            type="text",
+            readonly="readonly"
+          )
+        ),
+        tags$label(
+          class="ullme-field",
+          tags$span("Tutor and instance URLs"),
+          tags$textarea(
+            id="ullme_settings_student_urls",
+            readonly="readonly",
+            rows="8"
+          )
+        )
       )
     )
   )
@@ -1788,6 +1821,7 @@ ullme_course_summary_for_js = function(app=getApp()) {
     summary$course_skills = ullme_course_skills_for_js(app=app)
     summary$active_skill = ullme_skill_for_js(ullme_active_skill(app=app))
     summary$allowed_users = ullme_allowed_users_for_js(app=app)
+    summary$student_urls = ullme_course_student_urls_for_js(app=app)
     summary$course_files = if (is.null(course_dir)) list() else
       ullme_course_file_records(course_dir)
     summary$material_tree = if (is.null(course_dir)) list() else
