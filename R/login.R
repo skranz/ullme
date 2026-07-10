@@ -3,6 +3,156 @@ ullme_login_check = function(login_check=c("none", "sel")) {
 }
 
 
+ullme_login_value_supplied = function(value) {
+  if (is.null(value) || length(value) == 0) return(FALSE)
+  if (is.character(value) && length(value) == 1L) {
+    return(!is.na(value) && nzchar(trimws(value)))
+  }
+  TRUE
+}
+
+
+ullme_login_args_have_db = function(login_args) {
+  if (!is.null(login_args$conn)) return(TRUE)
+  db_arg = login_args$db.arg
+  if (is.list(db_arg) &&
+      !is.null(db_arg$dbname) &&
+      nzchar(paste0(db_arg$dbname)[1])) {
+    return(TRUE)
+  }
+  !is.null(login_args$dbname) && nzchar(paste0(login_args$dbname)[1])
+}
+
+
+ullme_login_options_requested = function(login_args=list(),
+                                         login_fixed_password=NULL,
+                                         login_db_dir=NULL,
+                                         login_db=NULL,
+                                         dbname=NULL,
+                                         smtp=NULL,
+                                         email.text.fun=NULL,
+                                         use.signup=NULL) {
+  if (!is.null(login_args) && length(login_args) > 0L) return(TRUE)
+  isTRUE(use.signup) ||
+    ullme_login_value_supplied(login_fixed_password) ||
+    ullme_login_value_supplied(login_db_dir) ||
+    ullme_login_value_supplied(login_db) ||
+    ullme_login_value_supplied(dbname) ||
+    ullme_login_value_supplied(smtp) ||
+    !is.null(email.text.fun)
+}
+
+
+ullme_login_check_email_fun = function(email2userid=ullme_email2userid,
+                                       email.domain=NULL) {
+  force(email2userid)
+  force(email.domain)
+  function(email, ...) {
+    if (!is.null(email.domain) && nzchar(paste0(email.domain)[1])) {
+      domain = paste0(email.domain)[1]
+      if (!startsWith(domain, "@")) domain = paste0("@", domain)
+      if (!endsWith(tolower(paste0(email)[1]), tolower(domain))) {
+        return(list(
+          ok=FALSE,
+          msg=paste0("You can only create an account with an email that ends with ", domain)
+        ))
+      }
+    }
+    res = tryCatch(email2userid(email), error=function(e) NULL)
+    if (is.null(res)) {
+      return(list(
+        ok=FALSE,
+        msg="This email address is not allowed for this uLLMe app."
+      ))
+    }
+    list(ok=TRUE, msg="")
+  }
+}
+
+
+ullme_login_db_path = function(main_dir, login_db_dir=NULL, login_db=NULL,
+                               dbname=NULL, login_dbname="loginDB.sqlite") {
+  db_path = login_db %||% dbname
+  if (!is.null(db_path) && nzchar(paste0(db_path)[1])) {
+    return(paste0(db_path)[1])
+  }
+  db_dir = login_db_dir
+  if (is.null(db_dir) || !nzchar(paste0(db_dir)[1])) {
+    db_dir = file.path(main_dir, "logindb")
+  }
+  dir.create(db_dir, recursive=TRUE, showWarnings=FALSE)
+  file.path(db_dir, paste0(login_dbname %||% "loginDB.sqlite")[1])
+}
+
+
+ullme_prepare_login_args = function(main_dir, login_args=list(),
+                                    login_fixed_password=NULL,
+                                    login_db_dir=NULL,
+                                    login_db=NULL,
+                                    dbname=NULL,
+                                    login_dbname="loginDB.sqlite",
+                                    smtp=NULL,
+                                    email.text.fun=NULL,
+                                    email.domain=NULL,
+                                    app.url=NULL,
+                                    app.title=NULL,
+                                    login.title=NULL,
+                                    help.text=NULL,
+                                    lang=NULL,
+                                    use.signup=NULL,
+                                    email2userid=ullme_email2userid) {
+  restore.point("ullme_prepare_login_args")
+  if (is.null(login_args)) login_args = list()
+  if (!is.list(login_args)) stop("login_args must be a list.", call.=FALSE)
+
+  args = list()
+  if (ullme_login_value_supplied(login_fixed_password)) {
+    args$fixed.password = paste0(login_fixed_password)[1]
+  }
+
+  wants_signup = isTRUE(use.signup) ||
+    ullme_login_value_supplied(login_db_dir) ||
+    ullme_login_value_supplied(login_db) ||
+    ullme_login_value_supplied(dbname) ||
+    ullme_login_value_supplied(smtp) ||
+    !is.null(email.text.fun)
+  if (!is.null(use.signup)) args$use.signup = isTRUE(use.signup)
+  if (isTRUE(wants_signup) && !identical(use.signup, FALSE)) {
+    args$use.signup = TRUE
+    if (!ullme_login_args_have_db(login_args)) {
+      args$dbname = ullme_login_db_path(
+        main_dir=main_dir,
+        login_db_dir=login_db_dir,
+        login_db=login_db,
+        dbname=dbname,
+        login_dbname=login_dbname
+      )
+    }
+    if (is.null(login_args$check.email.fun)) {
+      args$check.email.fun = ullme_login_check_email_fun(
+        email2userid=email2userid,
+        email.domain=email.domain
+      )
+    }
+  }
+
+  if (ullme_login_value_supplied(smtp)) args$smtp = smtp
+  if (!is.null(email.text.fun)) args$email.text.fun = email.text.fun
+  if (!is.null(email.domain)) args$email.domain = email.domain
+  if (!is.null(app.url)) {
+    args$app.url = paste0(app.url)[1]
+  } else if (isTRUE(wants_signup) && is.null(login_args$app.url)) {
+    args$app.url = ""
+  }
+  if (!is.null(app.title)) args$app.title = paste0(app.title)[1]
+  if (!is.null(login.title)) args$login.title = paste0(login.title)[1]
+  if (!is.null(help.text)) args$help.text = paste0(help.text)[1]
+  if (!is.null(lang)) args$lang = paste0(lang)[1]
+
+  utils::modifyList(args, login_args)
+}
+
+
 ullme_login_email = function(value) {
   email = tolower(trimws(paste0(value %||% "")[1]))
   valid = !is.na(email) &&
@@ -53,17 +203,9 @@ ullme_sel_login_has_authentication = function(login_args) {
     length(fixed_password) == 1L &&
     !is.na(fixed_password) &&
     nzchar(paste0(fixed_password))
-  db_arg = login_args$db.arg
   has_database =
     !identical(login_args$use.signup, FALSE) &&
-    (
-      !is.null(login_args$conn) ||
-      (
-        is.list(db_arg) &&
-        !is.null(db_arg$dbname) &&
-        nzchar(paste0(db_arg$dbname)[1])
-      )
-    )
+    ullme_login_args_have_db(login_args)
   query_mode = paste0(login_args$login.by.query.key %||% "no")[1]
   cookie_mode = paste0(login_args$login.by.cookie %||% "no")[1]
   uses_token = query_mode %in% c("allow", "require") ||

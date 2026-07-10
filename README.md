@@ -50,7 +50,12 @@ Roles are fixed by the constructor and cannot be switched inside an app.
 Both constructors accept `login_check="none"` (the default) or
 `login_check="sel"` for the optional shinyEventsLogin integration. See
 [LOGIN.md](LOGIN.md) for configuration, user identity, teacher authorization, and the
-security limitations.
+security limitations. Common login options can be passed directly: use
+`login_fixed_password` for a simple shared-password deployment, or
+`login_db_dir`/`dbname` plus `smtp`, `app.url`, and optionally
+`email.text.fun` for email signup and password reset. Raw
+`login_args=list(...)` remains available for less common
+`shinyEventsLogin::loginModule()` options.
 Both constructors accept an `email2userid` function. The default
 `ullme_email2userid()` accepts `@uni-ulm.de` email addresses and normalizes the
 local part by replacing non-alphanumeric runs with `_`. The original email is

@@ -23,6 +23,46 @@ Supported configurations include:
 - a configured shinyEventsLogin signup database; or
 - a configured query/cookie token backend.
 
+For common deployments, the constructors also expose the most important
+`shinyEventsLogin` options directly. Supplying any authentication option
+automatically selects `login_check="sel"` unless `login_check` is set
+explicitly:
+
+```r
+teacherApp(
+  main_dir,
+  login_fixed_password=Sys.getenv("ULLME_LOGIN_PASSWORD")
+)
+
+studentApp(
+  main_dir,
+  teacherid="skranz",
+  courseid="umwelt",
+  login_db_dir="/srv/logindb",
+  smtp=list(
+    from="wiwi_ullme_verwaltung@uni-ulm.de",
+    smtp=list(host.name="smtp.mathematik.uni-ulm.de")
+  ),
+  app.url="https://example.org/student/skranz/umwelt",
+  email.domain="@uni-ulm.de",
+  email.text.fun=my_email_text_fun,
+  login.title="<h4>uLLMe Anmeldung</h4>",
+  lang="de"
+)
+```
+
+`login_db_dir` stores `loginDB.sqlite` in that directory. Alternatively pass
+`dbname="/path/to/loginDB.sqlite"` or a raw `login_args$db.arg`. If `smtp` or
+`email.text.fun` is supplied without a database path, uLLMe uses
+`<main_dir>/logindb/loginDB.sqlite`. The `app.url` value is used by
+`shinyEventsLogin` to create confirmation and password-reset links; set it to
+the public URL of the concrete Shiny app. Without it, only a root-relative
+confirmation link can be generated.
+
+Before a signup email is sent, uLLMe checks the email with `email2userid`.
+With the default `ullme_email2userid()`, only `@uni-ulm.de` addresses are
+accepted. The same normalized userid is used after password login.
+
 For a small, low-risk deployment, a shared password can be supplied from an
 environment variable:
 

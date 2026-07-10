@@ -82,6 +82,31 @@ stopifnot(is.list(ullme_validate_sel_login_args(list(
   token.dir="tokens"
 ))))
 
+prepared_fixed = ullme_prepare_login_args(
+  main_dir=main_dir,
+  login_fixed_password="test-secret"
+)
+prepared_signup = ullme_prepare_login_args(
+  main_dir=main_dir,
+  smtp=list(from="no-reply@example.org", smtp=list(host.name="localhost")),
+  app.url="https://example.org/ullme",
+  email2userid=function(email) {
+    if (identical(tolower(email), "user@example.org")) "user" else NULL
+  }
+)
+check_email = prepared_signup$check.email.fun("user@example.org")
+reject_email = prepared_signup$check.email.fun("other@example.org")
+stopifnot(
+  identical(prepared_fixed$fixed.password, "test-secret"),
+  identical(prepared_signup$use.signup, TRUE),
+  identical(prepared_signup$app.url, "https://example.org/ullme"),
+  nzchar(prepared_signup$dbname),
+  is.list(prepared_signup$smtp),
+  is.function(prepared_signup$check.email.fun),
+  isTRUE(check_email$ok),
+  !isTRUE(reject_email$ok)
+)
+
 missing_backend = try(ullme_validate_sel_login_args(list()), silent=TRUE)
 reserved = try(ullme_validate_sel_login_args(list(
   fixed.password="secret",

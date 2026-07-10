@@ -160,6 +160,19 @@ before initializing course state. Students receive a stable random
 and download resource prefixes are random per authenticated Shiny session and
 are removed when that session ends.
 
+The app constructors keep `login_args` as the raw pass-through to
+`shinyEventsLogin::loginModule()`, but they also provide a direct parameter
+layer for the common cases. `login_fixed_password` builds a fixed-password
+login without a login database. `login_db_dir`, `login_db`, or `dbname` select
+the signup database; when `smtp` or `email.text.fun` is provided without an
+explicit database path, uLLMe stores `loginDB.sqlite` under
+`main_dir/logindb/`. `smtp`, `email.text.fun`, `email.domain`, `app.url`,
+`app.title`, `login.title`, `help.text`, and `lang` are forwarded with their
+shinyEventsLogin names. Supplying one of the authentication options selects
+`login_check="sel"` unless the caller set `login_check` explicitly. Signup
+email requests are checked through the constructor's `email2userid` function
+before any confirmation email is sent.
+
 `ullme_register_handlers()` registers the main application boundary:
 
 - `ullme_submit_chat_event`: submits text, model, message IDs, and image

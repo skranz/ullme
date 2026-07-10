@@ -41,9 +41,55 @@ teacherApp = function(main_dir, userid="skranz", teacherid=NULL,
                        base_url_student="",
                        login_check=c("none", "sel"),
                        login_args=list(),
+                       login_fixed_password=NULL,
+                       login_db_dir=NULL,
+                       login_db=NULL,
+                       dbname=NULL,
+                       login_dbname="loginDB.sqlite",
+                       smtp=NULL,
+                       email.text.fun=NULL,
+                       email.domain=NULL,
+                       app.url=NULL,
+                       app.title=NULL,
+                       login.title=NULL,
+                       help.text=NULL,
+                       lang=NULL,
+                       use.signup=NULL,
                        email2userid=ullme_email2userid) {
   restore.point("teacherApp")
   if (is.null(teacherid)) teacherid = userid
+  login_requested = ullme_login_options_requested(
+    login_args=login_args,
+    login_fixed_password=login_fixed_password,
+    login_db_dir=login_db_dir,
+    login_db=login_db,
+    dbname=dbname,
+    smtp=smtp,
+    email.text.fun=email.text.fun,
+    use.signup=use.signup
+  )
+  if (missing(login_check) && isTRUE(login_requested)) {
+    login_check = "sel"
+  }
+  login_args = ullme_prepare_login_args(
+    main_dir=main_dir,
+    login_args=login_args,
+    login_fixed_password=login_fixed_password,
+    login_db_dir=login_db_dir,
+    login_db=login_db,
+    dbname=dbname,
+    login_dbname=login_dbname,
+    smtp=smtp,
+    email.text.fun=email.text.fun,
+    email.domain=email.domain,
+    app.url=app.url,
+    app.title=app.title,
+    login.title=login.title,
+    help.text=help.text,
+    lang=lang,
+    use.signup=use.signup,
+    email2userid=email2userid
+  )
   .ullme_app(
     main_dir=main_dir,
     userid=userid,
