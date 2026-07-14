@@ -94,9 +94,13 @@
     var historyNewBtn = byId("ullme_student_history_new_btn");
     var historyCloseBtn = byId("ullme_student_history_close_btn");
     var historyOpenBtn = byId("ullme_student_history_open_btn");
+    var themeSelect = byId("ullme_student_theme_select");
 
     if (!messages || !input || !submitButton) return;
     state.submitButtonHtml = submitButton.innerHTML;
+
+    initViewportHeight();
+    initTheme(themeSelect);
 
     mountIntro(messages);
     resizeInput(input);
@@ -353,6 +357,55 @@
     article.appendChild(bubble);
     messages.appendChild(article);
     if (!message.thinking) typesetMath(text);
+  }
+
+  function initViewportHeight() {
+    var viewport = window.visualViewport;
+    function update() {
+      var height = viewport ? viewport.height : window.innerHeight;
+      document.documentElement.style.setProperty(
+        "--ullme-viewport-height", Math.round(height) + "px"
+      );
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    if (viewport) viewport.addEventListener("resize", update);
+  }
+
+  function initTheme(select) {
+    var storageKey = "ullme-color-theme";
+    var media = window.matchMedia("(prefers-color-scheme: dark)");
+    function storedTheme() {
+      try {
+        return window.localStorage.getItem(storageKey) || "system";
+      } catch (error) {
+        return "system";
+      }
+    }
+    function apply(theme) {
+      var dark = theme === "dark" || (theme === "system" && media.matches);
+      document.documentElement.dataset.ullmeTheme = dark ? "dark" : "light";
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    }
+    var theme = storedTheme();
+    if (["system", "light", "dark"].indexOf(theme) < 0) theme = "system";
+    if (select) {
+      select.value = theme;
+      select.addEventListener("change", function () {
+        theme = select.value;
+        try {
+          window.localStorage.setItem(storageKey, theme);
+        } catch (error) {}
+        apply(theme);
+      });
+    }
+    var onSystemThemeChange = function () {
+      if (theme === "system") apply(theme);
+    };
+    if (media.addEventListener) media.addEventListener("change", onSystemThemeChange);
+    else if (media.addListener) media.addListener(onSystemThemeChange);
+    apply(theme);
   }
 
   function updateStudentIntro(tutor) {

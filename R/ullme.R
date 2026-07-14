@@ -194,8 +194,7 @@ ullme_teacherid = function(app=getApp()) {
   app$chat_debug = isTRUE(chat_debug)
   app$sync_chat = isTRUE(sync_chat)
   app$enable_ai_tools = isTRUE(enable_ai_tools)
-  app$show_chat_thinking =
-    identical(role, "teacher") && isTRUE(show_chat_thinking)
+  app$show_chat_thinking = isTRUE(show_chat_thinking)
   app$store_ai_interactions = isTRUE(store_ai_interactions)
   app$never_save_chats =
     identical(role, "student") && isTRUE(never_save_chats)
@@ -586,6 +585,9 @@ ullme_app_ui = function(app=getApp()) {
   tagList(
   tags$head(
       tags$meta(name="viewport", content="width=device-width, initial-scale=1"),
+      if (!is_teacher) tags$script(HTML(
+        "try{var t=localStorage.getItem('ullme-color-theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.ullmeTheme=d?'dark':'light';document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}"
+      )),
       tags$link(
         rel="stylesheet",
         type="text/css",
@@ -736,6 +738,16 @@ ullme_appbar_ui = function(app=getApp()) {
           class = "ullme-settings-link",
           type = "button",
           "Skill Library"
+        )
+      ),
+      if (identical(app$app_kind, "student")) tags$label(
+        class = "ullme-user-settings-field",
+        tags$span("Appearance"),
+        tags$select(
+          id = "ullme_student_theme_select",
+          tags$option(value="system", "System"),
+          tags$option(value="light", "Light"),
+          tags$option(value="dark", "Dark")
         )
       )
     )

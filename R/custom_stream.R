@@ -9,7 +9,9 @@ ullme_custom_stream_system_prompt = function(context=list(),
                                              system_instructions=NULL,
                                              task_profile="",
                                              app=getApp()) {
-  if (identical(app$role, "student")) return(NULL)
+  if (identical(app$role, "student")) {
+    return(ullme_student_system_prompt(app=app))
+  }
   if (!identical(app$role, "teacher")) {
     stop("The custom stream backend is only available for teacher/student chat.")
   }

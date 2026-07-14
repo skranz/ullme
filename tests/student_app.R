@@ -51,6 +51,38 @@ stopifnot(
   identical(app$teacherid, "teacher_a"),
   identical(app$courseid, "course_a")
 )
+
+configured_app = studentApp(
+  main_dir=main_dir,
+  userid="student_config",
+  teacherid="teacher_a",
+  courseid="course_a",
+  api_provider="fake",
+  stream_backend="custom",
+  catch_chat_errors=FALSE,
+  chat_debug=TRUE,
+  sync_chat=TRUE,
+  enable_ai_tools=FALSE,
+  show_chat_thinking=TRUE
+)
+stopifnot(
+  identical(configured_app$stream_backend, "custom"),
+  identical(configured_app$catch_chat_errors, FALSE),
+  identical(configured_app$chat_debug, TRUE),
+  identical(configured_app$sync_chat, TRUE),
+  identical(configured_app$enable_ai_tools, FALSE),
+  identical(configured_app$show_chat_thinking, TRUE)
+)
+configured_app$student_tutors = list(
+  ullme_student_tutor_definition("tutor_a", app=configured_app)
+)
+configured_app$tutorid = "tutor_a"
+configured_app$instanceid = "instance_a"
+stopifnot(grepl(
+  "Help the student.",
+  ullme_custom_stream_system_prompt(app=configured_app),
+  fixed=TRUE
+))
 stopifnot(
   "ullme_submit_chat_event" %in% names(app$eventList),
   "ullme_cancel_chat_event" %in% names(app$eventList),
@@ -64,18 +96,35 @@ ui = paste(rendered_ui$head, rendered_ui$html, collapse="")
 stopifnot(
   grepl("ullme-student.css", ui, fixed=TRUE),
   grepl("ullme-student.js", ui, fixed=TRUE),
+  grepl("ullme_student_theme_select", ui, fixed=TRUE),
   grepl(
     "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
     ui,
     fixed=TRUE
   ),
-  grepl("ullme_student_pane_resizer", ui, fixed=TRUE),
+  grepl("ullme-student-workspace", ui, fixed=TRUE),
   !grepl("ullme_student_sidebar_toggle", ui, fixed=TRUE),
   !grepl("ullme-chat.css", ui, fixed=TRUE),
   grepl("ullme-chat.js", ui, fixed=TRUE),
   !grepl("ullme-teacher.js", ui, fixed=TRUE),
   !grepl("ullme-usage.js", ui, fixed=TRUE),
   !grepl("ullme-tutors.js", ui, fixed=TRUE)
+)
+
+student_css = paste(
+  readLines("inst/www/ullme-student.css", warn=FALSE, encoding="UTF-8"),
+  collapse="\n"
+)
+student_js = paste(
+  readLines("inst/www/ullme-student.js", warn=FALSE, encoding="UTF-8"),
+  collapse="\n"
+)
+stopifnot(
+  grepl("--ullme-viewport-height", student_css, fixed=TRUE),
+  grepl("env(safe-area-inset-bottom)", student_css, fixed=TRUE),
+  grepl(":root[data-ullme-theme=\"dark\"]", student_css, fixed=TRUE),
+  grepl("window.visualViewport", student_js, fixed=TRUE),
+  grepl("ullme-color-theme", student_js, fixed=TRUE)
 )
 
 for (path in file.path(

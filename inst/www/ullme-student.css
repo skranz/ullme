@@ -6,6 +6,14 @@
   --ullme-muted: #667085;
   --ullme-panel: #f7f8fb;
   --ullme-text: #172033;
+  --ullme-surface: #fff;
+  --ullme-surface-raised: #fff;
+  --ullme-subtle: #f0f2f5;
+  --ullme-hover: #eef1f6;
+  --ullme-user-bubble: #eef2f8;
+  --ullme-code-bg: #f3f5f8;
+  --ullme-control-border: #cfd5df;
+  --ullme-shadow: rgba(20, 30, 55, 0.16);
 }
 
 * {
@@ -705,4 +713,231 @@ input {
   padding: 0;
   border: 0;
   box-shadow: none;
+}
+
+/* Responsive app shell: account for mobile browser chrome and soft keyboards. */
+html,
+body {
+  overflow: hidden;
+  background: var(--ullme-surface);
+}
+
+.ullme-fluid,
+.ullme-app {
+  height: var(--ullme-viewport-height, 100dvh);
+  min-height: 0;
+}
+
+.ullme-appbar {
+  flex-wrap: nowrap;
+  background: color-mix(in srgb, var(--ullme-surface) 96%, transparent);
+}
+
+.ullme-context-controls {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+}
+
+.ullme-student-context-summary {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.ullme-student-context-summary::-webkit-scrollbar {
+  display: none;
+}
+
+.ullme-student-workspace {
+  height: 100%;
+}
+
+.ullme-chat-pane,
+.ullme-chat-input,
+.ullme-user-settings,
+.ullme-upload-preview {
+  background-color: var(--ullme-surface-raised);
+}
+
+.ullme-composer-wrap {
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--ullme-surface) 18px);
+}
+
+.ullme-user-settings-field + .ullme-user-settings-field {
+  margin-top: 12px;
+}
+
+.ullme-user-settings-field select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--ullme-border);
+  border-radius: 8px;
+  color: var(--ullme-text);
+  background: var(--ullme-panel);
+}
+
+@media (max-width: 760px) {
+  .ullme-appbar {
+    gap: 8px;
+    padding: 7px 10px;
+  }
+
+  .ullme-appbar-brand {
+    flex: 0 0 auto;
+    font-size: 18px;
+  }
+
+  .ullme-context-controls {
+    gap: 6px;
+  }
+
+  .ullme-appbar-spacer {
+    display: none;
+  }
+
+  .ullme-user-settings-button {
+    flex: 0 0 36px;
+  }
+
+  .ullme-composer-wrap {
+    padding: 6px 8px max(8px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 480px) {
+  .ullme-appbar {
+    min-height: 52px;
+  }
+
+  .ullme-student-course-summary {
+    max-width: 112px;
+  }
+
+  .ullme-student-header-text,
+  .ullme-student-header-select {
+    font-size: 12px;
+  }
+
+  .ullme-chat-messages {
+    padding: 18px 12px 12px;
+  }
+
+  .ullme-message {
+    margin-bottom: 18px;
+  }
+
+  .ullme-bubble {
+    max-width: 90%;
+    font-size: 14px;
+  }
+
+  .ullme-composer:not(.ullme-composer-recording) {
+    grid-template-areas:
+      "preview preview preview preview"
+      "input input input input"
+      "upload model voice submit";
+    grid-template-columns: 38px minmax(0, 1fr) 38px 38px;
+  }
+
+  .ullme-model-select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .ullme-user-settings {
+    top: 50px;
+    right: 8px;
+    width: min(300px, calc(100vw - 16px));
+  }
+
+  .ullme-student-workspace-with-history .ullme-student-chat-history {
+    top: 52px;
+  }
+}
+
+:root[data-ullme-theme="dark"] {
+  color-scheme: dark;
+  --ullme-accent: #6d91ff;
+  --ullme-accent-dark: #5278ec;
+  --ullme-border: #30394a;
+  --ullme-muted: #9ca8ba;
+  --ullme-panel: #151b26;
+  --ullme-text: #edf1f7;
+  --ullme-surface: #0d1119;
+  --ullme-surface-raised: #171d28;
+  --ullme-subtle: #202837;
+  --ullme-hover: #242d3d;
+  --ullme-user-bubble: #273248;
+  --ullme-code-bg: #171e2a;
+  --ullme-control-border: #3b4659;
+  --ullme-shadow: rgba(0, 0, 0, 0.45);
+}
+
+:root[data-ullme-theme="dark"] .ullme-appbar-brand {
+  color: #f2f5fb;
+}
+
+:root[data-ullme-theme="dark"] .ullme-student-header-text,
+:root[data-ullme-theme="dark"] .ullme-student-header-select {
+  color: #d9e0eb;
+  border-color: var(--ullme-control-border);
+  background: var(--ullme-subtle);
+}
+
+:root[data-ullme-theme="dark"] .ullme-icon-button:hover,
+:root[data-ullme-theme="dark"] .ullme-mini-action:hover,
+:root[data-ullme-theme="dark"] .ullme-student-chat-history-item:hover {
+  background: var(--ullme-hover);
+}
+
+:root[data-ullme-theme="dark"] .ullme-user-settings,
+:root[data-ullme-theme="dark"] .ullme-upload-preview {
+  box-shadow: 0 18px 45px var(--ullme-shadow);
+}
+
+:root[data-ullme-theme="dark"] .ullme-student-chat-history {
+  background: var(--ullme-panel);
+}
+
+:root[data-ullme-theme="dark"] .ullme-student-chat-history-item {
+  color: #cbd3df;
+}
+
+:root[data-ullme-theme="dark"] .ullme-student-chat-history-item-active {
+  color: #cbd8ff;
+  background: #25365d;
+}
+
+:root[data-ullme-theme="dark"] .ullme-message-user .ullme-bubble {
+  background: var(--ullme-user-bubble);
+}
+
+:root[data-ullme-theme="dark"] .ullme-message-text-markdown pre {
+  background: var(--ullme-code-bg);
+}
+
+:root[data-ullme-theme="dark"] .ullme-thinking .ullme-message-text {
+  color: #b2bdcc;
+}
+
+:root[data-ullme-theme="dark"] .ullme-composer {
+  border-color: var(--ullme-control-border);
+  background: var(--ullme-surface-raised);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-ullme-theme="dark"] .ullme-chat-input {
+  color: var(--ullme-text);
+  background: transparent;
+}
+
+:root[data-ullme-theme="dark"] .ullme-chat-input::placeholder {
+  color: #78859a;
+}
+
+:root[data-ullme-theme="dark"] .ullme-recording-cancel,
+:root[data-ullme-theme="dark"] .ullme-audio-select {
+  color: var(--ullme-text);
+  background: var(--ullme-subtle);
 }

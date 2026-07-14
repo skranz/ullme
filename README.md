@@ -85,8 +85,14 @@ semester, Tutor, and instance in the header when alternatives exist.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait
-for complete responses. `teacherApp(show_chat_thinking=TRUE)` also shows
-provider-supplied thinking content in a closed, expandable field when present.
+for complete responses. Both constructors accept `stream_backend`,
+`catch_chat_errors`, `chat_debug`, `sync_chat`, `enable_ai_tools`, and
+`show_chat_thinking`; use `stream_backend="custom"` for the custom
+OpenAI-compatible streaming backend. When `show_chat_thinking=TRUE`,
+provider-supplied thinking content is shown in a closed, expandable field when
+present. The student app's Personal settings menu also offers System, Light,
+and Dark appearance modes; this browser-local choice can later be replaced by
+a persisted user setting.
 Teacher AI requests and responses are stored below the active course's
 `ai_interactions/` directory by default; pass
 `store_ai_interactions=FALSE` to disable this debugging log. Student apps
