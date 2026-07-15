@@ -103,6 +103,9 @@ stopifnot(
     fixed=TRUE
   ),
   grepl("ullme-student-workspace", ui, fixed=TRUE),
+  grepl("id=\"ullme_camera_btn\"", ui, fixed=TRUE),
+  grepl("id=\"ullme_camera_upload\"", ui, fixed=TRUE),
+  grepl("capture=\"environment\"", ui, fixed=TRUE),
   !grepl("ullme_student_sidebar_toggle", ui, fixed=TRUE),
   !grepl("ullme-chat.css", ui, fixed=TRUE),
   grepl("ullme-chat.js", ui, fixed=TRUE),
@@ -124,6 +127,7 @@ stopifnot(
   grepl("env(safe-area-inset-bottom)", student_css, fixed=TRUE),
   grepl(":root[data-ullme-theme=\"dark\"]", student_css, fixed=TRUE),
   grepl("window.visualViewport", student_js, fixed=TRUE),
+  grepl("cameraInput.click()", student_js, fixed=TRUE),
   grepl("ullme-color-theme", student_js, fixed=TRUE)
 )
 

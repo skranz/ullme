@@ -82,6 +82,8 @@
     var messages = byId("ullme_chat_messages");
     var input = byId("ullme_chat_input");
     var submitButton = byId("ullme_submit_btn");
+    var cameraButton = byId("ullme_camera_btn");
+    var cameraInput = byId("ullme_camera_upload");
     var uploadButton = byId("ullme_upload_btn");
     var fileInput = byId("ullme_image_upload");
     var voiceButton = byId("ullme_voice_btn");
@@ -127,6 +129,15 @@
       });
       fileInput.addEventListener("change", function () {
         addLocalUploads(Array.prototype.slice.call(fileInput.files || []));
+        updateSubmitState();
+      });
+    }
+    if (cameraButton && cameraInput) {
+      cameraButton.addEventListener("click", function () {
+        cameraInput.click();
+      });
+      cameraInput.addEventListener("change", function () {
+        addLocalUploads(Array.prototype.slice.call(cameraInput.files || []));
         updateSubmitState();
       });
     }

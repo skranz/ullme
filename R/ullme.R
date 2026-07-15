@@ -359,6 +359,11 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   if (identical(app$role, "student")) {
+    changeHandler(
+      id = "ullme_camera_upload",
+      fun = ullme_handle_image_upload,
+      app = app
+    )
     eventHandler(
       eventId="ullme_cancel_chat_event",
       id=NULL,
@@ -624,6 +629,13 @@ ullme_app_ui = function(app=getApp()) {
           type = "file",
           accept = "image/*",
           multiple = "multiple"
+        ),
+        if (identical(app$app_kind, "student")) tags$input(
+          id = "ullme_camera_upload",
+          class = "ullme-file-input",
+          type = "file",
+          accept = "image/*",
+          capture = "environment"
         ),
         tags$input(
           id = "ullme_audio_upload",
@@ -1358,6 +1370,14 @@ ullme_composer_ui = function(app=getApp()) {
         title = "Skills",
         HTML(ullme_icon_svg("sparkles"))
       ),
+      if (identical(app$app_kind, "student")) tags$button(
+        id = "ullme_camera_btn",
+        class = "ullme-icon-button",
+        type = "button",
+        `aria-label` = "Take a photo",
+        title = "Take a photo",
+        HTML(ullme_icon_svg("camera"))
+      ),
       tags$button(
         id = "ullme_upload_btn",
         class = "ullme-icon-button",
@@ -1477,6 +1497,7 @@ ullme_icon_svg = function(name) {
   icons = list(
     panel = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M9 4v16"></path></svg>',
     image = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M21 15l-5-5L5 19"></path></svg>',
+    camera = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"></path><circle cx="12" cy="13" r="4"></circle></svg>',
     mic = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>',
     send = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>',
     plus = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',

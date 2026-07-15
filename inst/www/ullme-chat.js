@@ -166,8 +166,10 @@
 
   function clearUploads(state, render) {
     var input = byId("ullme_image_upload");
+    var cameraInput = byId("ullme_camera_upload");
     state.uploads = [];
     if (input) input.value = "";
+    if (cameraInput) cameraInput.value = "";
     render();
   }
 

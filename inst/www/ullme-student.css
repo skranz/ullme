@@ -677,10 +677,10 @@ input {
 .ullme-composer:not(.ullme-composer-recording) {
   display: grid;
   grid-template-areas:
-    "preview preview preview preview preview"
-    "input input input input input"
-    "upload spacer model voice submit";
-  grid-template-columns: 38px minmax(0, 1fr) auto 38px 38px;
+    "preview preview preview preview preview preview"
+    "input input input input input input"
+    "camera upload spacer model voice submit";
+  grid-template-columns: 38px 38px minmax(0, 1fr) auto 38px 38px;
   align-items: center;
   gap: 3px 5px;
   padding: 8px;
@@ -693,6 +693,10 @@ input {
 
 .ullme-composer:not(.ullme-composer-recording) #ullme_upload_btn {
   grid-area: upload;
+}
+
+.ullme-composer:not(.ullme-composer-recording) #ullme_camera_btn {
+  grid-area: camera;
 }
 
 .ullme-composer:not(.ullme-composer-recording) .ullme-model-select {
@@ -834,10 +838,10 @@ body {
 
   .ullme-composer:not(.ullme-composer-recording) {
     grid-template-areas:
-      "preview preview preview preview"
-      "input input input input"
-      "upload model voice submit";
-    grid-template-columns: 38px minmax(0, 1fr) 38px 38px;
+      "preview preview preview preview preview"
+      "input input input input input"
+      "camera upload model voice submit";
+    grid-template-columns: 38px 38px minmax(0, 1fr) 38px 38px;
   }
 
   .ullme-model-select {
