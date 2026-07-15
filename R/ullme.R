@@ -50,7 +50,8 @@ ullme_teacherid = function(app=getApp()) {
                       base_url_student="",
                       login_check=c("none", "sel"),
                       login_args=list(),
-                      email2userid=ullme_email2userid) {
+                      email2userid=ullme_email2userid,
+                      adapt_mathjax=TRUE) {
   restore.point(".ullme_app")
   app = eventsApp()
   glob = app$glob
@@ -88,6 +89,11 @@ ullme_teacherid = function(app=getApp()) {
       length(render_chat_markdown) != 1L ||
       is.na(render_chat_markdown)) {
     stop("render_chat_markdown must be TRUE or FALSE.")
+  }
+  if (!is.logical(adapt_mathjax) ||
+      length(adapt_mathjax) != 1L ||
+      is.na(adapt_mathjax)) {
+    stop("adapt_mathjax must be TRUE or FALSE.")
   }
   if (!is.logical(stream_chat) ||
       length(stream_chat) != 1L ||
@@ -188,6 +194,7 @@ ullme_teacherid = function(app=getApp()) {
   app$is.authenticated = identical(login_check, "none")
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
+  app$adapt_mathjax = isTRUE(adapt_mathjax)
   app$stream_chat = isTRUE(stream_chat)
   app$stream_backend = stream_backend
   app$catch_chat_errors = isTRUE(catch_chat_errors)
@@ -636,6 +643,41 @@ ullme_app_ui = function(app=getApp()) {
           type = "file",
           accept = "image/*",
           capture = "environment"
+        ),
+        if (identical(app$app_kind, "student")) tags$div(
+          id = "ullme_camera_dialog",
+          class = "ullme-camera-dialog",
+          role = "dialog",
+          `aria-modal` = "true",
+          `aria-label` = "Take a photo",
+          hidden = "hidden",
+          tags$div(
+            class = "ullme-camera-panel",
+            tags$video(
+              id = "ullme_camera_video",
+              class = "ullme-camera-video",
+              autoplay = "autoplay",
+              muted = "muted",
+              playsinline = "playsinline"
+            ),
+            tags$div(
+              class = "ullme-camera-actions",
+              tags$button(
+                id = "ullme_camera_cancel",
+                class = "ullme-camera-cancel",
+                type = "button",
+                "Cancel"
+              ),
+              tags$button(
+                id = "ullme_camera_capture",
+                class = "ullme-camera-capture",
+                type = "button",
+                `aria-label` = "Capture photo",
+                HTML(ullme_icon_svg("camera")),
+                tags$span("Take photo")
+              )
+            )
+          )
         ),
         tags$input(
           id = "ullme_audio_upload",
@@ -1327,6 +1369,10 @@ ullme_chat_output_html = function(text, app=getApp()) {
   restore.point("ullme_chat_output_html")
   text = paste0(text %||% "", collapse="\n")
   if (!isTRUE(app$render_chat_markdown) || !nzchar(text)) return("")
+
+  if (isTRUE(app$adapt_mathjax)) {
+    text = replace_math_delimiters(text)
+  }
 
   # Protect common LaTeX delimiters and escaped braces from CommonMark
   # so that MathJax can still find \[ \], \( \), \{ \}

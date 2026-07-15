@@ -84,6 +84,9 @@ default semester for the course when `sem` is missing, and lets students switch
 semester, Tutor, and instance in the header when alternatives exist.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
+By default, `adapt_mathjax=TRUE` also normalizes `$...$` and `$$...$$` in
+rendered chat output to MathJax's `\\(...\\)` and `\\[...\\]` delimiters.
+Set it to `FALSE` to preserve dollar delimiters unchanged.
 Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait
 for complete responses. Both constructors accept `stream_backend`,
 `catch_chat_errors`, `chat_debug`, `sync_chat`, `enable_ai_tools`, and

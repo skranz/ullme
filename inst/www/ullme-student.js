@@ -84,6 +84,10 @@
     var submitButton = byId("ullme_submit_btn");
     var cameraButton = byId("ullme_camera_btn");
     var cameraInput = byId("ullme_camera_upload");
+    var cameraDialog = byId("ullme_camera_dialog");
+    var cameraVideo = byId("ullme_camera_video");
+    var cameraCancel = byId("ullme_camera_cancel");
+    var cameraCapture = byId("ullme_camera_capture");
     var uploadButton = byId("ullme_upload_btn");
     var fileInput = byId("ullme_image_upload");
     var voiceButton = byId("ullme_voice_btn");
@@ -134,12 +138,35 @@
     }
     if (cameraButton && cameraInput) {
       cameraButton.addEventListener("click", function () {
-        cameraInput.click();
+        if (prefersNativeCameraCapture()) {
+          cameraInput.click();
+        } else {
+          openCamera(cameraDialog, cameraVideo);
+        }
       });
       cameraInput.addEventListener("change", function () {
         addLocalUploads(Array.prototype.slice.call(cameraInput.files || []));
         updateSubmitState();
       });
+      if (cameraCancel) {
+        cameraCancel.addEventListener("click", closeCamera);
+      }
+      if (cameraCapture) {
+        cameraCapture.addEventListener("click", function () {
+          captureCameraPhoto(cameraVideo, cameraInput);
+        });
+      }
+      if (cameraDialog) {
+        cameraDialog.addEventListener("click", function (event) {
+          if (event.target === cameraDialog) closeCamera();
+        });
+      }
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && cameraDialog && !cameraDialog.hidden) {
+          closeCamera();
+        }
+      });
+      window.addEventListener("pagehide", closeCamera);
     }
     document.addEventListener("paste", handlePaste);
 
@@ -597,6 +624,86 @@
     chatCommon.renderUploadPreview(
       state, icons.close, updateSubmitState
     );
+  }
+
+  var cameraStream = null;
+
+  function prefersNativeCameraCapture() {
+    if (navigator.userAgentData &&
+        typeof navigator.userAgentData.mobile === "boolean") {
+      return navigator.userAgentData.mobile;
+    }
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "")) {
+      return true;
+    }
+    return Boolean(
+      navigator.maxTouchPoints > 1 &&
+      window.matchMedia &&
+      window.matchMedia("(pointer: coarse)").matches &&
+      Math.min(window.screen.width, window.screen.height) <= 1024
+    );
+  }
+
+  function openCamera(dialog, video) {
+    if (!dialog || !video) return;
+    if (!window.isSecureContext || !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia) {
+      window.alert(
+        "Camera access is unavailable. Open the app over HTTPS (or localhost) " +
+        "and allow camera permission in the browser."
+      );
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" } }
+    }).then(function (stream) {
+      cameraStream = stream;
+      video.srcObject = stream;
+      dialog.hidden = false;
+      return video.play();
+    }).catch(function (error) {
+      closeCamera();
+      window.alert(
+        "The camera could not be opened. Check the browser's camera permission " +
+        "and make sure no other application is using it."
+      );
+      if (window.console && window.console.warn) {
+        window.console.warn("Could not open camera", error);
+      }
+    });
+  }
+
+  function closeCamera() {
+    var dialog = byId("ullme_camera_dialog");
+    var video = byId("ullme_camera_video");
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(function (track) { track.stop(); });
+      cameraStream = null;
+    }
+    if (video) video.srcObject = null;
+    if (dialog) dialog.hidden = true;
+  }
+
+  function captureCameraPhoto(video, input) {
+    if (!video || !input || !video.videoWidth || !video.videoHeight) return;
+    var canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(function (blob) {
+      if (!blob) return;
+      var file = new File(
+        [blob],
+        "photo-" + new Date().toISOString().replace(/[:.]/g, "-") + ".jpg",
+        { type: "image/jpeg" }
+      );
+      var transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      closeCamera();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, "image/jpeg", 0.92);
   }
 
   function clearUploads() {

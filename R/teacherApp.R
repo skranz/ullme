@@ -55,7 +55,8 @@ teacherApp = function(main_dir, userid="skranz", teacherid=NULL,
                        help.text=NULL,
                        lang=NULL,
                        use.signup=NULL,
-                       email2userid=ullme_email2userid) {
+                       email2userid=ullme_email2userid,
+                       adapt_mathjax=TRUE) {
   restore.point("teacherApp")
   if (is.null(teacherid)) teacherid = userid
   login_requested = ullme_login_options_requested(
@@ -98,6 +99,7 @@ teacherApp = function(main_dir, userid="skranz", teacherid=NULL,
     uses_fake_ai=uses_fake_ai,
     max_upload_mb=max_upload_mb,
     render_chat_markdown=render_chat_markdown,
+    adapt_mathjax=adapt_mathjax,
     api_key_file=api_key_file,
     api_provider=api_provider,
     api_model=api_model,

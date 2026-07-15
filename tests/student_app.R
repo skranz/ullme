@@ -44,6 +44,7 @@ stopifnot(
   isTRUE(app$never_save_chats),
   is.null(ullme_ai_interactions_dir(app=app)),
   identical(app$global$userid, "student_a"),
+  isTRUE(app$adapt_mathjax),
   identical(app$global$teacherid, "teacher_a"),
   identical(app$global$courseid, "course_a"),
   identical(app$global$tutorid, "tutor_a"),
@@ -127,7 +128,11 @@ stopifnot(
   grepl("env(safe-area-inset-bottom)", student_css, fixed=TRUE),
   grepl(":root[data-ullme-theme=\"dark\"]", student_css, fixed=TRUE),
   grepl("window.visualViewport", student_js, fixed=TRUE),
+  grepl("prefersNativeCameraCapture()", student_js, fixed=TRUE),
   grepl("cameraInput.click()", student_js, fixed=TRUE),
+  grepl("openCamera(cameraDialog, cameraVideo)", student_js, fixed=TRUE),
+  grepl("navigator.mediaDevices.getUserMedia", student_js, fixed=TRUE),
+  grepl("captureCameraPhoto", student_js, fixed=TRUE),
   grepl("ullme-color-theme", student_js, fixed=TRUE)
 )
 

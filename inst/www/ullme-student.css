@@ -752,6 +752,66 @@ body {
   display: none;
 }
 
+.ullme-camera-dialog[hidden] {
+  display: none;
+}
+
+.ullme-camera-dialog {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(10, 15, 28, 0.76);
+}
+
+.ullme-camera-panel {
+  overflow: hidden;
+  width: min(720px, 100%);
+  border-radius: 16px;
+  background: #101828;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+.ullme-camera-video {
+  display: block;
+  width: 100%;
+  max-height: min(72vh, 620px);
+  background: #000;
+  object-fit: contain;
+}
+
+.ullme-camera-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px;
+}
+
+.ullme-camera-cancel,
+.ullme-camera-capture {
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ullme-camera-cancel {
+  color: #344054;
+  background: #f2f4f7;
+}
+
+.ullme-camera-capture {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  background: var(--ullme-accent);
+}
+
 .ullme-student-workspace {
   height: 100%;
 }
