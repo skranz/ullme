@@ -415,15 +415,19 @@ Chat submission follows this sequence:
 1. JavaScript appends the user message immediately.
 2. JavaScript appends an assistant placeholder with an `assistantMessageId`.
 3. JavaScript sends `ullme_submit_chat_event`.
-4. R starts an asynchronous model request; ellmer owns the model/tool loop.
+4. For student Tutors, R starts the declarative node workflow and the custom
+   OpenAI-compatible streaming client executes each model node. Teacher chat
+   and the instance builder retain their existing request paths.
 5. Tool request and result callbacks update a visible activity line and write
    structured trace records beneath the interaction directory.
 6. Streaming updates replace the placeholder as text or thinking arrives.
 7. The completed update adds assistant actions and unlocks the composer.
 
-uLLMe always consumes ellmer's rich content stream internally, even when
-thinking is hidden. Tool-only model output therefore counts as provider
-activity and cannot be mistaken for a stalled connection.
+Student Tutor routers run locally. Intermediate model outputs remain internal;
+only a terminal node or `show_text` pause updates the visible transcript. A
+suspended `ask_for_input` node is resumed by the next student submission.
+Parallel classifier nodes use independent custom requests and aggregate before
+the workflow continues.
 
 Mutating tools that require approval return an unresolved promise to ellmer.
 The approval dialog resolves that promise with the committed or rejected
@@ -438,8 +442,9 @@ instead of leaving the composer permanently busy. Server cleanup runs even when
 delivery of the final browser callback fails.
 
 While a response is active, the composer send button becomes a stop button.
-Streaming requests use ellmer's stream controller, so stopping marks the request
-inactive, cancels transport consumption, preserves any partial answer, and
+Student workflow cancellation cancels every active node request; ellmer-backed
+teacher and instance-builder requests use ellmer's stream controller. Stopping
+marks the request inactive, preserves any partial visible answer, and
 immediately unlocks the composer. Gemma 4 uses its own NVIDIA request profile:
 thinking is disabled through `chat_template_kwargs` and the Nemotron-specific
 `reasoning_budget` parameter is omitted.
@@ -447,6 +452,8 @@ thinking is disabled through `chat_template_kwargs` and the Nemotron-specific
 When `store_ai_interactions=TRUE` (the default), main chat, instance-builder,
 and Definition Assistant requests write prompt, response, thinking, error, and
 status metadata beneath the active course's `ai_interactions/` directory.
+Stored Tutor workflow interactions additionally contain ordered per-node
+prompt and response directories under `nodes/`.
 Main-chat tool activity is stored as ordered YAML records under
 `tool_events/`; sensitive argument names are redacted and long values are
 truncated.

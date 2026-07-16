@@ -220,6 +220,14 @@ ullme_custom_stream_initial_messages = function(input, system_prompt=NULL,
 
 ullme_custom_stream_tool_names = function(task_profile="", app=getApp()) {
   if (!isTRUE(app$enable_ai_tools)) return(character(0))
+  if (identical(app$role, "student")) {
+    tutor = ullme_student_selected_tutor(app=app)
+    requested = paste0(unlist(
+      tutor$allowed_tools %||% list(),
+      use.names=FALSE
+    ))
+    return(intersect(requested, names(ullme_student_tool_registry())))
+  }
   if (!identical(app$role, "teacher")) return(character(0))
   if (identical(task_profile, "instance_builder")) {
     return("write_rtutor_instances_yaml")
@@ -244,6 +252,40 @@ ullme_custom_stream_tool_arg_schema = function(arg_spec) {
 
 
 ullme_custom_stream_tool_schema = function(name, app=getApp()) {
+  if (identical(app$role, "student")) {
+    registry = ullme_student_tool_registry()
+    spec = registry[[name]]
+    if (is.null(spec)) stop("Unknown student Tutor tool: ", name)
+    implementation = get(
+      paste0("utool_", name),
+      envir=environment(ullme_student_tool),
+      inherits=FALSE
+    )
+    arguments = formals(implementation)
+    arguments$app = NULL
+    properties = lapply(names(arguments), function(argument) list(
+      type="string",
+      description=paste0("Value for ", argument, ".")
+    ))
+    names(properties) = names(arguments)
+    required = names(arguments)[vapply(
+      arguments,
+      identical,
+      logical(1),
+      quote(expr=)
+    )]
+    parameters = list(
+      type="object",
+      properties=properties,
+      additionalProperties=FALSE
+    )
+    if (length(required)) parameters$required = as.list(required)
+    return(list(type="function", `function`=list(
+      name=name,
+      description=spec$description,
+      parameters=parameters
+    )))
+  }
   registry = ullme_tool_registry()
   spec = registry[[name]]
   if (is.null(spec)) stop("Unknown uLLMe tool: ", name)
@@ -522,6 +564,37 @@ ullme_custom_stream_tool_result_event = function(call, result, app=getApp()) {
 
 ullme_custom_stream_execute_tool = function(call, app=getApp()) {
   name = paste0(call$`function`$name %||% "")[1]
+  if (identical(app$role, "student")) {
+    allowed = ullme_custom_stream_tool_names(app=app)
+    if (!name %in% allowed) {
+      return(list(ok=FALSE, status="rejected", message=paste0(
+        "This Tutor does not allow tool: ", name
+      )))
+    }
+    args = tryCatch(
+      ullme_custom_stream_tool_args(call),
+      error=function(e) list(.parse_error=conditionMessage(e))
+    )
+    if (!is.null(args$.parse_error)) {
+      return(list(ok=FALSE, status="error", message=paste0(
+        "Could not parse tool arguments: ", args$.parse_error
+      )))
+    }
+    implementation = get(
+      paste0("utool_", name),
+      envir=environment(ullme_student_tool),
+      inherits=FALSE
+    )
+    ullme_custom_stream_tool_request_event(call, app=app)
+    result = tryCatch(
+      do.call(implementation, c(args, list(app=app))),
+      error=function(e) list(
+        ok=FALSE, status="error", message=conditionMessage(e)
+      )
+    )
+    ullme_custom_stream_tool_result_event(call, result, app=app)
+    return(result)
+  }
   registry = ullme_tool_registry()
   spec = registry[[name]]
   if (is.null(spec)) {
@@ -671,6 +744,7 @@ ullme_custom_stream_process_buffer = function(state, on_update,
 
 ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
                                         system_instructions=NULL,
+                                        system_prompt_override=NULL,
                                         include_thinking=FALSE,
                                         task_profile="",
                                         uploads=NULL,
@@ -713,12 +787,16 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
 
   config = app$api_config
   url = paste0(sub("/+$", "", config$base_url), "/chat/completions")
-  system_prompt = ullme_custom_stream_system_prompt(
-    context=context,
-    system_instructions=system_instructions,
-    task_profile=task_profile,
-    app=app
-  )
+  system_prompt = if (!is.null(system_prompt_override)) {
+    paste0(system_prompt_override, collapse="\n")
+  } else {
+    ullme_custom_stream_system_prompt(
+      context=context,
+      system_instructions=system_instructions,
+      task_profile=task_profile,
+      app=app
+    )
+  }
   state$messages = ullme_custom_stream_initial_messages(
     input=input,
     system_prompt=system_prompt,

@@ -1,6 +1,8 @@
 library(ullme)
 
-test_main_dir = tempfile("ullme-agent-tools-main-")
+test_root = file.path(tempdir(), "ullme_main")
+dir.create(test_root, recursive=TRUE, showWarnings=FALSE)
+test_main_dir = tempfile("agent-tools-main-", tmpdir=test_root)
 dir.create(test_main_dir, recursive=TRUE)
 cleanup_app = new.env(parent=emptyenv())
 cleanup_app$glob = list(main_dir=test_main_dir)
@@ -23,13 +25,18 @@ valid_tutor = paste(
   "lang: en",
   "label: Tutor One",
   "description: Helps",
-  "system_prompt: |",
-  "  Help with {{personality}}.",
+  "shown_text: Welcome",
   "default_personality: Friendly",
   "docs_per_instance: {}",
   "docs_per_course: {}",
   "allowed_tools: []",
   "allowed_student_customization: [personality]",
+  "start_node: answer",
+  "nodes:",
+  "  answer:",
+  "    prompt: '{{input}}'",
+  "prompt_fragments:",
+  "  init_prompt: 'Help with {{personality}}.'",
   sep="\n"
 )
 stopifnot(ullme_validate_definition_yaml("tutor", "tutor1", valid_tutor)$ok)

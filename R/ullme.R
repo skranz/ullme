@@ -211,6 +211,7 @@ ullme_teacherid = function(app=getApp()) {
   app$active_chat_request = NULL
   app$chat_timeout_seconds = 180
   app$chat_connect_timeout_seconds = 60
+  app$tutor_workflow_timeout_seconds = 600
   app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
@@ -2045,6 +2046,16 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     "handle_chat selected model=", model,
     " uploads=", length(uploads)
   )
+  if (identical(app$role, "student")) {
+    return(ullme_handle_student_tutor_submit(
+      text=text,
+      model=model,
+      uploads=uploads,
+      clientMessageId=clientMessageId,
+      assistantMessageId=assistantMessageId,
+      app=app
+    ))
+  }
   stats_request = if (identical(app$role, "student")) {
     ullme_student_stats_request(
       model=model %||% app$api_config$model,
@@ -2547,7 +2558,7 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
     thinking=thinking
   )
   if (identical(app$role, "student") && nzchar(text)) {
-    ullme_student_chat_history_append(
+    ullme_student_live_history_append(
       role="assistant",
       text=text,
       message_id=message_id,
@@ -2556,6 +2567,7 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
     ullme_send_student_chat_history(app=app)
   }
   if (identical(app$role, "student")) {
+    app$student_pending_workflow = NULL
     ullme_student_stats_append(
       request$stats_request,
       reply=text,

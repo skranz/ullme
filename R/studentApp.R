@@ -471,7 +471,8 @@ ullme_handle_student_context = function(semester=NULL, tutorid=NULL,
       ullme_student_session_stats_init(app=app)
     }
     if (!identical(app$semester, old_semester) ||
-        !identical(app$tutorid, old_tutorid)) {
+        !identical(app$tutorid, old_tutorid) ||
+        !identical(app$instanceid, old_instanceid)) {
       ullme_student_chat_history_init(app=app)
     }
     ""
@@ -608,51 +609,12 @@ ullme_student_system_prompt = function(app=getApp()) {
   restore.point("ullme_student_system_prompt")
   tutor = ullme_student_selected_tutor(app=app)
   if (is.null(tutor)) stop("No AI Tutor is selected.")
-  prompt = ullme_render_ai_tutor_system_prompt(
-    definition=tutor,
-    documents=ullme_student_tutor_values(tutor=tutor, app=app),
-    customization=list()
-  )
-  transcript = ullme_student_chat_history_transcript(app=app)
-  if (nzchar(transcript)) paste(prompt, transcript, sep="\n\n") else prompt
+  ullme_tutor_workflow_init_prompt(tutor, app=app)
 }
 
 
 ullme_student_chat = function(model=NULL, app=getApp()) {
-  model = ullme_model_id(model, app=app)
-  prompt = ullme_student_system_prompt(app=app)
-  key = ullme_chat_key(model, task_profile="student_tutor", app=app)
-  chat = app$teacher_chats[[key]]
-  if (is.null(chat)) {
-    chat = ullme_api_chat(
-      app$api_config,
-      model=model,
-      system_prompt=prompt,
-      task_profile="student_tutor"
-    )
-    if (!is.null(chat)) {
-      tool_names = paste0(unlist(
-        ullme_student_selected_tutor(app=app)$allowed_tools %||% list(),
-        use.names=FALSE
-      ))
-      tool_names = intersect(tool_names, names(ullme_student_tool_registry()))
-      if (length(tool_names)) {
-        tools = lapply(tool_names, ullme_student_tool, app=app)
-        names(tools) = tool_names
-        chat$register_tools(tools)
-        chat$on_tool_request(function(request) {
-          ullme_handle_tool_lifecycle_event("request", request, app=app)
-        })
-        chat$on_tool_result(function(result) {
-          ullme_handle_tool_lifecycle_event("result", result, app=app)
-        })
-      }
-    }
-    app$teacher_chats[[key]] = chat
-  } else {
-    chat$set_system_prompt(prompt)
-  }
-  chat
+  stop("Student Tutors use the declarative workflow runtime, not an ellmer chat.")
 }
 
 
@@ -785,9 +747,8 @@ ullme_student_workspace_ui = function(app=getApp()) {
 ullme_handle_student_chat_clear = function(app=getApp(), ...) {
   restore.point("ullme_handle_student_chat_clear")
   ullme_student_session_stats_init(app=app)
-  model = ullme_model_id(NULL, app=app)
-  key = ullme_chat_key(model, task_profile="student_tutor", app=app)
-  app$teacher_chats[[key]] = NULL
+  app$student_live_messages = list()
+  app$student_pending_workflow = NULL
   if (ullme_student_chat_history_enabled(app=app)) {
     ullme_student_chat_history_new(app=app)
     ullme_send_student_chat_history(app=app)

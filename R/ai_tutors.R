@@ -40,6 +40,7 @@ ullme_ai_tutor_template_paths = function() {
     ignore.case=TRUE,
     no..=TRUE
   )
+  paths = paths[!grepl("_old\\.ya?ml$", basename(paths), ignore.case=TRUE)]
   sort(paths)
 }
 
@@ -233,25 +234,40 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
   restore.point("ullme_normalize_ai_tutor_definition")
   if (!is.list(definition)) definition = list()
   per_instance = ullme_normalize_tutor_doc_specs(definition$docs_per_instance)
-  legacy_course_specs = definition$docs_per_course
-  if (is.list(legacy_course_specs)) {
-    legacy_course_specs = legacy_course_specs[vapply(
-      legacy_course_specs,
-      is.list,
-      logical(1)
-    )]
-  }
-  per_course = ullme_normalize_tutor_doc_specs(legacy_course_specs)
+  per_course = ullme_normalize_tutor_doc_specs(definition$docs_per_course)
   placeholder_documents = ullme_normalize_tutor_placeholder_documents(
     definition$placeholder_documents
   )
-  # Read scalar legacy docs_per_course entries as placeholder documents.
-  if (!length(placeholder_documents) &&
-      is.list(definition$docs_per_course)) {
-    placeholder_documents = ullme_normalize_tutor_placeholder_documents(
-      definition$docs_per_course
+  nodes = definition$nodes %||% list()
+  if (!is.list(nodes) || is.null(names(nodes))) nodes = list()
+  nodes = lapply(nodes, function(node) {
+    if (!is.list(node)) return(list())
+    node$prompt = paste0(node$prompt %||% "", collapse="\n")
+    node$waiting_message = paste0(
+      node$waiting_message %||% "",
+      collapse="\n"
     )
-  }
+    node$show_text = paste0(node$show_text %||% "", collapse="\n")
+    node[["next"]] = paste0(node[["next"]] %||% "")[1]
+    node$switch_input = paste0(node$switch_input %||% "")[1]
+    if (is.list(node$switch_to)) {
+      names(node$switch_to) = paste0(names(node$switch_to))
+      node$switch_to = lapply(node$switch_to, function(target) {
+        paste0(target %||% "")[1]
+      })
+    }
+    node$n_parallel = as.integer(node$n_parallel %||% 1L)[1]
+    node$n_retries = as.integer(node$n_retries %||% 0L)[1]
+    node$aggregate = paste0(node$aggregate %||% "")[1]
+    node$ask_for_input = isTRUE(node$ask_for_input)
+    node$add_to_history = !identical(node$add_to_history, FALSE)
+    node
+  })
+  fragments = definition$prompt_fragments %||% list()
+  if (!is.list(fragments) || is.null(names(fragments))) fragments = list()
+  fragments = lapply(fragments, function(fragment) {
+    paste0(fragment %||% "", collapse="\n")
+  })
   list(
     tutorid=tutorid,
     lang=paste0(definition$lang %||% "")[1],
@@ -265,7 +281,9 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     enabled=!identical(definition$enabled, FALSE),
     multiple_instances=!identical(definition$multiple_instances, FALSE),
     chat_history=isTRUE(definition$chat_history),
-    system_prompt=paste0(definition$system_prompt %||% "", collapse="\n"),
+    start_node=paste0(definition$start_node %||% "")[1],
+    nodes=nodes,
+    prompt_fragments=fragments,
     shown_text=paste0(definition$shown_text %||% "", collapse="\n"),
     default_personality=paste0(
       definition$default_personality %||% "",
@@ -291,22 +309,6 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
       definition$file_permissions
     ),
     yaml_content=ullme_ai_tutor_yaml(definition)
-  )
-}
-
-
-ullme_render_ai_tutor_system_prompt = function(definition, documents=list(),
-                                                customization=list()) {
-  restore.point("ullme_render_ai_tutor_system_prompt")
-  if (!is.list(definition)) stop("An AI Tutor definition is required.")
-  values = c(documents %||% list(), customization %||% list())
-  if (is.null(values$personality)) {
-    values$personality = definition$default_personality %||% ""
-  }
-  ullme_render_prompt(
-    text=definition$system_prompt %||% "",
-    values=values,
-    strict=TRUE
   )
 }
 
@@ -843,9 +845,6 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
         fields$instance_guidance,
         collapse="\n"
       )
-    }
-    if (has_field("system_prompt")) {
-      current$system_prompt = paste0(fields$system_prompt, collapse="\n")
     }
     if (has_field("shown_text")) {
       current$shown_text = paste0(fields$shown_text, collapse="\n")

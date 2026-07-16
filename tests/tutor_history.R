@@ -1,6 +1,8 @@
 library(ullme)
 
-test_main_dir = tempfile("ullme-tutor-history-main-")
+test_root = file.path(tempdir(), "ullme_main")
+dir.create(test_root, recursive=TRUE, showWarnings=FALSE)
+test_main_dir = tempfile("tutor-history-main-", tmpdir=test_root)
 dir.create(test_main_dir, recursive=TRUE)
 cleanup_app = new.env(parent=emptyenv())
 cleanup_app$glob = list(main_dir=test_main_dir)
@@ -29,13 +31,18 @@ writeLines(
     "lang: en",
     "label: Tutor One",
     "description: Helps",
-    "system_prompt: Help.",
     "shown_text: Welcome.",
     "default_personality: Friendly",
     "docs_per_instance: {}",
     "docs_per_course: {}",
     "allowed_tools: []",
-    "allowed_student_customization: []"
+    "allowed_student_customization: []",
+    "start_node: answer",
+    "nodes:",
+    "  answer:",
+    "    prompt: '{{input}}'",
+    "prompt_fragments:",
+    "  init_prompt: Help."
   ),
   file.path(tutor_dir, "tutor.yml")
 )

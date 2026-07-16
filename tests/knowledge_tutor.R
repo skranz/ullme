@@ -1,6 +1,8 @@
 library(ullme)
 
-main_dir = tempfile("ullme-knowledge-tutor-")
+test_root = file.path(tempdir(), "ullme_main")
+dir.create(test_root, recursive=TRUE, showWarnings=FALSE)
+main_dir = tempfile("knowledge-tutor-", tmpdir=test_root)
 semester = ullme_semester()
 course_dir = file.path(
   main_dir, "teachers", "teacher_a", "courses", semester, "course_a"
@@ -9,10 +11,15 @@ tutor_dir = file.path(course_dir, "ai_tutors", "knowledge_tutor_de")
 dir.create(file.path(course_dir, "materials", "scripts"), recursive=TRUE)
 dir.create(file.path(course_dir, "materials", "slides"), recursive=TRUE)
 dir.create(tutor_dir, recursive=TRUE)
-file.copy(
-  file.path("inst", "ai_tutors", "knowledge_tutor_de.yml"),
-  file.path(tutor_dir, "tutor.yml")
-)
+definition = yaml::read_yaml(file.path(
+  "inst", "ai_tutors", "knowledge_tutor_de_old.yml"
+))
+init_prompt = definition$system_prompt
+definition$system_prompt = NULL
+definition$start_node = "answer"
+definition$nodes = list(answer=list(prompt="{{input}}"))
+definition$prompt_fragments = list(init_prompt=init_prompt)
+yaml::write_yaml(definition, file.path(tutor_dir, "tutor.yml"))
 writeLines(
   "Course script",
   file.path(course_dir, "materials", "scripts", "course.md")
@@ -35,6 +42,20 @@ stopifnot(
   identical(tutor$multiple_instances, FALSE),
   is.null(app$instanceid),
   grepl("[content missing]", ullme_student_system_prompt(app=app), fixed=TRUE)
+)
+custom_tools = ullme_custom_stream_tools(app=app)
+custom_tool_names = vapply(
+  custom_tools,
+  function(tool) tool$`function`$name,
+  character(1)
+)
+stopifnot(
+  setequal(custom_tool_names, c("read_allowed_files", "list_allowed_files")),
+  identical(
+    custom_tools[[which(custom_tool_names == "read_allowed_files")]]$
+      `function`$parameters$required,
+    list("path")
+  )
 )
 
 writeLines(

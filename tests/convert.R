@@ -122,7 +122,9 @@ stopifnot(
   )
 )
 
-main = tempfile("ullme-convert-main-")
+test_root = file.path(tempdir(), "ullme_main")
+dir.create(test_root, recursive=TRUE, showWarnings=FALSE)
+main = tempfile("convert-main-", tmpdir=test_root)
 dir.create(main)
 cleanup_app = new.env(parent=emptyenv())
 cleanup_app$glob = list(main_dir=main)
@@ -141,15 +143,22 @@ writeLines(c(
   "lang: de",
   "label: PS Tutor",
   "description: Test",
-  "system_prompt: Test",
+  "shown_text: Welcome",
   "default_personality: Friendly",
   "docs_per_instance:",
   "  ps:",
+  "    descr: problem set",
   "    file_types: [md, tex, pdf]",
   "    pref_doc_dir: ps",
   "docs_per_course: {}",
   "allowed_tools: []",
-  "allowed_student_customization: []"
+  "allowed_student_customization: []",
+  "start_node: answer",
+  "nodes:",
+  "  answer:",
+  "    prompt: '{{input}}'",
+  "prompt_fragments:",
+  "  init_prompt: Test"
 ), file.path(course_dir, "ai_tutors", "pstutor", "tutor.yml"))
 app = new.env(parent=emptyenv())
 app$glob = list(main_dir=managed_root)
@@ -268,10 +277,5 @@ stopifnot(
   ))
 )
 
-ullme_remove_checked_directory(
-  root,
-  root=dirname(root),
-  expected_name=basename(root),
-  label="conversion test directory"
-)
+unlink(root, recursive=TRUE)
 ullme_remove_tempdir(managed_root, app=cleanup_app)

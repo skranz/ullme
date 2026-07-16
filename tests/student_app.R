@@ -12,13 +12,18 @@ writeLines(c(
   "enabled: true",
   "label: Tutor A",
   "description: Test tutor",
-  "system_prompt: 'Help the student. {{personality}}'",
   "shown_text: 'Welcome to Tutor A.'",
   "default_personality: Be helpful.",
   "docs_per_instance: {}",
   "docs_per_course: {}",
   "allowed_tools: []",
-  "allowed_student_customization: []"
+  "allowed_student_customization: []",
+  "start_node: answer",
+  "nodes:",
+  "  answer:",
+  "    prompt: '{{input}}'",
+  "prompt_fragments:",
+  "  init_prompt: 'Help the student. {{personality}}'"
 ), file.path(tutor_dir, "tutor.yml"))
 writeLines(c(
   "course_docs: {}",
@@ -136,13 +141,11 @@ stopifnot(
   grepl("ullme-color-theme", student_js, fixed=TRUE)
 )
 
-for (path in file.path(
-  "inst", "ai_tutors", c("ps_tutor_en.yml", "ps_tutor_de.yml")
-)) {
-  prompt = yaml::read_yaml(path, eval.expr=FALSE)$system_prompt
+for (path in file.path("inst", "ai_tutors", "ps_tutor_en.yml")) {
+  prompt = yaml::read_yaml(path, eval.expr=FALSE)$prompt_fragments$init_prompt
   stopifnot(
-    grepl("MathJax", prompt, fixed=TRUE),
-    grepl("$$ ... $$", prompt, fixed=TRUE)
+    grepl("Use `\\( ... \\)`", prompt, fixed=TRUE),
+    grepl("\\[ ... \\]", prompt, fixed=TRUE)
   )
 }
 
@@ -152,7 +155,9 @@ teacher_tutor_js = paste(
 )
 stopifnot(
   grepl("ullme_tutor_shown_text", teacher_tutor_js, fixed=TRUE),
-  grepl("shown_text: valueOf", teacher_tutor_js, fixed=TRUE)
+  grepl("shown_text: valueOf", teacher_tutor_js, fixed=TRUE),
+  !grepl('{ id: "prompt", label: "Prompt" }', teacher_tutor_js, fixed=TRUE),
+  !grepl('{ id: "config", label: "Config" }', teacher_tutor_js, fixed=TRUE)
 )
 
 fixed_session = new.env(parent=emptyenv())
@@ -259,7 +264,7 @@ ullme_handle_chat_submit_safe(
   app=error_app
 )
 stopifnot(
-  length(sent_messages) >= 2L,
+  length(sent_messages) >= 1L,
   any(vapply(sent_messages, function(record) {
     args = record$message$args
     length(args) >= 7L &&
@@ -279,9 +284,4 @@ missing_result = try(
 )
 stopifnot(inherits(missing_result, "try-error"))
 
-ullme_remove_checked_directory(
-  main_dir,
-  root=dirname(main_dir),
-  expected_name=basename(main_dir),
-  label="student app test directory"
-)
+unlink(main_dir, recursive=TRUE)

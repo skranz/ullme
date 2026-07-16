@@ -192,7 +192,7 @@
       return;
     }
     if (tutor.multiple_instances === false && state.activeTab === "instances") {
-      state.activeTab = "prompt";
+      state.activeTab = "yaml";
     }
     if (tutor.multiple_instances === false && state.yamlTab === "instances") {
       state.yamlTab = "definition";
@@ -200,11 +200,7 @@
 
     container.appendChild(tutorHeader(tutor));
     container.appendChild(tutorTabs(tutor));
-    if (state.activeTab === "prompt") {
-      container.appendChild(promptForm(tutor));
-    } else if (state.activeTab === "config") {
-      container.appendChild(configForm(tutor));
-    } else if (state.activeTab === "yaml") {
+    if (state.activeTab === "yaml") {
       container.appendChild(yamlEditor(tutor));
     } else {
       container.appendChild(instancePanel(tutor));
@@ -321,11 +317,7 @@
   function tutorTabs(tutor) {
     var tabs = document.createElement("nav");
     tabs.className = "ullme-tutor-tabs";
-    var tabSpecs = [
-      { id: "prompt", label: "Prompt" },
-      { id: "config", label: "Config" },
-      { id: "yaml", label: "YAML" }
-    ];
+    var tabSpecs = [{ id: "yaml", label: "Tutor YAML" }];
     if (tutor.multiple_instances !== false) {
       tabSpecs.unshift({
         id: "instances",

@@ -22,8 +22,8 @@ writeLines(c(
   "lang: en",
   "label: Problem Set Tutor",
   "description: Helps with exercises.",
+  "shown_text: Welcome",
   "instance_guidance: Match files ending in solution.",
-  "system_prompt: Help with {{ps}} and {{ps_sol}}.",
   "default_personality: Friendly",
   "docs_per_instance:",
   "  ps:",
@@ -38,7 +38,13 @@ writeLines(c(
   "    add_images: true",
   "docs_per_course: {}",
   "allowed_tools: []",
-  "allowed_student_customization: []"
+  "allowed_student_customization: []",
+  "start_node: answer",
+  "nodes:",
+  "  answer:",
+  "    prompt: '{{input}}'",
+  "prompt_fragments:",
+  "  init_prompt: Help with {{ps}} and {{ps_sol}}."
 ), file.path(course_dir, "ai_tutors", "pstutor", "tutor.yml"))
 
 prompt = ullme_instance_builder_prompt(
@@ -120,9 +126,4 @@ stopifnot(
   )
 )
 
-ullme_remove_checked_directory(
-  main,
-  root=dirname(main),
-  expected_name=basename(main),
-  label="instance builder test directory"
-)
+unlink(main, recursive=TRUE)

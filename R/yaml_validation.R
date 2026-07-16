@@ -247,6 +247,171 @@ ullme_validate_tutor_file_permissions = function(value) {
 }
 
 
+ullme_prompt_placeholders = function(text) {
+  text = paste0(text %||% "", collapse="\n")
+  hits = regmatches(
+    text,
+    gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}", text, perl=TRUE)
+  )[[1]]
+  if (length(hits) == 1L && identical(hits, "")) return(character(0))
+  unique(substring(hits, 3L, nchar(hits) - 2L))
+}
+
+
+ullme_validate_tutor_workflow = function(value, document_ids,
+                                          customization_ids) {
+  errors = character(0)
+  start = paste0(value$start_node %||% "")[1]
+  nodes = value$nodes
+  fragments = value$prompt_fragments
+  if (!grepl("^[A-Za-z][A-Za-z0-9_]*$", start)) {
+    errors = c(errors, "start_node must be a valid node ID.")
+  }
+  if (!is.list(nodes) || !length(nodes) || is.null(names(nodes))) {
+    return(c(errors, "nodes must be a non-empty mapping of node IDs."))
+  }
+  node_ids = names(nodes)
+  if (any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", node_ids))) {
+    errors = c(errors, "nodes contains an invalid node ID.")
+  }
+  if (nzchar(start) && !start %in% node_ids) {
+    errors = c(errors, "start_node does not name a defined node.")
+  }
+  if (!is.list(fragments) || !length(fragments) || is.null(names(fragments))) {
+    errors = c(errors, "prompt_fragments must be a non-empty mapping.")
+    fragments = list()
+  }
+  fragment_ids = names(fragments) %||% character(0)
+  if (!"init_prompt" %in% fragment_ids) {
+    errors = c(errors, "prompt_fragments.init_prompt is required.")
+  } else if (!nzchar(trimws(paste0(fragments$init_prompt, collapse="\n")))) {
+    errors = c(errors, "prompt_fragments.init_prompt must not be empty.")
+  }
+  if (length(fragment_ids) &&
+      any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", fragment_ids))) {
+    errors = c(errors, "prompt_fragments contains an invalid fragment ID.")
+  }
+  runtime_ids = c(
+    "input", "output", "hist", "hist_or_init_prompt", "image_uploaded"
+  )
+  reserved = intersect(runtime_ids, c(
+    document_ids, customization_ids, fragment_ids
+  ))
+  if (length(reserved)) {
+    errors = c(errors, paste0(
+      "Runtime placeholder names cannot be reused as document, customization, ",
+      "or fragment IDs: ", paste(reserved, collapse=", "), "."
+    ))
+  }
+  known_placeholders = unique(c(
+    document_ids, customization_ids, fragment_ids, runtime_ids
+  ))
+  for (fragment_id in fragment_ids) {
+    unknown = setdiff(
+      ullme_prompt_placeholders(fragments[[fragment_id]]),
+      known_placeholders
+    )
+    if (length(unknown)) {
+      errors = c(errors, paste0(
+        "prompt_fragments.", fragment_id,
+        " contains unknown placeholders: ", paste(unknown, collapse=", "), "."
+      ))
+    }
+  }
+  targets = character(0)
+  for (node_id in node_ids) {
+    node = nodes[[node_id]]
+    label = paste0("nodes.", node_id)
+    if (!is.list(node)) {
+      errors = c(errors, paste0(label, " must be a mapping."))
+      next
+    }
+    prompt = paste0(node$prompt %||% "", collapse="\n")
+    next_node = paste0(node[["next"]] %||% "")[1]
+    switch_input = paste0(node$switch_input %||% "")[1]
+    switch_to = node$switch_to
+    ask = isTRUE(node$ask_for_input)
+    if (!is.null(node$ask_for_input) &&
+        (!is.logical(node$ask_for_input) || length(node$ask_for_input) != 1L)) {
+      errors = c(errors, paste0(label, ".ask_for_input must be true or false."))
+    }
+    if (!is.null(node$add_to_history) &&
+        (!is.logical(node$add_to_history) || length(node$add_to_history) != 1L)) {
+      errors = c(errors, paste0(label, ".add_to_history must be true or false."))
+    }
+    if (ask && !nzchar(trimws(paste0(node$show_text %||% "", collapse="\n")))) {
+      errors = c(errors, paste0(label, ".show_text is required when ask_for_input is true."))
+    }
+    if (nzchar(next_node) && !is.null(switch_to)) {
+      errors = c(errors, paste0(label, " cannot define both next and switch_to."))
+    }
+    if (!is.null(switch_to)) {
+      if (!is.list(switch_to) || !length(switch_to) || is.null(names(switch_to))) {
+        errors = c(errors, paste0(label, ".switch_to must be a non-empty mapping."))
+      } else {
+        if (!nzchar(switch_input)) {
+          errors = c(errors, paste0(label, ".switch_input is required with switch_to."))
+        } else if (!switch_input %in% c("image_uploaded", "output")) {
+          errors = c(errors, paste0(
+            label, ".switch_input must be image_uploaded or output."
+          ))
+        }
+        targets = c(targets, paste0(unlist(switch_to, use.names=FALSE)))
+      }
+    } else if (nzchar(switch_input)) {
+      errors = c(errors, paste0(label, ".switch_input requires switch_to."))
+    }
+    if (nzchar(next_node)) targets = c(targets, next_node)
+    if (!nzchar(prompt) && is.null(switch_to) && !ask) {
+      errors = c(errors, paste0(label, " must call the model, route, or ask for input."))
+    }
+    if (ask && !nzchar(prompt)) {
+      errors = c(errors, paste0(label, ".prompt is required to process resumed input."))
+    }
+    parallel_n = suppressWarnings(as.integer(node$n_parallel %||% 1L)[1])
+    if (!is.null(node$n_parallel)) {
+      if (is.na(parallel_n) || parallel_n < 1L || parallel_n > 9L) {
+        errors = c(errors, paste0(label, ".n_parallel must be between 1 and 9."))
+      }
+    }
+    if (!is.null(node$n_retries)) {
+      n = suppressWarnings(as.integer(node$n_retries)[1])
+      if (is.na(n) || n < 0L || n > 3L) {
+        errors = c(errors, paste0(label, ".n_retries must be between 0 and 3."))
+      }
+    }
+    aggregate = paste0(node$aggregate %||% "")[1]
+    if (nzchar(aggregate) && !identical(aggregate, "majority_vote")) {
+      errors = c(errors, paste0(label, ".aggregate must be majority_vote."))
+    }
+    if (identical(aggregate, "majority_vote") &&
+        (!identical(switch_input, "output") || is.null(switch_to))) {
+      errors = c(errors, paste0(
+        label, ".aggregate majority_vote requires switch_input: output and switch_to."
+      ))
+    }
+    if (!is.na(parallel_n) && parallel_n > 1L && !nzchar(aggregate)) {
+      errors = c(errors, paste0(label, ".aggregate is required when n_parallel is greater than 1."))
+    }
+    unknown = setdiff(ullme_prompt_placeholders(prompt), known_placeholders)
+    if (length(unknown)) {
+      errors = c(errors, paste0(
+        label, ".prompt contains unknown placeholders: ",
+        paste(unknown, collapse=", "), "."
+      ))
+    }
+  }
+  missing_targets = setdiff(unique(targets[nzchar(targets)]), node_ids)
+  if (length(missing_targets)) {
+    errors = c(errors, paste0(
+      "Workflow routes to undefined nodes: ",
+      paste(missing_targets, collapse=", "), "."
+    ))
+  }
+  errors
+}
+
+
 ullme_validate_definition_yaml = function(kind, definitionid, content) {
   kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
@@ -270,8 +435,8 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
   }
   if (identical(kind, "tutor") && is.list(value)) {
     scalar_fields = c(
-      "lang", "label", "description", "system_prompt",
-      "default_personality"
+      "lang", "label", "description", "shown_text",
+      "default_personality", "start_node"
     )
     for (field in scalar_fields) {
       if (!nzchar(trimws(paste0(value[[field]] %||% "")[1]))) {
@@ -332,26 +497,21 @@ ullme_validate_definition_yaml = function(kind, definitionid, content) {
       names(value$docs_per_course %||% list()),
       names(value$placeholder_documents %||% list())
     )
-    for (prompt_field in c("system_prompt", "shown_text")) {
-      prompt = paste0(value[[prompt_field]] %||% "", collapse="\n")
-      hits = regmatches(
-        prompt,
-        gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}", prompt, perl=TRUE)
-      )[[1]]
-      placeholders = if (length(hits) == 1 && identical(hits, "")) {
-        character(0)
-      } else {
-        unique(substring(hits, 3, nchar(hits) - 2L))
-      }
-      unknown = setdiff(placeholders, c(document_ids, customization))
-      if (length(unknown) > 0) {
-        errors = c(
-          errors,
-          paste0(prompt_field, " contains unknown placeholders: ",
-                 paste(unknown, collapse=", "), ".")
-        )
-      }
+    shown_unknown = setdiff(
+      ullme_prompt_placeholders(value$shown_text),
+      c(document_ids, customization)
+    )
+    if (length(shown_unknown)) {
+      errors = c(errors, paste0(
+        "shown_text contains unknown placeholders: ",
+        paste(shown_unknown, collapse=", "), "."
+      ))
     }
+    errors = c(errors, ullme_validate_tutor_workflow(
+      value,
+      document_ids=document_ids,
+      customization_ids=customization
+    ))
   }
   ullme_validation_result(length(errors) == 0, errors, warnings, value)
 }

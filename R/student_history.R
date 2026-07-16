@@ -118,6 +118,8 @@ ullme_student_chat_history_write = function(history, app=getApp()) {
 
 
 ullme_student_chat_history_new = function(app=getApp()) {
+  app$student_live_messages = list()
+  app$student_pending_workflow = NULL
   if (!ullme_student_chat_history_enabled(app=app)) {
     app$student_chat_id = NULL
     app$student_history_messages = list()
@@ -150,6 +152,8 @@ ullme_student_chat_history_select = function(chat_id=NULL, app=getApp()) {
   app$student_chat_id = history$id
   app$student_history_messages = history$messages %||% list()
   app$student_history_seed_messages = app$student_history_messages
+  app$student_live_messages = app$student_history_messages
+  app$student_pending_workflow = NULL
   history
 }
 
@@ -177,9 +181,6 @@ ullme_student_chat_history_delete = function(chat_id, app=getApp()) {
     label="chat history directory"
   )
   if (deleting_current) {
-    model = ullme_model_id(NULL, app=app)
-    key = ullme_chat_key(model, task_profile="student_tutor", app=app)
-    app$teacher_chats[[key]] = NULL
     histories = ullme_student_chat_history_list(app=app)
     next_id = if (length(histories)) histories[[1]]$id else NULL
     ullme_student_chat_history_select(chat_id=next_id, app=app)
@@ -192,11 +193,34 @@ ullme_student_chat_history_init = function(app=getApp()) {
   app$student_chat_id = NULL
   app$student_history_messages = list()
   app$student_history_seed_messages = list()
+  app$student_live_messages = list()
+  app$student_pending_workflow = NULL
   if (!ullme_student_chat_history_enabled(app=app)) return(invisible(NULL))
   histories = ullme_student_chat_history_list(app=app)
   chat_id = if (length(histories)) histories[[1]]$id else NULL
   ullme_student_chat_history_select(chat_id=chat_id, app=app)
   invisible(app$student_chat_id)
+}
+
+
+ullme_student_live_history_append = function(role, text, message_id="",
+                                              app=getApp()) {
+  role = paste0(role)[1]
+  if (!role %in% c("user", "assistant")) stop("Invalid chat history role.")
+  message = list(
+    id=paste0(message_id %||% "")[1],
+    role=role,
+    text=paste0(text %||% "", collapse="\n"),
+    created_at=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
+  )
+  app$student_live_messages = c(app$student_live_messages %||% list(), list(message))
+  ullme_student_chat_history_append(
+    role=role,
+    text=message$text,
+    message_id=message$id,
+    app=app
+  )
+  invisible(message)
 }
 
 
@@ -313,9 +337,6 @@ ullme_handle_student_chat_history = function(chat_id=NULL, new_chat=FALSE,
     ullme_send_student_chat_history(app=app)
     return(invisible(isTRUE(deleted)))
   }
-  model = ullme_model_id(NULL, app=app)
-  key = ullme_chat_key(model, task_profile="student_tutor", app=app)
-  app$teacher_chats[[key]] = NULL
   ullme_student_session_stats_init(app=app)
   if (isTRUE(new_chat)) {
     ullme_student_chat_history_new(app=app)

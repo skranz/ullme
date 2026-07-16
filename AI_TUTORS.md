@@ -14,7 +14,7 @@ inst/ai_tutors/<tutorid>.yml
 The core fields are:
 
 - `tutorid`, `lang`, `label`, `description`, and `shown_text`;
-- `system_prompt`;
+- `start_node`, `nodes`, and `prompt_fragments`;
 - `default_personality`;
 - `docs_per_instance`;
 - `placeholder_documents`;
@@ -27,8 +27,79 @@ The core fields are:
 application. It supports the same Markdown and MathJax rendering as other
 assistant messages.
 
-Prompt placeholders refer directly to document IDs and customization IDs. For
-example, `{{ps}}`, `{{ps_sol}}`, and `{{personality}}`.
+Tutor definitions use the workflow format only. Files whose names end in
+`_old.yml` or `_old.yaml` are retained as references but are not offered as
+package templates.
+
+## Workflows
+
+Each student submission starts at `start_node`, unless the Tutor is resuming a
+node that previously used `ask_for_input: true`. Node behavior is inferred from
+its fields:
+
+```yaml
+start_node: route
+nodes:
+  route:
+    switch_input: image_uploaded
+    switch_to:
+      "TRUE": inspect
+      "FALSE": answer
+      DEFAULT: answer
+
+  inspect:
+    waiting_message: I am inspecting the image...
+    prompt: |
+      {{hist_or_init_prompt}}
+      Inspect the student's attached work: {{input}}
+    next: answer
+
+  answer:
+    add_to_history: false
+    prompt: |
+      {{hist}}
+      Return the final student-facing response.
+
+prompt_fragments:
+  init_prompt: |
+    You are a Tutor. Act as follows: {{personality}}
+    Course material: {{notes}}
+```
+
+- `prompt` performs a model call.
+- `next` continues unconditionally after that call.
+- `switch_input` accepts `image_uploaded` or `output`.
+- `switch_to` maps the switch value to a node; `DEFAULT` is the fallback.
+- A prompt node without `next` or `switch_to` returns its output to the
+  student.
+- Intermediate outputs are hidden from the student.
+- `add_to_history: false` excludes a node output from later `{{hist}}` values,
+  while `{{output}}` still contains it for the immediately following node.
+- `waiting_message` replaces the temporary activity text while the node runs.
+- `ask_for_input: true` shows `show_text`, suspends the workflow, and processes
+  the student's next submission with that node's prompt.
+- `n_parallel`, `aggregate: majority_vote`, and `n_retries` support classifier
+  nodes. Values are trimmed, case-normalized, restricted to declared routes,
+  and must produce an absolute majority.
+
+The runtime stops workflows after 40 node executions to contain accidental
+cycles. Node IDs and all route targets are validated when YAML is saved.
+
+`prompt_fragments.init_prompt` is rendered as the system message for every
+model node. Document and customization placeholders such as `{{ps}}`,
+`{{ps_sol}}`, and `{{personality}}` are resolved there. Runtime placeholders
+available in node prompts are:
+
+- `{{input}}`: the student submission that started or resumed the workflow;
+- `{{output}}`: the immediately preceding model output;
+- `{{hist}}`: prior visible conversation plus retained internal node outputs;
+- `{{hist_or_init_prompt}}`: the workflow history (the init prompt is already
+  the system message); and
+- `{{image_uploaded}}`: `TRUE` or `FALSE`.
+
+Uploaded images remain available to later calls in the same workflow, including
+after a clarification pause. Internal calls are not rendered or added to the
+visible student transcript.
 
 ## Course copies
 
@@ -63,8 +134,8 @@ pref_doc_dir: ps
 add_images: true
 ```
 
-The Definition tab edits these mappings as tables. The YAML tab exposes the
-complete course definition.
+The Teacher Studio edits Tutor definitions in one YAML text area. Instance
+assignments retain their dedicated editor and instance-builder assistant.
 
 ## Instance assignments
 
@@ -124,6 +195,10 @@ and is the default. It disables both saved student conversations and the
 student interaction debug log, and suppresses the history sidebar regardless
 of `chat_history`. Set it to `FALSE` only when the deployment has an
 appropriate data-protection basis for retaining chat text.
+
+The current process still keeps a live transcript for `{{hist}}` and suspended
+workflow continuation. With `never_save_chats=TRUE`, that transcript is never
+written to disk and is discarded with the live chat.
 
 Student apps write content-free usage records to
 `main_dir/session_stats/<anonymous-session-id>.csv`. A new random 16-character

@@ -74,6 +74,28 @@ ullme_ai_interaction_finish = function(directory, status="completed",
 }
 
 
+ullme_ai_interaction_workflow_node = function(directory, index, node,
+                                               prompt, output,
+                                               status="completed") {
+  if (is.null(directory) || !dir.exists(directory)) return(invisible(FALSE))
+  nodes_dir = file.path(directory, "nodes")
+  dir.create(nodes_dir, recursive=TRUE, showWarnings=FALSE)
+  node_id = gsub("[^A-Za-z0-9_-]+", "-", paste0(node)[1])
+  path = file.path(nodes_dir, sprintf("%03d-%s", as.integer(index), node_id))
+  dir.create(path, recursive=FALSE, showWarnings=FALSE)
+  writeLines(paste0(prompt), file.path(path, "prompt.txt"), useBytes=TRUE)
+  if (nzchar(paste0(output)[1])) {
+    writeLines(paste0(output), file.path(path, "response.txt"), useBytes=TRUE)
+  }
+  yaml::write_yaml(list(
+    node=paste0(node)[1],
+    status=paste0(status)[1],
+    finished_at=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
+  ), file.path(path, "metadata.yaml"))
+  invisible(path)
+}
+
+
 ullme_tool_trace_value = function(value, name="", max_chars=2000L) {
   if (grepl(
     "(api.?key|access.?token|secret|password|credential)",
