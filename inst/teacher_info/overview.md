@@ -1,7 +1,7 @@
 # uLLMe teacher overview
 
 uLLMe gives a teacher one workspace for course materials, student-facing AI
-Tutors, reusable Skills, and the YAML or Markdown definitions behind them.
+Tutors and the YAML definitions behind them.
 
 A practical first workflow is:
 

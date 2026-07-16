@@ -84,25 +84,11 @@ ullme_tool_prompt_summary = function(tool_names=NULL) {
 }
 
 
-ullme_skill_prompt_summary = function(app=getApp()) {
-  restore.point("ullme_skill_prompt_summary")
-  skills = ullme_skill_catalog(app=app)
-  if (length(skills) == 0) return("- No Skill definitions are currently available.")
-  paste(vapply(skills, function(skill) {
-    paste0(
-      "- ", skill$skillid, " (", skill$label, ", ", skill$source, "): ",
-      skill$description
-    )
-  }, character(1)), collapse="\n")
-}
-
-
 ullme_teacher_prompt_values = function(app=getApp(), context=list(),
                                         tool_names=NULL) {
   restore.point("ullme_teacher_prompt_values")
   course = tryCatch(ullme_course_summary(app=app)$course, error=function(e) NULL)
   coursename = paste0(course$coursename %||% app$courseid %||% "")[1]
-  active = ullme_active_skill(app=app)
   open_file = paste0(context$course_file %||% "")[1]
   list(
     userid=app$userid %||% "",
@@ -112,15 +98,6 @@ ullme_teacher_prompt_values = function(app=getApp(), context=list(),
     studio_view=paste0(context$studio_view %||% "")[1],
     open_file=open_file,
     tools=ullme_tool_prompt_summary(tool_names=tool_names),
-    skills=ullme_skill_prompt_summary(app=app),
-    active_skill=if (is.null(active)) {
-      "No Skill is active."
-    } else {
-      paste0(
-        "Active Skill: ", active$skillid, " (", active$label, ")\n\n",
-        active$instructions %||% ""
-      )
-    },
     project_state=ullme_teacher_project_state_text(app=app)
   )
 }
@@ -139,8 +116,7 @@ ullme_teacher_system_prompt = function(app=getApp(), context=list(),
     "teacher_language",
     "teacher_onboarding",
     "teacher_context",
-    "teacher_tools",
-    "teacher_skills"
+    "teacher_tools"
   )
   paste(vapply(
     fragments,

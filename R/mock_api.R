@@ -4,10 +4,7 @@ example = function() {
 
   ullme_start_mock_openai_api_job(port = 8124, tool_mode = "always")
 
-  chat = ullme_mock_ellmer_chat(port = 8124)
-  chat$register_tool(ullme_mock_time_tool())
-  chat$chat("Please call the time tool")
-  chat$chat("Hello")
+  message("Mock API started at http://127.0.0.1:8124/v1")
 
 }
 
@@ -99,7 +96,7 @@ ullme_run_mock_openai_api = function(port = 8123,
     tool_mode = tool_mode
   )
   message("Mock OpenAI API: http://", host, ":", port, "/v1")
-  message("ellmer chat completions: ellmer::chat_openai_compatible(base_url = \"http://", host, ":", port, "/v1\", model = \"", model, "\", credentials = function() \"mock-key\")")
+  message("OpenAI-compatible chat completions: http://", host, ":", port, "/v1/chat/completions")
   api$run(host = host, port = port)
 }
 
@@ -154,84 +151,6 @@ ullme_start_mock_openai_api_job = function(port = 8123,
     job_dir = job_dir,
     job_file = job_file
   ))
-}
-
-
-ullme_mock_ellmer_chat = function(port = 8123,
-                                  host = "127.0.0.1",
-                                  model = "ullme-mock",
-                                  use_responses_api = FALSE,
-                                  stream = NULL,
-                                  api_args = list(),
-                                  ...) {
-  restore.point("ullme_mock_ellmer_chat")
-  ullme_mock_require_namespace("ellmer")
-  base_url = paste0("http://", host, ":", port, "/v1")
-  credentials = function() "mock-key"
-  if (!is.null(stream)) {
-    api_args = utils::modifyList(list(stream = stream), api_args)
-  }
-
-  if (isTRUE(use_responses_api)) {
-    return(ellmer::chat_openai(
-      base_url = base_url,
-      model = model,
-      credentials = credentials,
-      api_args = api_args,
-      ...
-    ))
-  }
-
-  ellmer::chat_openai_compatible(
-    base_url = base_url,
-    model = model,
-    credentials = credentials,
-    api_args = api_args,
-    ...
-  )
-}
-
-
-ullme_mock_time_tool = function() {
-  restore.point("ullme_mock_time_tool")
-  ullme_mock_require_namespace("ellmer")
-  ellmer::tool(
-    function(tz = "UTC") {
-      format(Sys.time(), tz = tz, usetz = TRUE)
-    },
-    name = "get_current_time",
-    description = "Returns the current time in the requested time zone.",
-    arguments = list(
-      tz = ellmer::type_string(
-        "Time zone to display the current time in. Defaults to UTC.",
-        required = FALSE
-      )
-    )
-  )
-}
-
-
-ullme_mock_weather_tool = function() {
-  restore.point("ullme_mock_weather_tool")
-  ullme_mock_require_namespace("ellmer")
-  ellmer::tool(
-    function(cities) {
-      raining = c(London = "heavy", Houston = "none", Chicago = "overcast", Ulm = "light")
-      temperature = c(London = "cool", Houston = "hot", Chicago = "warm", Ulm = "mild")
-      wind = c(London = "strong", Houston = "weak", Chicago = "strong", Ulm = "calm")
-      data.frame(
-        city = cities,
-        raining = unname(raining[cities]),
-        temperature = unname(temperature[cities]),
-        wind = unname(wind[cities])
-      )
-    },
-    name = "get_weather",
-    description = "Reports deterministic mock weather for one or more cities.",
-    arguments = list(
-      cities = ellmer::type_array(ellmer::type_string(), "City names")
-    )
-  )
 }
 
 

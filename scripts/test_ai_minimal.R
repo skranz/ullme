@@ -13,7 +13,7 @@ library(ullme)
 
 message("R: ", R.version.string)
 print(Cstack_info())
-for (pkg in c("ullme", "ellmer", "httr2", "promises", "coro",
+for (pkg in c("ullme", "curl", "jsonlite", "promises", "coro",
               "restorepoint", "stringi")) {
   message(pkg, ": ", as.character(utils::packageVersion(pkg)))
 }
@@ -25,13 +25,22 @@ config = ullme_api_config(
   api_base_url=api_base_url
 )
 
-chat = ullme_api_chat(
-  config=config,
-  model=config$model,
-  system_prompt="You are a minimal connectivity test. Answer briefly."
-)
+app = new.env(parent=emptyenv())
+app$role = "student"
+app$api_config = config
+app$enable_ai_tools = FALSE
+app$chat_debug = FALSE
+app$chat_connect_timeout_seconds = 60
+app$chat_timeout_seconds = 180
 
-answer = chat$chat(question, echo="none")
+request = ullme_start_custom_ai_stream(
+  input=question,
+  model=config$model,
+  system_prompt_override=
+    "You are a minimal connectivity test. Answer briefly.",
+  app=app
+)
+answer = ullme_await_promise(request$promise, seconds=180)
 
 cat("\n--- AI response ---\n")
 cat(answer, "\n")

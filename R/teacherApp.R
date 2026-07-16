@@ -9,9 +9,6 @@ example = function() {
     main_dir,
     api_key_file = api_key_file,
     api_provider = "nvidia",
-    stream_chat = FALSE,
-    stream_backend = "custom",
-    sync_chat = FALSE,
     catch_chat_errors = FALSE,
     chat_debug = TRUE,
     enable_ai_tools = FALSE,
@@ -30,11 +27,8 @@ teacherApp = function(main_dir, userid="skranz", teacherid=NULL,
                        api_provider=c("fake", "nvidia", "local"),
                        api_model=NULL, api_base_url=NULL,
                        render_chat_markdown=TRUE,
-                       stream_chat=TRUE,
-                       stream_backend=c("ellmer", "custom")[2],
                        catch_chat_errors=TRUE,
                        chat_debug=FALSE,
-                       sync_chat=FALSE,
                        enable_ai_tools=TRUE,
                        instance_builder_retries=1L,
                        show_chat_thinking=TRUE,
@@ -105,11 +99,8 @@ teacherApp = function(main_dir, userid="skranz", teacherid=NULL,
     api_provider=api_provider,
     api_model=api_model,
     api_base_url=api_base_url,
-    stream_chat=stream_chat,
-    stream_backend=stream_backend,
     catch_chat_errors=catch_chat_errors,
     chat_debug=chat_debug,
-    sync_chat=sync_chat,
     enable_ai_tools=enable_ai_tools,
     instance_builder_retries=instance_builder_retries,
     show_chat_thinking=show_chat_thinking,
@@ -127,7 +118,7 @@ ullme_teacher_context_controls_ui = function(app=getApp()) {
   ullme_fixed_context_controls_ui(
     app=app,
     role_label="Teacher",
-    allow_add_course=TRUE
+    allow_add_course=FALSE
   )
 }
 
@@ -146,8 +137,7 @@ ullme_teacher_workspace_ui = function(app=getApp()) {
     ),
     tags$section(
       class="ullme-studio-main",
-      ullme_course_workspace_ui(app=app),
-      tags$div(id="ullme_definition_mount", class="ullme-definition-mount")
+      ullme_course_workspace_ui(app=app)
     ),
     tags$button(
       class="ullme-pane-resizer ullme-pane-resizer-ai",

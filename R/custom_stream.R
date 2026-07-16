@@ -258,8 +258,8 @@ ullme_custom_stream_tool_schema = function(name, app=getApp()) {
     if (is.null(spec)) stop("Unknown student Tutor tool: ", name)
     implementation = get(
       paste0("utool_", name),
-      envir=environment(ullme_student_tool),
-      inherits=FALSE
+      envir=environment(ullme_custom_stream_tool_schema),
+      inherits=TRUE
     )
     arguments = formals(implementation)
     arguments$app = NULL
@@ -291,8 +291,8 @@ ullme_custom_stream_tool_schema = function(name, app=getApp()) {
   if (is.null(spec)) stop("Unknown uLLMe tool: ", name)
   implementation = get(
     paste0("utool_", name),
-    envir=environment(ullme_tool),
-    inherits=FALSE
+    envir=environment(ullme_custom_stream_tool_schema),
+    inherits=TRUE
   )
   hidden = c("app", "userid", "teacherid")
   args = setdiff(names(formals(implementation)), hidden)
@@ -583,8 +583,8 @@ ullme_custom_stream_execute_tool = function(call, app=getApp()) {
     }
     implementation = get(
       paste0("utool_", name),
-      envir=environment(ullme_student_tool),
-      inherits=FALSE
+      envir=environment(ullme_custom_stream_execute_tool),
+      inherits=TRUE
     )
     ullme_custom_stream_tool_request_event(call, app=app)
     result = tryCatch(
@@ -618,8 +618,8 @@ ullme_custom_stream_execute_tool = function(call, app=getApp()) {
   }
   implementation = get(
     paste0("utool_", name),
-    envir=environment(ullme_tool),
-    inherits=FALSE
+    envir=environment(ullme_custom_stream_execute_tool),
+    inherits=TRUE
   )
   ullme_custom_stream_tool_request_event(call, app=app)
   result = ullme_execute_tool(

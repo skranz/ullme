@@ -131,7 +131,7 @@ ullme_validate_course_file_content = function(path, content, app=getApp(),
   )
   tutor_parts = regmatches(relative, tutor_match)[[1]]
   if (length(tutor_parts) > 1) {
-    return(ullme_validate_definition_yaml("tutor", tutor_parts[[2]], content))
+    return(ullme_validate_tutor_yaml(tutor_parts[[2]], content))
   }
   if (grepl("\\.ya?ml$", relative, ignore.case=TRUE)) {
     return(ullme_parse_yaml_text(content, basename(relative)))

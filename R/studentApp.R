@@ -4,9 +4,6 @@ example_studentApp = function() {
   main_dir = "C:/libraries/ullme/ullme_main"
   app = studentApp(
     main_dir=main_dir,
-    stream_chat = TRUE,
-    stream_backend = "custom",
-    sync_chat = FALSE,
     catch_chat_errors = FALSE,
     chat_debug = TRUE,
     enable_ai_tools = FALSE,
@@ -30,11 +27,8 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
                        api_provider=c("fake", "nvidia", "local"),
                        api_model=NULL, api_base_url=NULL,
                        render_chat_markdown=TRUE,
-                       stream_chat=TRUE,
-                       stream_backend=c("ellmer", "custom")[2],
                        catch_chat_errors=TRUE,
                        chat_debug=FALSE,
-                       sync_chat=FALSE,
                        enable_ai_tools=TRUE,
                        show_chat_thinking=FALSE,
                        store_ai_interactions=TRUE,
@@ -107,11 +101,8 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
     api_provider=api_provider,
     api_model=api_model,
     api_base_url=api_base_url,
-    stream_chat=stream_chat,
-    stream_backend=stream_backend,
     catch_chat_errors=catch_chat_errors,
     chat_debug=chat_debug,
-    sync_chat=sync_chat,
     enable_ai_tools=enable_ai_tools,
     show_chat_thinking=show_chat_thinking,
     store_ai_interactions=store_ai_interactions,
@@ -616,7 +607,7 @@ ullme_student_system_prompt = function(app=getApp()) {
 
 
 ullme_student_chat = function(model=NULL, app=getApp()) {
-  stop("Student Tutors use the declarative workflow runtime, not an ellmer chat.")
+  stop("Student Tutors use the declarative workflow runtime, not a stateful chat object.")
 }
 
 

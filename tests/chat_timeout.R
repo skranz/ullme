@@ -30,14 +30,6 @@ stopifnot(
   )
 )
 
-controller = ellmer::stream_controller()
-stopifnot(!controller$cancelled)
-controller$cancel("Stopped by test")
-stopifnot(
-  controller$cancelled,
-  identical(controller$reason, "Stopped by test")
-)
-
 resolved = promises::promise_resolve("ready")
 stopifnot(identical(ullme_await_promise(resolved, seconds=1), "ready"))
 

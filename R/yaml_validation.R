@@ -412,28 +412,27 @@ ullme_validate_tutor_workflow = function(value, document_ids,
 }
 
 
-ullme_validate_definition_yaml = function(kind, definitionid, content) {
-  kind = ullme_definition_kind(kind)
-  definitionid = ullme_clean_definition_id(definitionid)
-  filename = if (identical(kind, "tutor")) "tutor.yml" else "ullme.yaml"
+ullme_validate_tutor_yaml = function(tutorid, content) {
+  tutorid = ullme_clean_definition_id(tutorid)
+  filename = "tutor.yml"
   parsed = ullme_parse_yaml_text(content, filename)
   if (!parsed$ok) return(parsed)
 
   value = parsed$value
-  id_field = if (identical(kind, "tutor")) "tutorid" else "skillid"
+  id_field = "tutorid"
   errors = ullme_validate_required_fields(value, id_field, filename)
   if (length(errors) == 0) {
     declared = paste0(value[[id_field]])[1]
-    if (!identical(declared, definitionid)) {
+    if (!identical(declared, tutorid)) {
       errors = c(errors, paste0(id_field, " must match the definition directory name '",
-                                definitionid, "'."))
+                                tutorid, "'."))
     }
   }
   warnings = character(0)
   if (is.list(value) && !nzchar(trimws(paste0(value$label %||% "")[1]))) {
     warnings = c(warnings, "label is empty.")
   }
-  if (identical(kind, "tutor") && is.list(value)) {
+  if (is.list(value)) {
     scalar_fields = c(
       "lang", "label", "description", "shown_text",
       "default_personality", "start_node"

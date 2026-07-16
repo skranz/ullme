@@ -15,15 +15,14 @@ Student mode remains chat-first.
 
 ## Navigation
 
-The rail starts with the global **Usage** entry, followed by fixed
-**Materials** and **Settings** entries. Each AI Tutor installed in the selected
-course gets its own Tutor entry. Skills added to the course get Skill entries;
-the currently active one is highlighted.
+The rail starts with a single **Add** menu, followed by the global **Usage**
+entry and fixed **Materials** and **Settings** entries. Each AI Tutor installed
+in the selected course gets its own Tutor entry.
 
 The **Add** menu currently offers:
 
-- **Add AI Tutor**, which copies a reusable template into the course; and
-- **Add Skill**, which adds and activates a reusable teacher workflow.
+- **Add Tutor**, which copies a reusable template into the course; and
+- **New Course**, which creates and selects a course.
 
 There is no separate Organize or Definitions work surface.
 

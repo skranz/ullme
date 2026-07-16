@@ -2,8 +2,6 @@
   var state = {
     tutors: [],
     templates: [],
-    courseSkills: [],
-    activeSkill: null,
     selectedTutorId: "",
     activeTab: "instances",
     yamlTab: "definition",
@@ -13,7 +11,6 @@
   };
 
   var tutorIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>';
-  var skillIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3z"></path><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"></path></svg>';
   var robotIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="3"></rect><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"></path></svg>';
   var undoIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9 8l-4 4 4 4"></path><path d="M5 12h8a4 4 0 0 1 4 4"></path></svg>';
   var redoIcon = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 8l4 4-4 4"></path><path d="M19 12h-8a4 4 0 0 0-4 4"></path></svg>';
@@ -42,16 +39,9 @@
     if (nav) {
       nav.addEventListener("click", function (event) {
         var tutorButton = event.target.closest("[data-tutor-id]");
-        var skillButton = event.target.closest("[data-skill-id]");
         if (tutorButton && nav.contains(tutorButton)) {
           state.tutorPaneActive = true;
           selectTutor(tutorButton.getAttribute("data-tutor-id"));
-          return;
-        }
-        if (skillButton && nav.contains(skillButton)) {
-          sendEvent("ullme_skill_activate_event", {
-            skillid: skillButton.getAttribute("data-skill-id")
-          });
           return;
         }
         var viewButton = event.target.closest("[data-studio-view]");
@@ -73,8 +63,13 @@
         var item = event.target.closest("[data-add-kind]");
         if (!item) return;
         closeAddMenu();
-        if (window.ullme && window.ullme.openCatalogDialog) {
-          window.ullme.openCatalogDialog(item.getAttribute("data-add-kind"));
+        if (window.ullme) {
+          var kind = item.getAttribute("data-add-kind");
+          if (kind === "course" && window.ullme.openAddCourseDialog) {
+            window.ullme.openAddCourseDialog();
+          } else if (kind === "tutors" && window.ullme.openCatalogDialog) {
+            window.ullme.openCatalogDialog("tutors");
+          }
         }
       });
       document.addEventListener("click", function (event) {
@@ -97,14 +92,10 @@
     if (button) button.setAttribute("aria-expanded", "false");
   }
 
-  function update(tutors, templates, activeSkill, courseSkills, courseFiles) {
+  function update(tutors, templates, courseFiles) {
     state.tutors = Array.isArray(tutors) ? tutors : [];
     state.templates = Array.isArray(templates) ? templates : [];
-    if (arguments.length > 2) state.activeSkill = activeSkill || null;
-    if (arguments.length > 3) {
-      state.courseSkills = Array.isArray(courseSkills) ? courseSkills : [];
-    }
-    if (arguments.length > 4) {
+    if (arguments.length > 2) {
       state.courseFiles = (Array.isArray(courseFiles) ? courseFiles : [])
         .filter(function (file) {
           return String(file.path || "").indexOf("materials/") === 0;
@@ -116,11 +107,6 @@
       state.selectedTutorId = state.tutors.length ? state.tutors[0].tutorid : "";
     }
     render();
-  }
-
-  function updateSkill(skill) {
-    state.activeSkill = skill || null;
-    renderSkillNavigation();
   }
 
   function selectedTutor() {
@@ -139,7 +125,6 @@
   function render() {
     if (!state.initialized && document.readyState !== "loading") init();
     renderTutorNavigation();
-    renderSkillNavigation();
     renderTutorDetail();
   }
 
@@ -160,27 +145,6 @@
       button.title = tutor.label || tutor.tutorid;
       button.innerHTML = tutorIcon;
       label.textContent = tutor.label || tutor.tutorid;
-      button.appendChild(label);
-      container.appendChild(button);
-    });
-  }
-
-  function renderSkillNavigation() {
-    var container = byId("ullme_skill_nav_items");
-    if (!container) return;
-    container.innerHTML = "";
-    state.courseSkills.forEach(function (skill) {
-      var button = document.createElement("button");
-      var label = document.createElement("span");
-      var active = state.activeSkill &&
-        state.activeSkill.skillid === skill.skillid;
-      button.type = "button";
-      button.className = "ullme-studio-nav-item ullme-dynamic-nav-item ullme-skill-nav-item";
-      if (active) button.classList.add("ullme-skill-nav-item-active");
-      button.setAttribute("data-skill-id", skill.skillid || "");
-      button.title = skill.label || skill.skillid || "Skill";
-      button.innerHTML = skillIcon;
-      label.textContent = skill.label || skill.skillid || "Skill";
       button.appendChild(label);
       container.appendChild(button);
     });
@@ -1432,8 +1396,7 @@
   }
 
   window.ullmeTutors = {
-    update: update,
-    updateSkill: updateSkill
+    update: update
   };
   window.ullme = window.ullme || {};
   window.ullme.aiTutorSaveComplete = saveComplete;

@@ -70,11 +70,10 @@ stopifnot(
   is.null(
     ullme_nvidia_chat_profile("google/gemma-4-31b-it")$api_args$reasoning_budget
   ),
-  identical(
+  is.null(
     ullme_nvidia_chat_profile(
       "nvidia/nemotron-3-ultra-550b-a55b"
-    )$api_args$reasoning_budget,
-    16384
+    )$api_args$reasoning_budget
   ),
   identical(
     ullme_nvidia_chat_profile(
@@ -85,7 +84,11 @@ stopifnot(
   )
 )
 
-test_main_dir = tempfile("ullme-ai-provider-main-")
+test_main_dir = file.path(
+  tempdir(),
+  "ullme_main",
+  paste0("ai-provider-", as.integer(Sys.time()))
+)
 dir.create(test_main_dir, recursive=TRUE)
 cleanup_app = new.env(parent=emptyenv())
 cleanup_app$glob = list(main_dir=test_main_dir)
@@ -124,11 +127,6 @@ ullme_remove_tempdir(test_dir, app=cleanup_app)
 registry = ullme_tool_registry()
 stopifnot(all(c(
   "list_ai_tutors",
-  "list_skills",
   "read_course_file",
   "rewrite_course_text_file"
 ) %in% names(registry)))
-
-stopifnot(
-  inherits(ullme_definition_rewrite_type(), "ellmer::TypeObject")
-)

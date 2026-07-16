@@ -25,7 +25,7 @@
 
 - Teacher mode uses the [Teacher Studio](TEACHER_STUDIO.md): a course
   workspace for materials, editable text files, course-local AI Tutors and
-  their instances, active Skills, and a collapsible context-aware AI pane.
+  their instances, and a collapsible context-aware AI pane.
 
 Create fixed-role applications with:
 
@@ -87,11 +87,9 @@ Assistant output is rendered as CommonMark Markdown by default. Pass
 By default, `adapt_mathjax=TRUE` also normalizes `$...$` and `$$...$$` in
 rendered chat output to MathJax's `\\(...\\)` and `\\[...\\]` delimiters.
 Set it to `FALSE` to preserve dollar delimiters unchanged.
-Responses stream asynchronously by default; pass `stream_chat=FALSE` to wait
-for complete responses. Both constructors accept `stream_backend`,
-`catch_chat_errors`, `chat_debug`, `sync_chat`, `enable_ai_tools`, and
-`show_chat_thinking`; use `stream_backend="custom"` for the custom
-OpenAI-compatible streaming backend. When `show_chat_thinking=TRUE`,
+Responses use uLLMe's OpenAI-compatible streaming client. Both constructors
+accept `catch_chat_errors`, `chat_debug`, `enable_ai_tools`, and
+`show_chat_thinking`. When `show_chat_thinking=TRUE`,
 provider-supplied thinking content is shown in a closed, expandable field when
 present. The student app's Personal settings menu also offers System, Light,
 and Dark appearance modes; this browser-local choice can later be replaced by

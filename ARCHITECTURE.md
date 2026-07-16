@@ -46,7 +46,7 @@ inst/www/ullme-audio.js
 
 The browser owns transient interaction state: draft text, local image previews,
 message insertion, assistant placeholders, composer sizing, dropdown menus,
-course-tab selection, tutor- and skill-catalog rendering, material-list
+course-tab selection, Tutor-catalog rendering, material-list
 rendering, and audio recording controls.
 
 The R server owns persistent or trusted work: filesystem discovery, file
@@ -62,19 +62,18 @@ Both apps use one compact application bar containing:
 - a fixed Teacher or Student label
 - semester selector
 - course selector
-- add-course button in the teacher app
 - personal-settings button
 
 The personal-settings popover displays the instance userid and gives teachers
-access to Skill and agent settings. AI Tutors are added from the rail's Add
-menu.
+access to agent settings. AI Tutors and courses are added from the rail's
+single Add menu.
 
 Teacher mode divides the workspace into a compact navigation rail, the main
 work surface, and a resizable AI assistant pane. The global Usage dashboard is
 the initial view; Materials and Settings are fixed course rail entries. Each
-installed AI Tutor and each course Skill receive a dynamic rail entry. The
-active Skill is highlighted. The Add menu opens the Tutor-template or Skill
-catalog. A bottom settings group currently contains the Users view, where
+installed AI Tutor receives a dynamic rail entry. The Add menu opens the Tutor
+template catalog or the New Course dialog. A bottom settings group currently
+contains the Users view, where
 authorized teachers edit `allowed_users.yaml` through a table rather than a raw
 YAML editor. The main teacher listed in `general/teachers.yaml` is shown as a
 protected row and cannot be removed.
@@ -120,27 +119,14 @@ history mechanism. Committed changes refresh the Tutor UI.
 `ullme_test_instance_builder()` exposes the same prompt workflow
 outside Shiny for prompt development.
 
-All ULLME-managed Tutor YAML, instance YAML, course settings, Skill assignment,
-and course-file edits use the same transaction history. The **Edits & undo**
+All ULLME-managed Tutor YAML, instance YAML, course settings, and course-file
+edits use the same transaction history. The **Edits & undo**
 navigation item opens recent changes and restores an earlier version only when
 the target has not changed since that edit. Tutor panes expose the same history
 through their header shortcut.
 
-Skills belong to the teacher assistant rather than the course tab row. A
-composer button opens the resolved Skill catalog. Selecting a Skill displays
-its introduction, starter prompts, and composer placeholder above the composer
-until the teacher clears it or selects another Skill.
-
-The legacy Definitions work surface is not part of Teacher Studio. Tutor
-editing belongs to the selected Tutor pane. Skill definitions may still use
-their dedicated library tooling.
-
-The Definition Assistant is an optional adaptive panel. Opening it collapses
-the source library into a definition picker and divides the workspace between
-the editor and chat. Assistant rewrites modify only the browser's unsaved
-editor draft and provide Undo; the existing Save action remains the only path
-to disk. The fake-AI implementation exercises this protocol; real models
-return a validated structured draft.
+Tutor editing belongs to the selected Tutor pane. The instance-builder AI
+helper is implemented directly in R and is not a customizable assistant.
 
 The student app builds a chat-first workspace without the Teacher Studio,
 teacher navigation, or pane resizers. It reuses the common chat implementation
@@ -200,21 +186,11 @@ before any confirmation email is sent.
 - `ullme_ai_tutor_toggle_event`: enables or disables an installed course tutor.
 - `ullme_ai_tutor_save_event`: validates and saves the selected course Tutor's
   form or YAML definition.
-- `ullme_skill_activate_event`: activates one resolved Skill for the teacher
-  assistant.
-- `ullme_skill_clear_event`: clears the active Skill.
-- `ullme_definition_action_event`: supports the remaining Skill-library
-  definition actions.
-- `ullme_definition_import_tutor` and `ullme_definition_import_skill`: upload
-  Tutor YAML and Skill ZIP files for validation and import preview.
-- `ullme_definition_chat_event`: constructs definition-scoped context and
-  returns an in-memory rewrite draft.
-
 Audio handlers are registered separately by `ullme_register_audio_handlers()`.
 
-After semester, course, settings, material, Tutor, or Skill changes, R
+After semester, course, settings, material, or Tutor changes, R
 calls `window.ullme.updateCourseList(...)`. The browser updates selectors,
-  fixed-role layout classes, settings fields, Tutor panes, Skill state, and
+  fixed-role layout classes, settings fields, Tutor panes, and
 material lists without rebuilding the UI.
 
 ## Users, Roles, And Semesters
@@ -420,7 +396,7 @@ Chat submission follows this sequence:
 3. JavaScript sends `ullme_submit_chat_event`.
 4. For student Tutors, R starts the declarative node workflow and the custom
    OpenAI-compatible streaming client executes each model node. Teacher chat
-   and the instance builder retain their existing request paths.
+   and the instance builder use the same client.
 5. Tool request and result callbacks update a visible activity line and write
    structured trace records beneath the interaction directory.
 6. Streaming updates replace the placeholder as text or thinking arrives.
@@ -432,9 +408,9 @@ suspended `ask_for_input` node is resumed by the next student submission.
 Parallel classifier nodes use independent custom requests and aggregate before
 the workflow continues.
 
-Mutating tools that require approval return an unresolved promise to ellmer.
-The approval dialog resolves that promise with the committed or rejected
-result, after which ellmer resumes the same model/tool conversation. Model and
+Mutating tools that require approval return an unresolved promise to the
+streaming tool loop. The approval dialog resolves that promise with the
+committed or rejected result, after which the client resumes the same model/tool conversation. Model and
 browser response watchdogs pause while user approval is pending. Stopping the
 chat rejects any pending change and settles its tool promise.
 
@@ -445,15 +421,15 @@ instead of leaving the composer permanently busy. Server cleanup runs even when
 delivery of the final browser callback fails.
 
 While a response is active, the composer send button becomes a stop button.
-Student workflow cancellation cancels every active node request; ellmer-backed
-teacher and instance-builder requests use ellmer's stream controller. Stopping
+Student workflow cancellation cancels every active node request. Teacher and
+instance-builder requests use the same cancellable streaming controller. Stopping
 marks the request inactive, preserves any partial visible answer, and
 immediately unlocks the composer. Gemma 4 uses its own NVIDIA request profile:
 thinking is disabled through `chat_template_kwargs` and the Nemotron-specific
 `reasoning_budget` parameter is omitted.
 
-When `store_ai_interactions=TRUE` (the default), main chat, instance-builder,
-and Definition Assistant requests write prompt, response, thinking, error, and
+When `store_ai_interactions=TRUE` (the default), main chat and instance-builder
+requests write prompt, response, thinking, error, and
 status metadata beneath the active course's `ai_interactions/` directory.
 Stored Tutor workflow interactions additionally contain ordered per-node
 prompt and response directories under `nodes/`.

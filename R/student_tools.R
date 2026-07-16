@@ -12,15 +12,15 @@ ullme_student_tool_registry = function() {
         "Use list_allowed_files to discover paths and access permissions first."
       ),
       arguments=list(
-        path=ellmer::type_string(
-          "File path returned by list_allowed_files.",
+        path=list(
+          type="string",
+          description="File path returned by list_allowed_files.",
           required=TRUE
         )
       )
     )
   )
 }
-
 
 ullme_student_file_permissions = function(app=getApp()) {
   tutor = ullme_student_selected_tutor(app=app)
@@ -184,39 +184,5 @@ utool_read_allowed_files = function(path, app=getApp()) {
       readLines(allowed$target, warn=FALSE, encoding="UTF-8"),
       collapse="\n"
     )
-  )
-}
-
-
-ullme_student_tool = function(name, app=getApp()) {
-  registry = ullme_student_tool_registry()
-  spec = registry[[name]]
-  if (is.null(spec)) stop("Unknown student Tutor tool: ", name)
-  implementation = get(
-    paste0("utool_", name),
-    envir=environment(ullme_student_tool),
-    inherits=FALSE
-  )
-  tool_fun = function() {
-    tryCatch(
-      do.call(implementation, c(as.list(environment()), list(app=app))),
-      error=function(e) {
-        list(ok=FALSE, status="error", message=conditionMessage(e))
-      }
-    )
-  }
-  implementation_formals = formals(implementation)
-  formals(tool_fun) = implementation_formals[
-    setdiff(names(implementation_formals), "app")
-  ]
-  environment(tool_fun) = list2env(
-    list(implementation=implementation, app=app),
-    parent=environment(ullme_student_tool)
-  )
-  ellmer::tool(
-    fun=tool_fun,
-    name=name,
-    description=spec$description,
-    arguments=spec$arguments %||% list()
   )
 }

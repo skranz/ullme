@@ -38,11 +38,8 @@ ullme_teacherid = function(app=getApp()) {
                       api_provider=c("fake", "nvidia", "local"),
                       api_model=NULL, api_base_url=NULL,
                       render_chat_markdown=TRUE,
-                      stream_chat=TRUE,
-                      stream_backend=c("ellmer", "custom"),
                       catch_chat_errors=TRUE,
                       chat_debug=FALSE,
-                      sync_chat=FALSE,
                       enable_ai_tools=TRUE,
                       instance_builder_retries=1L,
                       show_chat_thinking=FALSE,
@@ -61,7 +58,6 @@ ullme_teacherid = function(app=getApp()) {
   app$global = glob
 
   role = match.arg(role)
-  stream_backend = match.arg(stream_backend)
   login_check = ullme_login_check(login_check)
   if (!is.list(login_args)) stop("login_args must be a list.")
   if (!is.function(email2userid)) {
@@ -96,11 +92,6 @@ ullme_teacherid = function(app=getApp()) {
       is.na(adapt_mathjax)) {
     stop("adapt_mathjax must be TRUE or FALSE.")
   }
-  if (!is.logical(stream_chat) ||
-      length(stream_chat) != 1L ||
-      is.na(stream_chat)) {
-    stop("stream_chat must be TRUE or FALSE.")
-  }
   if (!is.logical(catch_chat_errors) ||
       length(catch_chat_errors) != 1L ||
       is.na(catch_chat_errors)) {
@@ -110,11 +101,6 @@ ullme_teacherid = function(app=getApp()) {
       length(chat_debug) != 1L ||
       is.na(chat_debug)) {
     stop("chat_debug must be TRUE or FALSE.")
-  }
-  if (!is.logical(sync_chat) ||
-      length(sync_chat) != 1L ||
-      is.na(sync_chat)) {
-    stop("sync_chat must be TRUE or FALSE.")
   }
   if (!is.logical(enable_ai_tools) ||
       length(enable_ai_tools) != 1L ||
@@ -203,11 +189,8 @@ ullme_teacherid = function(app=getApp()) {
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
   app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$adapt_mathjax = isTRUE(adapt_mathjax)
-  app$stream_chat = isTRUE(stream_chat)
-  app$stream_backend = stream_backend
   app$catch_chat_errors = isTRUE(catch_chat_errors)
   app$chat_debug = isTRUE(chat_debug)
-  app$sync_chat = isTRUE(sync_chat)
   app$enable_ai_tools = isTRUE(enable_ai_tools)
   app$instance_builder_retries = instance_builder_retries
   app$show_chat_thinking = isTRUE(show_chat_thinking)
@@ -221,12 +204,10 @@ ullme_teacherid = function(app=getApp()) {
   app$chat_timeout_seconds = 180
   app$chat_connect_timeout_seconds = 60
   app$tutor_workflow_timeout_seconds = 600
-  app$teacher_chats = list()
   app$api_models = app$api_config$model
   app$api_models_error = NULL
   app$base_url_student = ullme_normalize_base_url(base_url_student)
   ullme_set_app_user_paths(app=app)
-  app$definition_imports = list()
   app$pending_changes = list()
   app$change_results = list()
   app$change_waiters = list()
@@ -251,7 +232,6 @@ ullme_teacherid = function(app=getApp()) {
   app$material_category = "root"
   app$material_upload_directory = ""
   app$material_upload_tree = NULL
-  app$active_skillid = ""
 
   if (identical(login_check, "sel")) {
     app$login_args = ullme_validate_sel_login_args(login_args)
@@ -284,7 +264,6 @@ ullme_add_resource_paths = function(app=getApp()) {
   www_dir = ullme_www_dir()
   dir.create(app$uploads_dir, recursive=TRUE, showWarnings=FALSE)
   dir.create(app$audio_dir, recursive=TRUE, showWarnings=FALSE)
-  dir.create(app$definition_downloads_dir, recursive=TRUE, showWarnings=FALSE)
 
   existing = shiny::resourcePaths()
   add_path = function(prefix, directory) {
@@ -315,18 +294,13 @@ ullme_add_resource_paths = function(app=getApp()) {
   add_path("ullme", www_dir)
   add_path(app$uploads_resource_prefix, app$uploads_dir)
   add_path(app$audio_resource_prefix, app$audio_dir)
-  add_path(
-    app$definition_downloads_resource_prefix,
-    app$definition_downloads_dir
-  )
   app$resource_paths_registered = TRUE
   if (identical(app$login_check, "sel") &&
       !is.null(app$session) &&
       is.function(app$session$onSessionEnded)) {
     prefixes = c(
       app$uploads_resource_prefix,
-      app$audio_resource_prefix,
-      app$definition_downloads_resource_prefix
+      app$audio_resource_prefix
     )
     app$session$onSessionEnded(function() {
       for (prefix in prefixes) {
@@ -412,13 +386,6 @@ ullme_register_handlers = function(app=getApp()) {
     changeHandler(
       id = paste0("ullme_material_upload_", category),
       fun = ullme_handle_material_upload,
-      app = app
-    )
-  })
-  lapply("skill", function(kind) {
-    changeHandler(
-      id = paste0("ullme_definition_import_", kind),
-      fun = ullme_handle_definition_import_upload,
       app = app
     )
   })
@@ -549,30 +516,6 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   eventHandler(
-    eventId = "ullme_skill_activate_event",
-    id = NULL,
-    fun = ullme_handle_skill_activate,
-    app = app
-  )
-  eventHandler(
-    eventId = "ullme_skill_clear_event",
-    id = NULL,
-    fun = ullme_handle_skill_clear,
-    app = app
-  )
-  eventHandler(
-    eventId = "ullme_definition_action_event",
-    id = NULL,
-    fun = ullme_handle_definition_action,
-    app = app
-  )
-  eventHandler(
-    eventId = "ullme_definition_chat_event",
-    id = NULL,
-    fun = ullme_handle_definition_chat,
-    app = app
-  )
-  eventHandler(
     eventId = "ullme_change_approval_event",
     id = NULL,
     fun = ullme_handle_change_approval,
@@ -696,12 +639,6 @@ ullme_app_ui = function(app=getApp()) {
           accept = "audio/*"
         ),
         if (identical(app$app_kind, "teacher")) tagList(
-          tags$input(
-            id = "ullme_definition_import_skill",
-            class = "ullme-file-input",
-            type = "file",
-            accept = ".zip,application/zip"
-          ),
           lapply(c("root", ullme_course_material_categories()), function(category) {
             tags$input(
               id = paste0("ullme_material_upload_", category),
@@ -793,15 +730,6 @@ ullme_appbar_ui = function(app=getApp()) {
           type="text",
           value=app$login_email %||% app$userid,
           readonly="readonly"
-        )
-      ),
-      if (identical(app$app_kind, "teacher")) tags$div(
-        class = "ullme-teacher-library-links",
-        tags$button(
-          id = "ullme_manage_skills_btn",
-          class = "ullme-settings-link",
-          type = "button",
-          "Skill Library"
         )
       ),
       if (identical(app$app_kind, "student")) tags$label(
@@ -946,14 +874,14 @@ ullme_studio_navigation_ui = function(app=getApp()) {
           role="menuitem",
           `data-add-kind`="tutors",
           HTML(ullme_icon_svg("tutor")),
-          tags$span("Add AI Tutor")
+          tags$span("Add Tutor")
         ),
         tags$button(
           type="button",
           role="menuitem",
-          `data-add-kind`="skills",
-          HTML(ullme_icon_svg("sparkles")),
-          tags$span("Add Skill")
+          `data-add-kind`="course",
+          HTML(ullme_icon_svg("plus")),
+          tags$span("New Course")
         )
       )
     ),
@@ -964,11 +892,6 @@ ullme_studio_navigation_ui = function(app=getApp()) {
           id="ullme_tutor_nav_items",
           class="ullme-dynamic-nav-items",
           `aria-label`="Course AI Tutors"
-        ),
-        if (i == 3) tags$div(
-          id="ullme_skill_nav_items",
-          class="ullme-dynamic-nav-items",
-          `aria-label`="Active Skills"
         ),
         tags$button(
         class=paste(
@@ -1405,11 +1328,6 @@ ullme_composer_ui = function(app=getApp()) {
   restore.point("ullme_composer_ui")
   tags$footer(
     class = "ullme-composer-wrap",
-    tags$section(
-      id = "ullme_active_skill",
-      class = "ullme-active-skill",
-      `aria-live` = "polite"
-    ),
     tags$div(
       class = "ullme-composer",
       ullme_audio_recording_ui(),
@@ -1417,14 +1335,6 @@ ullme_composer_ui = function(app=getApp()) {
         id = "ullme_upload_preview",
         class = "ullme-upload-preview",
         `aria-live` = "polite"
-      ),
-      if (identical(app$app_kind, "teacher")) tags$button(
-        id = "ullme_skills_btn",
-        class = "ullme-icon-button ullme-skills-button",
-        type = "button",
-        `aria-label` = "Choose a skill",
-        title = "Skills",
-        HTML(ullme_icon_svg("sparkles"))
       ),
       if (identical(app$app_kind, "student")) tags$button(
         id = "ullme_camera_btn",
@@ -1580,7 +1490,6 @@ ullme_handle_semester_select = function(semester=NULL, app=getApp(), ...) {
   if (is.na(index)) return(invisible(NULL))
 
   app$semester = semester
-  app$active_skillid = ""
   ullme_refresh_course_state(app=app)
   ullme_send_course_state(app=app)
   invisible(app$semester)
@@ -1594,7 +1503,6 @@ ullme_handle_course_select = function(courseid=NULL, app=getApp(), ...) {
   if (nzchar(courseid) && !courseid %in% app$courseids) return(invisible(NULL))
 
   app$courseid = courseid
-  app$active_skillid = ""
   ullme_send_course_state(app=app)
   invisible(app$courseid)
 }
@@ -1906,9 +1814,6 @@ ullme_course_summary_for_js = function(app=getApp()) {
       )
     )
     summary$ai_tutor_catalog = ullme_ai_tutor_catalog(app=app)
-    summary$skills = ullme_skill_catalog_for_js(app=app)
-    summary$course_skills = ullme_course_skills_for_js(app=app)
-    summary$active_skill = ullme_skill_for_js(ullme_active_skill(app=app))
     summary$allowed_users = ullme_allowed_users_for_js(app=app)
     summary$student_urls = ullme_course_student_urls_for_js(app=app)
     summary$course_files = if (is.null(course_dir)) list() else
@@ -1919,9 +1824,6 @@ ullme_course_summary_for_js = function(app=getApp()) {
     summary$ai_tutors = list()
     summary$edit_history = list()
     summary$ai_tutor_catalog = list()
-    summary$skills = list()
-    summary$course_skills = list()
-    summary$active_skill = NULL
     summary$course_files = list()
     course_dir = ullme_active_course_dir(app=app)
     summary$material_tree = if (is.null(course_dir)) list() else
@@ -2014,7 +1916,7 @@ ullme_handle_chat_submit_safe = function(..., session=NULL, app=getApp()) {
 }
 
 
-ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
+ullme_handle_chat_submit = function(id=NULL, text="", model=NULL,
                                   context=NULL, uploads=NULL,
                                   instance_builder=NULL,
                                   clientMessageId=NULL, assistantMessageId=NULL,
@@ -2136,14 +2038,6 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       silent=TRUE
     )
   }
-  skill = ullme_active_skill(app=app)
-  if (identical(task_profile, "instance_builder")) {
-    skill = NULL
-  }
-  requested_skillid = paste0(skillid %||% "")[1]
-  if (!is.null(skill) && nzchar(requested_skillid) && !identical(requested_skillid, skill$skillid)) {
-    skill = NULL
-  }
   context_instruction = NULL
   if (identical(app$role, "teacher") && is.list(context)) {
     open_file = paste0(context$course_file %||% "")[1]
@@ -2155,7 +2049,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     )
   }
   system_instructions = paste(
-    c(if (is.null(skill)) NULL else skill$instructions, context_instruction),
+    c(context_instruction),
     collapse="\n\n"
   )
   if (!nzchar(system_instructions)) system_instructions = NULL
@@ -2329,10 +2223,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
       ),
       app=app
     )
-    retry_stream_fun = if (
-      identical(app$stream_backend, "custom") &&
-      ullme_custom_stream_supported(app=app, task_profile="instance_builder")
-    ) ullme_start_custom_ai_stream else ullme_start_ai_stream
+    retry_stream_fun = ullme_start_custom_ai_stream
     retry_args = list(
       input=retry_prompt,
       model=model,
@@ -2383,18 +2274,12 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     app=app
   )
 
-  if (isTRUE(app$stream_chat) && !isTRUE(app$sync_chat)) {
-    use_custom_stream = identical(app$stream_backend, "custom") &&
-      ullme_custom_stream_supported(app=app, task_profile=task_profile)
-    stream_fun = if (isTRUE(use_custom_stream)) {
-      ullme_start_custom_ai_stream
-    } else {
-      ullme_start_ai_stream
-    }
+  {
+    stream_fun = ullme_start_custom_ai_stream
     ullme_chat_debug(
       app,
       "handle_chat stream branch begin backend=",
-      if (isTRUE(use_custom_stream)) "custom" else "ellmer"
+      "custom"
     )
     stream_on_update = function(text, thinking, done) {
       ullme_chat_debug(
@@ -2443,7 +2328,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         on_event=stream_on_event,
         app=app
       )
-      if (isTRUE(use_custom_stream)) stream_args$uploads = uploads
+      stream_args$uploads = uploads
       do.call(stream_fun, stream_args)
     }
     if (identical(app$catch_chat_errors, FALSE)) {
@@ -2525,109 +2410,6 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         }
         if (identical(app$catch_chat_errors, FALSE)) stop(error)
         fail(error, text=job$state$text, thinking=job$state$thinking)
-      }
-    )
-  } else {
-    ullme_chat_debug(app, "handle_chat nonstream branch begin")
-    if (isTRUE(app$sync_chat)) {
-      ullme_chat_debug(app, "handle_chat sync branch begin")
-      start_sync_chat = function() {
-        ullme_start_ai_chat_sync(
-          input=ai_input,
-          model=model,
-          context=context %||% list(),
-          system_instructions=system_instructions,
-          task_profile=task_profile,
-          app=app
-        )
-      }
-      if (identical(app$catch_chat_errors, FALSE)) {
-        response = start_sync_chat()
-      } else {
-        response = tryCatch(start_sync_chat(), error=function(e) e)
-        if (inherits(response, "error")) {
-          return(invisible(fail(response)))
-        }
-      }
-      ullme_student_stats_attach_chat(
-        stats_request,
-        response$chat,
-        usage_start=response$usage_start
-      )
-      answer = response$answer
-      ullme_student_stats_mark_output(stats_request)
-      ullme_send_chat_stream_update(
-        message_id=assistantMessageId,
-        text=answer,
-        thinking="",
-        done=!identical(task_profile, "instance_builder"),
-        app=app
-      )
-      finish(text=answer, thinking="")
-      ullme_chat_debug(app, "handle_chat sync branch end")
-      return(invisible(answer))
-    }
-    start_chat = function() {
-      ullme_start_ai_chat(
-        input=ai_input,
-        model=model,
-        context=context %||% list(),
-        system_instructions=system_instructions,
-        task_profile=task_profile,
-        app=app
-      )
-    }
-    if (identical(app$catch_chat_errors, FALSE)) {
-      response = start_chat()
-    } else {
-      response = tryCatch(start_chat(), error=function(e) e)
-      if (inherits(response, "error")) {
-        return(invisible(fail(response)))
-      }
-    }
-    ullme_student_stats_attach_chat(
-      stats_request,
-      response$chat,
-      usage_start=response$usage_start
-    )
-    task = promises::then(
-      ullme_promise_timeout(
-        response$promise,
-        seconds=app$chat_timeout_seconds,
-        is_paused=function() isTRUE(request$waiting_for_approval)
-      ),
-      onFulfilled=function(answer) {
-        ullme_chat_debug(
-          app,
-          "handle_chat nonstream promise fulfilled answer_bytes=",
-          nchar(paste0(answer, collapse=""), type="bytes")
-        )
-        if (!isTRUE(request$active)) return(invisible(NULL))
-        ullme_student_stats_mark_output(stats_request)
-        thinking = if (isTRUE(app$show_chat_thinking)) {
-          ullme_chat_last_thinking(response$chat)
-        } else {
-          ""
-        }
-        ullme_send_chat_stream_update(
-          message_id=assistantMessageId,
-          text=answer,
-          thinking=thinking,
-          done=!identical(task_profile, "instance_builder"),
-          app=app
-        )
-        finish(text=answer, thinking=thinking)
-        answer
-      },
-      onRejected=function(error) {
-        ullme_chat_debug(
-          app,
-          "handle_chat nonstream promise rejected message=",
-          conditionMessage(error)
-        )
-        if (!isTRUE(request$active)) return(invisible(NULL))
-        if (identical(app$catch_chat_errors, FALSE)) stop(error)
-        fail(error)
       }
     )
   }

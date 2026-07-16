@@ -581,8 +581,7 @@ input {
 }
 
 .ullme-file-input,
-.ullme-recording-panel,
-.ullme-active-skill {
+.ullme-recording-panel {
   display: none;
 }
 

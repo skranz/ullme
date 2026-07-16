@@ -1,28 +1,5 @@
 library(ullme)
 
-request_content = ellmer::ContentToolRequest(
-  id="call-1",
-  name="read_course_file",
-  arguments=list(courseid="micro", path="notes.md")
-)
-request_record = ullme_tool_request_record(request_content)
-stopifnot(
-  identical(request_record$call_id, "call-1"),
-  identical(request_record$tool, "read_course_file"),
-  identical(request_record$arguments$courseid, "micro")
-)
-
-result_content = ellmer::ContentToolResult(
-  value=list(ok=FALSE, status="rejected", message="No"),
-  request=request_content
-)
-result_record = ullme_tool_result_record(result_content)
-stopifnot(
-  identical(result_record$call_id, "call-1"),
-  identical(result_record$tool, "read_course_file"),
-  identical(result_record$status, "rejected")
-)
-
 trace_value = ullme_tool_trace_value(list(
   api_key="do-not-store",
   content=paste(rep("x", 2100), collapse="")

@@ -307,8 +307,6 @@ ullme_set_app_user_paths = function(app=getApp(), unique_resources=FALSE) {
     ullme_cur_session_images_dir(cur_session_dir=app$cur_session_dir)
   app$audio_dir =
     ullme_cur_session_audio_dir(cur_session_dir=app$cur_session_dir)
-  app$definition_downloads_dir =
-    file.path(app$cur_session_dir, "definition_downloads")
   suffix = if (isTRUE(unique_resources)) {
     paste0("-", ullme_resource_token())
   } else {
@@ -316,8 +314,6 @@ ullme_set_app_user_paths = function(app=getApp(), unique_resources=FALSE) {
   }
   app$uploads_resource_prefix = paste0("ullme-uploads", suffix)
   app$audio_resource_prefix = paste0("ullme-audio", suffix)
-  app$definition_downloads_resource_prefix =
-    paste0("ullme-definition-downloads", suffix)
   app$resource_paths_registered = FALSE
   invisible(app)
 }

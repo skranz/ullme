@@ -70,18 +70,14 @@ configured_app = studentApp(
   teacherid="teacher_a",
   courseid="course_a",
   api_provider="fake",
-  stream_backend="custom",
   catch_chat_errors=FALSE,
   chat_debug=TRUE,
-  sync_chat=TRUE,
   enable_ai_tools=FALSE,
   show_chat_thinking=TRUE
 )
 stopifnot(
-  identical(configured_app$stream_backend, "custom"),
   identical(configured_app$catch_chat_errors, FALSE),
   identical(configured_app$chat_debug, TRUE),
-  identical(configured_app$sync_chat, TRUE),
   identical(configured_app$enable_ai_tools, FALSE),
   identical(configured_app$show_chat_thinking, TRUE)
 )

@@ -122,8 +122,8 @@ legacy_tutor = sub(
     warn=FALSE
   ), collapse="\n")
 )
-stopifnot(!ullme_validate_definition_yaml(
-  "tutor", "pstutor", legacy_tutor
+stopifnot(!ullme_validate_tutor_yaml(
+  "pstutor", legacy_tutor
 )$ok)
 
 app = new.env(parent=emptyenv())

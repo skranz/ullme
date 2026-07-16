@@ -72,27 +72,20 @@ utool_list_material_files = function(courseid, semester="sel",
 }
 
 
-utool_read_definition_yaml = function(kind, definitionid, source,
+utool_read_definition_yaml = function(definitionid, source,
                                        app=getApp()) {
   restore.point("utool_read_definition_yaml")
-  kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
-  if (identical(kind, "tutor")) {
-    path = if (identical(source, "course")) {
-      course_dir = ullme_active_course_dir(app=app)
-      if (is.null(course_dir)) NULL else
-        ullme_existing_course_ai_tutor_path(course_dir, definitionid)
-    } else if (identical(source, "package")) {
-      ullme_ai_tutor_template_path(definitionid)
-    } else {
-      NULL
-    }
-    filename = if (is.null(path)) "tutor.yml" else basename(path)
+  path = if (identical(source, "course")) {
+    course_dir = ullme_active_course_dir(app=app)
+    if (is.null(course_dir)) NULL else
+      ullme_existing_course_ai_tutor_path(course_dir, definitionid)
+  } else if (identical(source, "package")) {
+    ullme_ai_tutor_template_path(definitionid)
   } else {
-    directory = ullme_definition_dir(kind, definitionid, source, app=app)
-    filename = "ullme.yaml"
-    path = file.path(directory, filename)
+    NULL
   }
+  filename = if (is.null(path)) "tutor.yml" else basename(path)
   if (is.null(path) || !file.exists(path)) {
     stop("The requested definition YAML does not exist.")
   }
@@ -140,19 +133,6 @@ utool_read_tutor_instances_yaml = function(tutorid, app=getApp()) {
       course_docs=instance_data$course_docs
     )
   )
-}
-
-
-utool_list_skills = function(app=getApp()) {
-  restore.point("utool_list_skills")
-  lapply(ullme_skill_catalog(app=app), function(skill) {
-    list(
-      skillid=skill$skillid,
-      label=skill$label,
-      source=skill$source,
-      description=skill$description
-    )
-  })
 }
 
 
@@ -268,29 +248,20 @@ utool_copy_material = function(source_courseid, source_category, source_path,
 }
 
 
-utool_rewrite_definition_yaml = function(kind, definitionid, source,
+utool_rewrite_definition_yaml = function(definitionid, source,
                                           yaml_content, app=getApp()) {
   restore.point("utool_rewrite_definition_yaml")
-  kind = ullme_definition_kind(kind)
   definitionid = ullme_clean_definition_id(definitionid)
   source = paste0(source)[1]
-  if (!ullme_definition_is_editable(kind, source, app=app)) {
-    stop("Only course AI Tutors and personal Skills are editable.")
-  }
-  validation = ullme_validate_definition_yaml(kind, definitionid, yaml_content)
+  if (!identical(source, "course")) stop("Only course AI Tutors are editable.")
+  validation = ullme_validate_tutor_yaml(definitionid, yaml_content)
   ullme_validation_stop(validation)
-  if (identical(kind, "tutor")) {
-    course_dir = ullme_active_course_dir(app=app)
-    if (!identical(source, "course") || is.null(course_dir)) {
-      stop("AI Tutor rewrites target the selected course copy.")
-    }
-    target = ullme_existing_course_ai_tutor_path(course_dir, definitionid)
-    filename = basename(target)
-  } else {
-    directory = ullme_definition_dir(kind, definitionid, source, app=app)
-    filename = "ullme.yaml"
-    target = file.path(directory, filename)
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) {
+    stop("AI Tutor rewrites target the selected course copy.")
   }
+  target = ullme_existing_course_ai_tutor_path(course_dir, definitionid)
+  filename = basename(target)
   if (!file.exists(target)) stop("The requested definition YAML does not exist.")
 
   operation = ullme_new_change(

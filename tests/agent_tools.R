@@ -39,8 +39,8 @@ valid_tutor = paste(
   "  init_prompt: 'Help with {{personality}}.'",
   sep="\n"
 )
-stopifnot(ullme_validate_definition_yaml("tutor", "tutor1", valid_tutor)$ok)
-stopifnot(!ullme_validate_definition_yaml("tutor", "other", valid_tutor)$ok)
+stopifnot(ullme_validate_tutor_yaml("tutor1", valid_tutor)$ok)
+stopifnot(!ullme_validate_tutor_yaml("other", valid_tutor)$ok)
 stopifnot(!ullme_parse_yaml_text("a: [", "bad.yaml")$ok)
 registry = ullme_tool_registry()
 new_tools = c(

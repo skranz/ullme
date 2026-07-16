@@ -25,7 +25,7 @@ ullme_tool_registry = function() {
       perm=ullme_tool_perm(course_must_exist=TRUE)
     ),
     read_definition_yaml=list(
-      description="Read the YAML metadata of an AI Tutor or Skill visible to the current teacher.",
+      description="Read the YAML metadata of an AI Tutor visible to the current teacher.",
       perm=ullme_tool_perm()
     ),
     list_ai_tutors=list(
@@ -34,10 +34,6 @@ ullme_tool_registry = function() {
     ),
     read_tutor_instances_yaml=list(
       description="Read the complete instances.yml assignment YAML for a course AI Tutor.",
-      perm=ullme_tool_perm()
-    ),
-    list_skills=list(
-      description="List the Skill definitions visible to the current teacher, including source and description.",
       perm=ullme_tool_perm()
     ),
     read_course_file=list(
@@ -58,7 +54,7 @@ ullme_tool_registry = function() {
       perm=ullme_tool_perm(course_must_exist=TRUE, mutates=TRUE)
     ),
     rewrite_definition_yaml=list(
-      description="Validate and replace YAML for a course AI Tutor or editable personal Skill.",
+      description="Validate and replace YAML for a course AI Tutor.",
       perm=ullme_tool_perm(mutates=TRUE)
     ),
     rewrite_tutor_instances_yaml=list(
@@ -82,58 +78,6 @@ ullme_tool_registry = function() {
       perm=ullme_tool_perm(mutates=TRUE)
     )
   )
-}
-
-
-ullme_tool = function(name, descr=NULL, perm=NULL, app=getApp()) {
-  restore.point("ullme_tool")
-  registry = ullme_tool_registry()
-  spec = registry[[name]]
-  if (is.null(spec)) stop("Unknown uLLMe tool: ", name)
-  if (is.null(descr)) descr = spec$description
-  if (is.null(perm)) perm = spec$perm
-
-  fun_name = paste0("utool_", name)
-  namespace = environment(ullme_tool)
-  implementation = get(fun_name, envir=namespace, inherits=FALSE)
-  implementation_formals = formals(implementation)
-  hidden = c("app", "userid", "teacherid")
-  tool_args = setdiff(names(implementation_formals), hidden)
-
-  tool_fun = function() {
-    args = as.list(environment())
-    ullme_execute_tool(
-      implementation=implementation,
-      args=args,
-      perm=perm,
-      app=app
-    )
-  }
-  formals(tool_fun) = implementation_formals[tool_args]
-  environment(tool_fun) = list2env(
-    list(
-      implementation=implementation,
-      perm=perm,
-      app=app
-    ),
-    parent=namespace
-  )
-
-  ellmer::tool(
-    fun=tool_fun,
-    name=name,
-    description=descr,
-    arguments=ullme_tool_arg_defs(tool_args, specs=spec$arguments %||% list())
-  )
-}
-
-
-ullme_tools = function(app=getApp()) {
-  restore.point("ullme_tools")
-  tool_names = names(ullme_tool_registry())
-  tools = lapply(tool_names, ullme_tool, app=app)
-  names(tools) = tool_names
-  tools
 }
 
 
@@ -203,23 +147,6 @@ ullme_tool_semester = function(semester="sel", app=getApp()) {
 }
 
 
-ullme_tool_arg_defs = function(args, specs=list()) {
-  restore.point("ullme_tool_arg_defs")
-  definitions = ullme_tool_arg_spec(args=args, specs=specs)
-  lapply(definitions, function(spec) {
-    description = spec$description
-    required = isTRUE(spec$required)
-    switch(
-      spec$type,
-      string=ellmer::type_string(description, required=required),
-      boolean=ellmer::type_boolean(description, required=required),
-      number=ellmer::type_number(description, required=required),
-      stop("Unsupported tool argument type: ", spec$type)
-    )
-  })
-}
-
-
 ullme_tool_arg_spec = function(args, specs=list()) {
   restore.point("ullme_tool_arg_spec")
   defaults = ullme_default_tool_arg_spec()
@@ -242,7 +169,7 @@ ullme_default_tool_arg_spec = function() {
   restore.point("ullme_default_tool_arg_spec")
   list(
     semester=list(type="string", description="Semester such as WS2526 or SS27. Use 'sel' for the selected semester.", required=FALSE),
-    topic=list(type="string", description="Information topic, for example overview, materials, tutors, skills, safety, project_state, or next_steps.", required=FALSE),
+    topic=list(type="string", description="Information topic, for example overview, materials, tutors, safety, project_state, or next_steps.", required=FALSE),
     query=list(type="string", description="Optional words to search for in the teacher information library.", required=FALSE),
     courseid=list(type="string", description="Course ID owned by the current teacher.", required=TRUE),
     category=list(type="string", description="Material category: general, slides, ps, quiz, or background.", required=FALSE),
@@ -255,10 +182,9 @@ ullme_default_tool_arg_spec = function() {
     target_category=list(type="string", description="Destination material category.", required=TRUE),
     target_path=list(type="string", description="Relative destination file path. Empty means keep the source filename.", required=FALSE),
     overwrite=list(type="boolean", description="Whether an existing destination may be replaced.", required=FALSE),
-    kind=list(type="string", description="Definition kind: tutor or skill.", required=TRUE),
-    definitionid=list(type="string", description="AI Tutor or Skill definition ID.", required=TRUE),
+    definitionid=list(type="string", description="AI Tutor definition ID.", required=TRUE),
     tutorid=list(type="string", description="Course AI Tutor ID used for assignments and preferred document formats.", required=TRUE),
-    source=list(type="string", description="Definition source: course or package for Tutors; personal, general, or package for Skills.", required=TRUE),
+    source=list(type="string", description="AI Tutor definition source: course or package.", required=TRUE),
     yaml_content=list(type="string", description="Complete replacement YAML text.", required=TRUE),
     paths=list(type="string", description="One or more paths relative to the materials directory, separated by commas or newlines.", required=TRUE),
     from=list(type="string", description="Optional Pandoc input format; empty infers it from each file extension.", required=FALSE),

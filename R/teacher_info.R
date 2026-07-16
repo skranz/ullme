@@ -15,6 +15,8 @@ ullme_init_teacher_info = function(main_dir=ullme_main_dir()) {
   source = ullme_teacher_info_source_dir()
   target = ullme_teacher_info_dir(main_dir=main_dir)
   dir.create(target, recursive=TRUE, showWarnings=FALSE)
+  obsolete = file.path(target, "ai_tutors_and_skills.md")
+  if (file.exists(obsolete)) file.remove(obsolete)
   if (!dir.exists(source)) return(invisible(target))
 
   files = list.files(
@@ -79,9 +81,7 @@ ullme_teacher_project_state = function(app=getApp()) {
     installed_ai_tutors=length(tutors),
     enabled_ai_tutors=enabled_tutors,
     ai_tutor_instances=tutor_instances,
-    available_ai_tutor_templates=length(ullme_ai_tutor_catalog(app=app)),
-    available_skills=length(ullme_skill_catalog(app=app)),
-    active_skill=app$active_skillid %||% ""
+    available_ai_tutor_templates=length(ullme_ai_tutor_catalog(app=app))
   )
 }
 
@@ -112,7 +112,7 @@ ullme_teacher_next_steps = function(state) {
     }
   }
   if (length(steps) == 0) {
-    steps = "Ask for help with materials, AI Tutors, Tutor instances, or Skills."
+    steps = "Ask for help with materials, AI Tutors, or Tutor instances."
   }
   as.list(steps)
 }
@@ -134,12 +134,6 @@ ullme_teacher_project_state_text = function(app=getApp()) {
     state$enabled_ai_tutors,
     "; instances: ", state$ai_tutor_instances, "\n",
     "- Available Tutor templates: ", state$available_ai_tutor_templates,
-    "; Skills: ", state$available_skills,
-    if (nzchar(state$active_skill)) {
-      paste0("; active Skill: ", state$active_skill)
-    } else {
-      "; active Skill: none"
-    },
     "\nSuggested next steps:\n",
     paste0("- ", unlist(next_steps), collapse="\n")
   )

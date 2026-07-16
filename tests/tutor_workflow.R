@@ -10,8 +10,8 @@ yaml_content = paste(
   readLines(definition_path, warn=FALSE, encoding="UTF-8"),
   collapse="\n"
 )
-validation = ullme_validate_definition_yaml(
-  "tutor", "ps_tutor_en", yaml_content
+validation = ullme_validate_tutor_yaml(
+  "ps_tutor_en", yaml_content
 )
 stopifnot(validation$ok)
 stopifnot(identical(
@@ -25,8 +25,8 @@ invalid = sub(
   yaml_content,
   fixed=TRUE
 )
-invalid_validation = ullme_validate_definition_yaml(
-  "tutor", "ps_tutor_en", invalid
+invalid_validation = ullme_validate_tutor_yaml(
+  "ps_tutor_en", invalid
 )
 stopifnot(
   !invalid_validation$ok,
@@ -43,8 +43,8 @@ invalid_parallel = sub(
   yaml_content,
   fixed=TRUE
 )
-invalid_parallel_validation = ullme_validate_definition_yaml(
-  "tutor", "ps_tutor_en", invalid_parallel
+invalid_parallel_validation = ullme_validate_tutor_yaml(
+  "ps_tutor_en", invalid_parallel
 )
 stopifnot(!invalid_parallel_validation$ok)
 

@@ -4,18 +4,22 @@ uLLMe agent tools use a trusted application context. The model can select a
 course, material category, definition ID, or relative filename, but it cannot
 select a user identity or an arbitrary absolute path.
 
-The registry is defined by `ullme_tool_registry()` and instantiated for one app
-with `ullme_tools(app)`. Tool wrappers are closures; they do not generate and
-parse R source code.
+The registry is defined by `ullme_tool_registry()`. The OpenAI-compatible
+streaming client turns its entries into JSON tool schemas and dispatches calls
+through `ullme_execute_tool()` in the current app context.
 
 ## Available tools
 
 Read-only tools:
 
 - `cur_user`
+- `teacher_info`
 - `list_courses`
 - `list_material_files`
 - `read_definition_yaml`
+- `list_ai_tutors`
+- `read_tutor_instances_yaml`
+- `read_course_file`
 - `list_changes`
 - `change_status`
 
@@ -23,6 +27,10 @@ Modifying tools:
 
 - `copy_material`
 - `rewrite_definition_yaml`
+- `rewrite_tutor_instances_yaml`
+- `write_rtutor_instances_yaml`
+- `convert_material_files`
+- `rewrite_course_text_file`
 - `undo_change`
 
 Modifying tools prepare a transaction before touching the filesystem. The

@@ -904,9 +904,8 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     }
     content = ullme_ai_tutor_yaml(current)
   }
-  validation = ullme_validate_definition_yaml(
-    kind="tutor",
-    definitionid=tutorid,
+  validation = ullme_validate_tutor_yaml(
+    tutorid=tutorid,
     content=content
   )
   ullme_validation_stop(validation)

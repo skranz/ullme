@@ -298,7 +298,7 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
       )
       stop(error)
     }
-    job = ullme_start_ai_stream(
+    job = ullme_start_custom_ai_stream(
       input=request,
       model=model,
       context=list(studio_view="ai-tutors"),
