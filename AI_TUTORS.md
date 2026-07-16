@@ -136,6 +136,10 @@ add_images: true
 
 The Teacher Studio edits Tutor definitions in one YAML text area. Instance
 assignments retain their dedicated editor and instance-builder assistant.
+The assistant returns structured YAML text and does not use tools. The app
+accepts direct YAML, the requested begin/end-delimited form, or a fenced YAML
+block. `teacherApp(instance_builder_retries=1L)` controls how many correction
+requests may follow a non-empty response that fails parsing or validation.
 
 ## Instance assignments
 
@@ -151,10 +155,15 @@ Example:
 course_docs: {}
 instances:
   - instanceid: ps1
+    label: Problem Set 1
     docs:
       ps: [ps/ps1.pdf]
       ps_sol: [ps/ps1_sol.pdf]
 ```
+
+`instanceid` is the stable URL/configuration identifier. `label` is the
+human-readable name shown in both the Teacher Studio and the Student App; when
+it is omitted, uLLMe falls back to `instanceid`.
 
 If no saved assignment exists, uLLMe scans each document role's
 `pref_doc_dir`, groups likely matching files, and presents suggestions in the
@@ -192,9 +201,16 @@ shown first, with older chats under **More**. The default is `false`.
 
 `studentApp(never_save_chats=TRUE)` is the application-level privacy override
 and is the default. It disables both saved student conversations and the
-student interaction debug log, and suppresses the history sidebar regardless
+normal student interaction log, and suppresses the history sidebar regardless
 of `chat_history`. Set it to `FALSE` only when the deployment has an
 appropriate data-protection basis for retaining chat text.
+
+For local development, `studentApp(chat_debug=TRUE)` explicitly writes every
+model call from the current app process to `main_dir/debug_session`, even when
+`never_save_chats=TRUE`. Each text file contains Tutor/instance/node metadata,
+the full system and node prompts, and the full answer, thinking, or error. A
+new debug-enabled Student App removes all old files in that folder with
+`file.remove()` before starting. Do not enable this option in production.
 
 The current process still keeps a live transcript for `{{hist}}` and suspended
 workflow continuation. With `never_save_chats=TRUE`, that transcript is never

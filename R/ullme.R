@@ -44,6 +44,7 @@ ullme_teacherid = function(app=getApp()) {
                       chat_debug=FALSE,
                       sync_chat=FALSE,
                       enable_ai_tools=TRUE,
+                      instance_builder_retries=1L,
                       show_chat_thinking=FALSE,
                       store_ai_interactions=TRUE,
                       never_save_chats=TRUE,
@@ -120,6 +121,13 @@ ullme_teacherid = function(app=getApp()) {
       is.na(enable_ai_tools)) {
     stop("enable_ai_tools must be TRUE or FALSE.")
   }
+  retry_value = suppressWarnings(as.numeric(instance_builder_retries)[1])
+  if (length(instance_builder_retries) != 1L || is.na(retry_value) ||
+      !is.finite(retry_value) || retry_value < 0 ||
+      retry_value != floor(retry_value)) {
+    stop("instance_builder_retries must be a non-negative integer.")
+  }
+  instance_builder_retries = as.integer(retry_value)
   if (!is.logical(show_chat_thinking) ||
       length(show_chat_thinking) != 1L ||
       is.na(show_chat_thinking)) {
@@ -201,6 +209,7 @@ ullme_teacherid = function(app=getApp()) {
   app$chat_debug = isTRUE(chat_debug)
   app$sync_chat = isTRUE(sync_chat)
   app$enable_ai_tools = isTRUE(enable_ai_tools)
+  app$instance_builder_retries = instance_builder_retries
   app$show_chat_thinking = isTRUE(show_chat_thinking)
   app$store_ai_interactions = isTRUE(store_ai_interactions)
   app$never_save_chats =
@@ -2074,6 +2083,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   ai_input = if (nzchar(trimws(text))) text else "[uploaded image]"
   interaction_kind = "chat"
   task_profile = ""
+  instance_builder_tutorid = ""
   if (has_instance_builder) {
     tutorid = paste0(instance_builder$tutorid %||% "")[1]
     guidance = paste0(instance_builder$guidance %||% text, collapse="\n")
@@ -2105,6 +2115,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
     interaction_kind = "instance_builder"
     task_profile = "instance_builder"
     course_dir = ullme_active_course_dir(app=app)
+    instance_builder_tutorid = tutorid
     if (nzchar(trimws(guidance))) {
       try(
         ullme_store_form_input(
@@ -2194,8 +2205,39 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   }
 
   app$chat_response_active = TRUE
+  start_instance_builder_retry = NULL
   finish = function(status="completed", text="", thinking="", error="",
                     error_code="") {
+    builder_result = NULL
+    if (identical(status, "completed") &&
+        nzchar(request$instance_builder_tutorid %||% "")) {
+      builder_result = ullme_apply_instance_builder_response(
+        tutorid=request$instance_builder_tutorid,
+        text=text,
+        app=app
+      )
+      can_retry = !isTRUE(builder_result$ok) && nzchar(trimws(text)) &&
+        request$instance_builder_retry_count <
+          (app$instance_builder_retries %||% 1L)
+      if (isTRUE(can_retry)) {
+        request$instance_builder_retry_count =
+          request$instance_builder_retry_count + 1L
+        start_instance_builder_retry(
+          previous_output=text,
+          error=builder_result$message
+        )
+        return(invisible(FALSE))
+      }
+      ullme_send_chat_stream_update(
+        message_id=assistantMessageId,
+        text=text,
+        thinking=thinking,
+        done=TRUE,
+        error=if (isTRUE(builder_result$ok)) "" else builder_result$message,
+        activity=if (isTRUE(builder_result$ok)) builder_result$message else "",
+        app=app
+      )
+    }
     request$active = FALSE
     app$chat_response_active = FALSE
     app$chat_tasks[[assistantMessageId]] = NULL
@@ -2264,9 +2306,75 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
   request$waiting_for_approval = FALSE
   request$message_id = assistantMessageId
   request$tool_event_seq = 0L
+  request$instance_builder_tutorid = instance_builder_tutorid
+  request$instance_builder_retry_count = 0L
   request$stats_request = stats_request
   app$chat_requests[[assistantMessageId]] = request
   app$active_chat_request = request
+  start_instance_builder_retry = function(previous_output, error) {
+    retry_number = request$instance_builder_retry_count
+    retry_limit = app$instance_builder_retries %||% 1L
+    retry_prompt = ullme_instance_builder_retry_prompt(
+      previous_output=previous_output,
+      error=error
+    )
+    ullme_send_chat_stream_update(
+      message_id=assistantMessageId,
+      text="",
+      thinking="",
+      done=FALSE,
+      activity=paste0(
+        "Correcting invalid YAML (retry ", retry_number,
+        " of ", retry_limit, ")\u2026"
+      ),
+      app=app
+    )
+    retry_stream_fun = if (
+      identical(app$stream_backend, "custom") &&
+      ullme_custom_stream_supported(app=app, task_profile="instance_builder")
+    ) ullme_start_custom_ai_stream else ullme_start_ai_stream
+    retry_args = list(
+      input=retry_prompt,
+      model=model,
+      context=context %||% list(),
+      system_instructions=system_instructions,
+      include_thinking=isTRUE(app$show_chat_thinking),
+      task_profile="instance_builder",
+      on_update=function(text, thinking, done) {
+        if (!isTRUE(request$active)) return(invisible(NULL))
+        request$received_provider_output = request$received_provider_output ||
+          nzchar(text) || nzchar(thinking)
+        ullme_send_chat_stream_update(
+          message_id=assistantMessageId,
+          text=text,
+          thinking=thinking,
+          done=FALSE,
+          activity=if (isTRUE(done)) "Validating corrected YAML\u2026" else "",
+          app=app
+        )
+      },
+      app=app
+    )
+    job = tryCatch(do.call(retry_stream_fun, retry_args), error=function(e) e)
+    if (inherits(job, "error")) return(invisible(fail(job)))
+    request$controller = job$controller
+    request$state = job$state
+    task = promises::then(
+      ullme_promise_timeout(job$promise, seconds=app$chat_timeout_seconds),
+      onFulfilled=function(value) {
+        if (!isTRUE(request$active)) return(invisible(NULL))
+        finish(text=value$text, thinking=value$thinking)
+        value
+      },
+      onRejected=function(error) {
+        if (!isTRUE(request$active)) return(invisible(NULL))
+        if (identical(app$catch_chat_errors, FALSE)) stop(error)
+        fail(error, text=job$state$text, thinking=job$state$thinking)
+      }
+    )
+    app$chat_tasks[[assistantMessageId]] = task
+    invisible(task)
+  }
   connection_status = ullme_ai_connection_status(model=model, app=app)
   ullme_send_chat_stream_update(
     message_id=assistantMessageId,
@@ -2306,7 +2414,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         message_id=assistantMessageId,
         text=text,
         thinking=thinking,
-        done=done,
+        done=isTRUE(done) && !identical(task_profile, "instance_builder"),
         app=app
       )
       ullme_chat_debug(
@@ -2452,7 +2560,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
         message_id=assistantMessageId,
         text=answer,
         thinking="",
-        done=TRUE,
+        done=!identical(task_profile, "instance_builder"),
         app=app
       )
       finish(text=answer, thinking="")
@@ -2505,7 +2613,7 @@ ullme_handle_chat_submit = function(id=NULL, text="", model=NULL, skillid=NULL,
           message_id=assistantMessageId,
           text=answer,
           thinking=thinking,
-          done=TRUE,
+          done=!identical(task_profile, "instance_builder"),
           app=app
         )
         finish(text=answer, thinking=thinking)

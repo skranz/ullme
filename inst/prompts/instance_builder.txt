@@ -34,7 +34,9 @@ TASK
 - Use only files listed above. Do not read or convert files.
 - Produce the complete YAML mapping with `course_docs` and `instances`.
 - Use unique, short, stable `instanceid` values.
-- Call `write_rtutor_instances_yaml` exactly once with `tutorid="{{tutorid}}"`
-  and the complete YAML in `yaml_content`.
-- Do not call any other tool. Do not discuss alternatives or provide a plan.
-- After the tool result, reply with one brief sentence.
+- Give every instance a concise, human-readable `label` for the Student App.
+- Do not call tools. Do not discuss alternatives or provide a plan.
+- Return exactly the following three parts and nothing else:
+BEGIN_ULLME_INSTANCES_YAML
+<the complete valid YAML mapping>
+END_ULLME_INSTANCES_YAML

@@ -89,7 +89,11 @@ ullme_example_tutor_instances_yaml = function(definition) {
   })
   names(course_docs) = names(course_specs)
   instances = if (length(instance_specs)) {
-    list(list(instanceid="example_1", docs=instance_docs))
+    list(list(
+      instanceid="example_1",
+      label="Example 1",
+      docs=instance_docs
+    ))
   } else {
     list()
   }
@@ -142,11 +146,102 @@ ullme_instance_builder_request = function(tutorid, guidance="",
 }
 
 
+ullme_instance_builder_yaml_header = function() {
+  "BEGIN_ULLME_INSTANCES_YAML"
+}
+
+
+ullme_instance_builder_yaml_footer = function() {
+  "END_ULLME_INSTANCES_YAML"
+}
+
+
+ullme_parse_instance_builder_response = function(text) {
+  parsed = ullme_parse_yaml_reply(
+    text=text,
+    required_fields=c("course_docs", "instances"),
+    header_line=ullme_instance_builder_yaml_header(),
+    footer_line=ullme_instance_builder_yaml_footer(),
+    label="Instance Builder response"
+  )
+  if (!isTRUE(parsed$ok)) return(parsed)
+  unknown = setdiff(names(parsed$value), c("course_docs", "instances"))
+  if (length(unknown)) {
+    message = paste0(
+      "Instance Builder response contains unknown top-level field",
+      if (length(unknown) > 1L) "s" else "",
+      ": ", paste(unknown, collapse=", "), "."
+    )
+    return(list(
+      ok=FALSE, value=NULL, yaml="", source=parsed$source,
+      errors=message, message=message
+    ))
+  }
+  parsed
+}
+
+
+ullme_apply_instance_builder_response = function(tutorid, text,
+                                                  app=getApp()) {
+  parsed = ullme_parse_instance_builder_response(text)
+  if (!isTRUE(parsed$ok)) {
+    return(list(
+      ok=FALSE,
+      applied=FALSE,
+      message=parsed$message,
+      parse=parsed
+    ))
+  }
+  result = tryCatch(
+    ullme_save_course_ai_tutor_instances_yaml(
+      tutorid=tutorid,
+      yaml_content=parsed$yaml,
+      origin="instance_builder",
+      app=app
+    ),
+    error=function(e) e
+  )
+  if (!inherits(result, "error") && isTRUE(result$ok) &&
+      identical(result$status, "committed")) {
+    if (!isTRUE(app$headless)) ullme_send_course_state(app=app)
+    return(list(
+      ok=TRUE, applied=TRUE, message="Instances updated.", parse=parsed
+    ))
+  }
+  message = if (inherits(result, "error")) {
+    conditionMessage(result)
+  } else {
+    result$message %||% "The returned assignments could not be saved."
+  }
+  list(
+    ok=FALSE,
+    applied=FALSE,
+    message=message,
+    parse=parsed
+  )
+}
+
+
+ullme_instance_builder_retry_prompt = function(previous_output, error) {
+  paste0(
+    "Your previous Instance Builder response could not be accepted.\n\n",
+    "PARSING OR VALIDATION ERROR\n", paste0(error)[1], "\n\n",
+    "PREVIOUS RESPONSE\n", paste0(previous_output, collapse="\n"), "\n\n",
+    "Return a corrected complete instances.yml now. Output exactly these ",
+    "three parts and nothing else:\n",
+    ullme_instance_builder_yaml_header(), "\n",
+    "<valid YAML mapping with course_docs and instances>\n",
+    ullme_instance_builder_yaml_footer()
+  )
+}
+
+
 ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
                                         tutorid, guidance="",
                                         api_key_file=NULL,
                                         model="nvidia/nemotron-3-nano-30b-a3b",
                                         run=FALSE, allow_changes=FALSE,
+                                        retries=1L,
                                         timeout_seconds=180) {
   course_dir = ullme_course_dir(
     main_dir=main_dir, userid=userid, role="teacher",
@@ -181,7 +276,10 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
   thinking = character(0)
   request = prompt
   changed = FALSE
-  max_rounds = 1L
+  retries = suppressWarnings(as.integer(retries)[1])
+  if (is.na(retries) || retries < 0L) stop("retries must be non-negative.")
+  max_rounds = retries + 1L
+  builder_result = NULL
   deadline = as.numeric(Sys.time()) + as.numeric(timeout_seconds)[1]
   for (round in seq_len(max_rounds)) {
     remaining = deadline - as.numeric(Sys.time())
@@ -230,6 +328,17 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
     answer = round_result$text
     answers = c(answers, answer)
     thinking = c(thinking, round_result$thinking)
+    builder_result = if (isTRUE(allow_changes)) {
+      ullme_apply_instance_builder_response(tutorid, answer, app=app)
+    } else {
+      parsed = ullme_parse_instance_builder_response(answer)
+      list(
+        ok=isTRUE(parsed$ok),
+        applied=FALSE,
+        message=parsed$message,
+        parse=parsed
+      )
+    }
     current_instances = if (file.exists(instances_path)) {
       paste(readLines(
         instances_path, warn=FALSE, encoding="UTF-8"
@@ -238,12 +347,16 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
       NULL
     }
     changed = !identical(initial_instances, current_instances)
-    if (changed || round >= max_rounds) break
+    if (isTRUE(builder_result$ok) || round >= max_rounds) break
+    request = ullme_instance_builder_retry_prompt(
+      previous_output=answer,
+      error=builder_result$message
+    )
   }
   combined_answer = paste(answers, collapse="\n\n")
   ullme_ai_interaction_finish(
     interaction,
-    status=if (isTRUE(allow_changes) && !changed) "incomplete" else "completed",
+    status=if (!isTRUE(builder_result$ok)) "incomplete" else "completed",
     text=combined_answer,
     thinking=paste(thinking, collapse="\n\n")
   )
@@ -252,6 +365,7 @@ ullme_test_instance_builder = function(main_dir, userid, semester, courseid,
     answer=combined_answer,
     changed=changed,
     rounds=length(answers),
+    result=builder_result,
     app=app
   )
 }

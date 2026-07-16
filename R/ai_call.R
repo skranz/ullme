@@ -167,11 +167,9 @@ ullme_teacher_chat = function(model=NULL, system_prompt=NULL,
       task_profile=task_profile
     )
     if (!is.null(chat)) {
-      if (isTRUE(app$enable_ai_tools)) {
+      if (isTRUE(app$enable_ai_tools) &&
+          !identical(task_profile, "instance_builder")) {
         tools = ullme_tools(app=app)
-        if (identical(task_profile, "instance_builder")) {
-          tools = tools["write_rtutor_instances_yaml"]
-        }
         chat$register_tools(tools)
         chat$on_tool_request(function(request) {
           ullme_handle_tool_lifecycle_event("request", request, app=app)
@@ -220,7 +218,7 @@ ullme_ai_request_chat = function(model=NULL, context=list(),
   tool_names = if (!isTRUE(app$enable_ai_tools)) {
     character(0)
   } else if (identical(task_profile, "instance_builder")) {
-    "write_rtutor_instances_yaml"
+    character(0)
   } else {
     NULL
   }
@@ -441,7 +439,8 @@ ullme_start_ai_stream = function(input, model=NULL, context=list(),
     stream=stream_mode,
     controller=controller
   )
-  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools)) {
+  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools) &&
+      !identical(task_profile, "instance_builder")) {
     stream_args$tool_mode = "sequential"
   }
   ullme_chat_debug(
@@ -573,7 +572,8 @@ ullme_start_ai_chat = function(input, model=NULL, context=list(),
   )
   usage_start = ullme_chat_usage_snapshot(NULL)
   chat_args = list(input)
-  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools)) {
+  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools) &&
+      !identical(task_profile, "instance_builder")) {
     chat_args$tool_mode = "sequential"
   }
   list(
@@ -605,7 +605,8 @@ ullme_start_ai_chat_sync = function(input, model=NULL, context=list(),
   ullme_chat_debug(app, "start_ai_chat_sync chat ready")
   usage_start = ullme_chat_usage_snapshot(NULL)
   chat_args = list(input, echo="none")
-  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools)) {
+  if (identical(app$role, "teacher") && isTRUE(app$enable_ai_tools) &&
+      !identical(task_profile, "instance_builder")) {
     chat_args$tool_mode = "sequential"
   }
   ullme_chat_debug(

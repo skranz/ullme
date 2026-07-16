@@ -29,6 +29,7 @@ writeLines(c(
   "course_docs: {}",
   "instances:",
   "  - instanceid: instance_a",
+  "    label: Practice instance A",
   "    docs: {}"
 ), file.path(tutor_dir, "instances.yml"))
 
@@ -57,6 +58,11 @@ stopifnot(
   identical(app$teacherid, "teacher_a"),
   identical(app$courseid, "course_a")
 )
+tutors = ullme_student_tutors(app=app)
+stopifnot(identical(
+  tutors[[1]]$instances[[1]]$label,
+  "Practice instance A"
+))
 
 configured_app = studentApp(
   main_dir=main_dir,

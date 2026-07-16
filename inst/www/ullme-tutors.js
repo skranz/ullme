@@ -7,6 +7,7 @@
     selectedTutorId: "",
     activeTab: "instances",
     yamlTab: "definition",
+    courseFiles: [],
     tutorPaneActive: false,
     initialized: false
   };
@@ -96,12 +97,18 @@
     if (button) button.setAttribute("aria-expanded", "false");
   }
 
-  function update(tutors, templates, activeSkill, courseSkills) {
+  function update(tutors, templates, activeSkill, courseSkills, courseFiles) {
     state.tutors = Array.isArray(tutors) ? tutors : [];
     state.templates = Array.isArray(templates) ? templates : [];
     if (arguments.length > 2) state.activeSkill = activeSkill || null;
     if (arguments.length > 3) {
       state.courseSkills = Array.isArray(courseSkills) ? courseSkills : [];
+    }
+    if (arguments.length > 4) {
+      state.courseFiles = (Array.isArray(courseFiles) ? courseFiles : [])
+        .filter(function (file) {
+          return String(file.path || "").indexOf("materials/") === 0;
+        });
     }
     if (!state.tutors.some(function (tutor) {
       return tutor.tutorid === state.selectedTutorId;
@@ -373,14 +380,15 @@
     var headRow = document.createElement("tr");
     var body = document.createElement("tbody");
     body.id = "ullme_tutor_instance_rows";
-    appendCell(headRow, "th", "Instance");
+    appendCell(headRow, "th", "Instance ID");
+    appendCell(headRow, "th", "Label");
     roles.forEach(function (role) {
       appendCell(headRow, "th", humanize(role));
     });
     appendCell(headRow, "th", "");
     head.appendChild(headRow);
     instances.forEach(function (instance) {
-      body.appendChild(instanceEditorRow(instance, roles));
+      body.appendChild(instanceEditorRow(instance, roles, tutor));
     });
     table.appendChild(head);
     table.appendChild(body);
@@ -404,7 +412,7 @@
     add.className = "ullme-secondary-action";
     add.textContent = "Add instance";
     add.addEventListener("click", function () {
-      body.appendChild(instanceEditorRow({ instanceid: "", docs: {} }, roles));
+      body.appendChild(instanceEditorRow({ instanceid: "", label: "", docs: {} }, roles, tutor));
     });
     save.type = "button";
     save.className = "ullme-primary-action ullme-tutor-save-button";
@@ -440,6 +448,9 @@
     var historyWrap = document.createElement("label");
     var historyLabel = document.createElement("span");
     var history = document.createElement("select");
+    var modelWrap = document.createElement("label");
+    var modelLabel = document.createElement("span");
+    var model = document.createElement("select");
     var guidance = document.createElement("textarea");
     var actions = document.createElement("div");
     var cancel = document.createElement("button");
@@ -447,6 +458,9 @@
     backdrop.id = "ullme_instance_builder_dialog";
     backdrop.className = "ullme-instance-builder-backdrop";
     dialog.className = "ullme-instance-builder-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Make AI Tutor instances");
     title.textContent = "Make AI Tutor instances";
     description.textContent =
       "Describe filename conventions or which files belong together. " +
@@ -493,6 +507,21 @@
         history.value = "";
       }
     });
+    modelWrap.className = "ullme-instance-builder-history";
+    modelLabel.textContent = "AI model";
+    model.setAttribute("aria-label", "AI model for instance builder");
+    var chatModel = byId("ullme_model_select");
+    if (chatModel) {
+      Array.prototype.forEach.call(chatModel.options, function (source) {
+        var option = document.createElement("option");
+        option.value = source.value;
+        option.textContent = source.textContent;
+        option.title = source.title || source.value;
+        option.selected = source.value === chatModel.value;
+        model.appendChild(option);
+      });
+    }
+    model.disabled = !model.options.length;
     actions.className = "ullme-dialog-actions";
     cancel.type = "button";
     cancel.className = "ullme-secondary-action";
@@ -524,11 +553,9 @@
       window.ullme.startInstanceBuilder({
         tutorid: tutor.tutorid,
         label: tutor.label || tutor.tutorid,
-        guidance: submittedGuidance
+        guidance: submittedGuidance,
+        model: model.value || null
       });
-    });
-    backdrop.addEventListener("click", function (event) {
-      if (event.target === backdrop) backdrop.remove();
     });
     [cancel, start].forEach(function (button) { actions.appendChild(button); });
     dialog.appendChild(title);
@@ -536,6 +563,9 @@
     historyWrap.appendChild(historyLabel);
     historyWrap.appendChild(history);
     dialog.appendChild(historyWrap);
+    modelWrap.appendChild(modelLabel);
+    modelWrap.appendChild(model);
+    dialog.appendChild(modelWrap);
     dialog.appendChild(guidance);
     dialog.appendChild(actions);
     backdrop.appendChild(dialog);
@@ -543,10 +573,12 @@
     guidance.focus();
   }
 
-  function instanceEditorRow(instance, roles) {
+  function instanceEditorRow(instance, roles, tutor) {
     var row = document.createElement("tr");
     var idCell = document.createElement("td");
     var idInput = document.createElement("input");
+    var labelCell = document.createElement("td");
+    var labelInput = document.createElement("input");
     var removeCell = document.createElement("td");
     var remove = document.createElement("button");
     row.className = "ullme-instance-editor-row";
@@ -555,15 +587,22 @@
     idInput.placeholder = "ps1";
     idCell.appendChild(idInput);
     row.appendChild(idCell);
+    labelInput.className = "ullme-instance-input ullme-instance-label";
+    labelInput.value = instance.label || instance.instanceid || "";
+    labelInput.placeholder = "Problem Set 1";
+    labelCell.appendChild(labelInput);
+    row.appendChild(labelCell);
     roles.forEach(function (role) {
       var cell = document.createElement("td");
       var input = document.createElement("input");
       var paths = instance.docs && instance.docs[role];
+      var spec = tutorDocSpec(tutor, role, "docs_per_instance");
       input.className = "ullme-instance-input ullme-instance-docs";
       input.setAttribute("data-docid", role);
       input.value = (Array.isArray(paths) ? paths : (paths ? [paths] : [])).join(", ");
-      input.placeholder = "Relative material path";
+      input.placeholder = materialFilterLabel(spec);
       cell.appendChild(input);
+      attachMaterialSuggestions(input, spec, role);
       row.appendChild(cell);
     });
     remove.type = "button";
@@ -586,6 +625,7 @@
       });
       return {
         instanceid: (row.querySelector(".ullme-instance-id") || {}).value || "",
+        label: (row.querySelector(".ullme-instance-label") || {}).value || "",
         docs: docs
       };
     }).filter(function (instance) { return instance.instanceid.trim(); });
@@ -601,17 +641,70 @@
     grid.className = "ullme-course-doc-grid";
     roles.forEach(function (role) {
       var paths = values && values[role];
-      grid.appendChild(field(
+      var assignment = field(
         humanize(role),
         id + "_" + role,
         "input",
         (Array.isArray(paths) ? paths : (paths ? [paths] : [])).join(", "),
         "Comma-separated relative material paths"
-      ));
+      );
+      attachMaterialSuggestions(
+        assignment.querySelector("input"),
+        tutorDocSpec(selectedTutor(), role, "docs_per_course"),
+        role
+      );
+      grid.appendChild(assignment);
     });
     section.appendChild(title);
     section.appendChild(grid);
     return section;
+  }
+
+  function tutorDocSpec(tutor, role, fieldName) {
+    var specs = tutor && Array.isArray(tutor[fieldName]) ? tutor[fieldName] : [];
+    return specs.find(function (spec) { return spec.docid === role; }) || {};
+  }
+
+  function materialChoices(spec) {
+    spec = spec || {};
+    var directory = String(spec.pref_doc_dir || "").replace(/^\/+|\/+$/g, "");
+    var prefix = "materials/" + (directory ? directory + "/" : "");
+    var extensions = (Array.isArray(spec.file_types) ? spec.file_types : [])
+      .map(function (value) { return String(value).replace(/^\./, "").toLowerCase(); });
+    return state.courseFiles.filter(function (file) {
+      var path = String(file.path || "");
+      return path.indexOf(prefix) === 0 &&
+        (!extensions.length || extensions.indexOf(String(file.extension || "").toLowerCase()) >= 0);
+    }).map(function (file) {
+      return String(file.path).replace(/^materials\//, "");
+    });
+  }
+
+  function materialFilterLabel(spec) {
+    spec = spec || {};
+    var directory = String(spec.pref_doc_dir || "materials");
+    var extensions = Array.isArray(spec.file_types) ? spec.file_types : [];
+    return "Choose " + directory + (extensions.length ? " · " + extensions.join(", ") : " file");
+  }
+
+  function attachMaterialSuggestions(input, spec, role) {
+    if (!input) return;
+    var choices = materialChoices(spec);
+    var list = document.createElement("datalist");
+    var id = "ullme_material_choices_" + String(role || "file").replace(/[^A-Za-z0-9_-]/g, "_") +
+      "_" + Math.random().toString(36).slice(2);
+    list.id = id;
+    choices.forEach(function (path) {
+      var option = document.createElement("option");
+      option.value = path;
+      list.appendChild(option);
+    });
+    input.setAttribute("list", id);
+    input.title = choices.length
+      ? "Choose a file below materials/" + String(spec.pref_doc_dir || "") +
+        " matching: " + (spec.file_types || []).join(", ")
+      : "No material files match this document role's directory and file-type filters.";
+    input.parentNode.appendChild(list);
   }
 
   function collectCourseDocs(roles) {

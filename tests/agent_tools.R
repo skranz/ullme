@@ -126,6 +126,32 @@ stopifnot(
   )
 )
 
+fallback_response = paste(
+  "The completed assignments are:",
+  "```yaml",
+  "course_docs: {}",
+  "instances:",
+  "  - instanceid: fallback",
+  "    label: Fallback assignment",
+  "    docs: {}",
+  "```",
+  sep="\n"
+)
+fallback_saved = ullme_apply_instance_builder_response(
+  "tutor1",
+  fallback_response,
+  app=app
+)
+fallback_value = yaml::read_yaml(file.path(
+  course_dir, "ai_tutors", "tutor1", "instances.yml"
+))
+stopifnot(
+  fallback_saved$ok,
+  fallback_saved$applied,
+  identical(fallback_value$instances[[1]]$instanceid, "fallback"),
+  identical(fallback_value$instances[[1]]$label, "Fallback assignment")
+)
+
 target = file.path(root, "teachers", "alice", "note.yaml")
 writeLines("value: before", target)
 operation = ullme_new_change(

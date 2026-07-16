@@ -87,7 +87,8 @@ app = studentApp(
   courseid="course_a",
   tutorid="ps_tutor_en",
   instanceid="ps1",
-  api_provider="fake"
+  api_provider="fake",
+  chat_debug=TRUE
 )
 ullme_student_select_context(app=app)
 selected = ullme_student_selected_tutor(app=app)
@@ -103,6 +104,22 @@ no_image = ullme_tutor_workflow_new(
 result = ullme_await_promise(
   ullme_tutor_workflow_advance(no_image),
   seconds=5
+)
+debug_calls = list.files(
+  file.path(main_dir, "debug_session"),
+  pattern="^[0-9]{3}-.*[.]txt$",
+  full.names=TRUE
+)
+debug_calls = debug_calls[basename(debug_calls) != "000-session.txt"]
+stopifnot(
+  length(debug_calls) >= 1L,
+  any(vapply(debug_calls, function(path) {
+    content = paste(readLines(path, warn=FALSE), collapse="\n")
+    grepl("instanceid: ps1", content, fixed=TRUE) &&
+      grepl("===== SYSTEM PROMPT =====", content, fixed=TRUE) &&
+      grepl("===== PROMPT =====", content, fixed=TRUE) &&
+      grepl("===== ANSWER =====", content, fixed=TRUE)
+  }, logical(1)))
 )
 stopifnot(
   identical(result$status, "completed"),

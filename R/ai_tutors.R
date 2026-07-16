@@ -397,6 +397,8 @@ ullme_read_course_ai_tutor_instances = function(course_dir, tutorid) {
     docs = lapply(docs, ullme_tutor_document_paths)
     list(
       instanceid=paste0(instance$instanceid %||% instance$id %||% "")[1],
+      label=paste0(instance$label %||% instance$instanceid %||%
+        instance$id %||% "")[1],
       docs=docs,
       source="saved"
     )
@@ -542,7 +544,7 @@ ullme_suggest_course_ai_tutor_instances = function(course_dir, definition) {
         specs[[docid]]$file_types
       ))
     }
-    list(instanceid=key, docs=docs, source="suggested")
+    list(instanceid=key, label=key, docs=docs, source="suggested")
   })
 }
 
@@ -974,6 +976,8 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
   for (instance in instances %||% list()) {
     if (!is.list(instance)) next
     instanceid = ullme_clean_tutor_instance_id(instance$instanceid)
+    label = trimws(paste0(instance$label %||% instanceid)[1])
+    if (!nzchar(label)) label = instanceid
     if (instanceid %in% seen_instanceids) {
       stop("Tutor instance IDs must be unique: ", instanceid)
     }
@@ -997,6 +1001,7 @@ ullme_save_course_ai_tutor_instances = function(tutorid, instances,
     })
     clean_instances[[length(clean_instances) + 1L]] = list(
       instanceid=instanceid,
+      label=label,
       docs=docs
     )
   }

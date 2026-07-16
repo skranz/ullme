@@ -1,6 +1,6 @@
 ullme_custom_stream_supported = function(app=getApp(), task_profile="") {
   provider = paste0(app$api_config$provider %||% "")[1]
-  identical(task_profile, "") &&
+  task_profile %in% c("", "instance_builder") &&
     provider %in% c("nvidia", "local")
 }
 
@@ -230,7 +230,7 @@ ullme_custom_stream_tool_names = function(task_profile="", app=getApp()) {
   }
   if (!identical(app$role, "teacher")) return(character(0))
   if (identical(task_profile, "instance_builder")) {
-    return("write_rtutor_instances_yaml")
+    return(character(0))
   }
   names(ullme_tool_registry())
 }
@@ -536,10 +536,11 @@ ullme_custom_stream_tool_result_event = function(call, result, app=getApp()) {
     ""
   }
   if (!nzchar(status)) status = "completed"
+  tool_name = paste0(call$`function`$name %||% "unknown_tool")[1]
   record = list(
     event="result",
     call_id=paste0(call$id %||% "")[1],
-    tool=paste0(call$`function`$name %||% "unknown_tool")[1],
+    tool=tool_name,
     status=status,
     value=ullme_tool_trace_value(result),
     at=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")

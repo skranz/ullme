@@ -168,8 +168,20 @@ ullme_tutor_workflow_vote = function(outputs, node) {
 }
 
 
-ullme_tutor_workflow_model_call = function(state, node, prompt,
+ullme_tutor_workflow_model_call = function(state, node, node_id, prompt,
+                                            attempt=1L, parallel_call=1L,
                                             on_update=function(...) NULL) {
+  system_prompt = ullme_tutor_workflow_init_prompt(
+    state$tutor,
+    app=state$app
+  )
+  debug_record = ullme_debug_session_model_call_start(
+    state=state,
+    node_id=node_id,
+    attempt=attempt,
+    parallel_call=parallel_call
+  )
+  job = NULL
   if (ullme_uses_fake_ai(app=state$app)) {
     value = if (identical(node$aggregate %||% "", "majority_vote")) {
       choices = setdiff(names(node$switch_to %||% list()), "DEFAULT")
@@ -177,39 +189,71 @@ ullme_tutor_workflow_model_call = function(state, node, prompt,
     } else {
       paste0("Fake AI answer to:\n", prompt)
     }
-    return(promises::promise(function(resolve, reject) resolve(list(
+    call = promises::promise(function(resolve, reject) resolve(list(
       text=value,
       thinking=""
-    ))))
-  }
-  job = ullme_start_custom_ai_stream(
-    input=prompt,
-    model=state$model,
-    system_prompt_override=ullme_tutor_workflow_init_prompt(
-      state$tutor,
+    )))
+  } else {
+    job = ullme_start_custom_ai_stream(
+      input=prompt,
+      model=state$model,
+      system_prompt_override=system_prompt,
+      include_thinking=isTRUE(state$app$chat_debug),
+      task_profile="",
+      uploads=state$uploads,
+      on_update=on_update,
       app=state$app
-    ),
-    include_thinking=FALSE,
-    task_profile="",
-    uploads=state$uploads,
-    on_update=on_update,
-    app=state$app
+    )
+    state$controllers[[length(state$controllers) + 1L]] = job$controller
+    call = job$promise
+  }
+  promises::then(
+    call,
+    onFulfilled=function(result) {
+      ullme_debug_session_model_call_finish(
+        record=debug_record,
+        state=state,
+        system_prompt=system_prompt,
+        prompt=prompt,
+        answer=result$text %||% "",
+        thinking=result$thinking %||% ""
+      )
+      result
+    },
+    onRejected=function(error) {
+      partial_text = if (is.null(job)) "" else job$state$text %||% ""
+      partial_thinking = if (is.null(job)) "" else
+        job$state$thinking %||% ""
+      ullme_debug_session_model_call_finish(
+        record=debug_record,
+        state=state,
+        system_prompt=system_prompt,
+        prompt=prompt,
+        answer=partial_text,
+        thinking=partial_thinking,
+        error=conditionMessage(error)
+      )
+      stop(error)
+    }
   )
-  state$controllers[[length(state$controllers) + 1L]] = job$controller
-  job$promise
 }
 
 
-ullme_tutor_workflow_call_node = function(state, node, prompt,
+ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
                                            on_final_update=function(...) NULL) {
   attempts_left = as.integer(node$n_retries %||% 0L)
+  attempt = 0L
   run_attempt = NULL
   run_attempt = function() {
+    attempt <<- attempt + 1L
     n = as.integer(node$n_parallel %||% 1L)
     calls = lapply(seq_len(n), function(i) {
       callback = if (n == 1L) on_final_update else function(...) NULL
       ullme_tutor_workflow_model_call(
-        state, node, prompt, on_update=callback
+        state, node, node_id, prompt,
+        attempt=attempt,
+        parallel_call=i,
+        on_update=callback
       )
     })
     combined = promises::promise_all(.list=calls)
@@ -268,7 +312,7 @@ ullme_tutor_workflow_advance = function(state,
       if (nzchar(waiting)) on_waiting(waiting, node_id)
       rendered = ullme_tutor_workflow_prompt(state, node)
       call = ullme_tutor_workflow_call_node(
-        state, node, rendered,
+        state, node, node_id, rendered,
         on_final_update=if (
           !nzchar(node[["next"]] %||% "") && is.null(node$switch_to)
         ) on_final_update else function(...) NULL

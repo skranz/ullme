@@ -90,7 +90,7 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
     use.signup=use.signup,
     email2userid=email2userid
   )
-  .ullme_app(
+  app = .ullme_app(
     main_dir=main_dir,
     userid=userid,
     role="student",
@@ -120,6 +120,8 @@ studentApp = function(main_dir, userid="student", teacherid=NULL,
     login_args=login_args,
     email2userid=email2userid
   )
+  ullme_debug_session_init(app=app)
+  app
 }
 
 

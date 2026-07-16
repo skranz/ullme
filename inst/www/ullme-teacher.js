@@ -314,26 +314,6 @@
       if (event.key !== "Escape") return;
       closeSidebarMenus();
       closeUserSettings();
-      if (byId("ullme_definition_import_preview")) {
-        closeDefinitionImportPreview();
-        return;
-      }
-      if (byId("ullme_change_approval_overlay")) {
-        return;
-      }
-      if (byId("ullme_tutor_create_dialog")) {
-        closeTutorCreateDialog();
-        return;
-      }
-      if (byId("ullme_definition_create_dialog")) {
-        closeCreateDefinitionDialog();
-        return;
-      }
-      if (byId("ullme_definition_overlay")) {
-        closeDefinitionWorkspace();
-        return;
-      }
-      closeCatalogDialog();
     });
 
     if (addCourseButton) {
@@ -662,7 +642,7 @@
       clientMessageId: clientMessageId,
       assistantMessageId: assistantMessageId,
       text: guidance,
-      model: modelSelect ? modelSelect.value : null,
+      model: options.model || (modelSelect ? modelSelect.value : null),
       skillid: null,
       context: {
         studio_view: "ai-tutors",
@@ -840,7 +820,8 @@
         tutors,
         state.aiTutorCatalog,
         state.activeSkill,
-        state.courseSkills
+        state.courseSkills,
+        state.courseFiles
       );
     }
   }
@@ -935,9 +916,6 @@
     dialog.appendChild(list);
     dialog.appendChild(note);
     overlay.appendChild(dialog);
-    overlay.addEventListener("click", function (event) {
-      if (event.target === overlay) closeCatalogDialog();
-    });
     document.body.appendChild(overlay);
     close.focus();
   }
@@ -1063,9 +1041,6 @@
         templateid: templateid,
         tutorid: tutorid
       });
-    });
-    overlay.addEventListener("click", function (event) {
-      if (event.target === overlay) closeTutorCreateDialog();
     });
 
     head.appendChild(title);
@@ -1643,9 +1618,6 @@
     dialog.appendChild(error);
     dialog.appendChild(actions);
     backdrop.appendChild(dialog);
-    backdrop.addEventListener("click", function (event) {
-      if (event.target === backdrop) closeCreateDefinitionDialog();
-    });
     overlay.appendChild(backdrop);
     idInput.focus();
   }
@@ -1948,9 +1920,6 @@
     }
     dialog.appendChild(actions);
     backdrop.appendChild(dialog);
-    backdrop.addEventListener("click", function (event) {
-      if (event.target === backdrop) closeDefinitionImportPreview();
-    });
     host.appendChild(backdrop);
     confirm.focus();
   }
@@ -2074,9 +2043,6 @@
     create.textContent = "Create";
 
     cancel.addEventListener("click", closeAddCourseDialog);
-    overlay.addEventListener("click", function (event) {
-      if (event.target === overlay) closeAddCourseDialog();
-    });
     create.addEventListener("click", function () {
       var courseid = idField.input.value.trim();
       if (!courseid) {

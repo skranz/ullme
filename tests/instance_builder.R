@@ -77,10 +77,42 @@ stopifnot(
   ),
   grepl("example_1_ps.md", prompt, fixed=TRUE),
   grepl("example_1_ps_sol.md", prompt, fixed=TRUE),
-  grepl("write_rtutor_instances_yaml", prompt, fixed=TRUE),
+  grepl("label: Example 1", prompt, fixed=TRUE),
+  !grepl("write_rtutor_instances_yaml", prompt, fixed=TRUE),
+  grepl("BEGIN_ULLME_INSTANCES_YAML", prompt, fixed=TRUE),
+  grepl("END_ULLME_INSTANCES_YAML", prompt, fixed=TRUE),
   !grepl("convert_material_files", prompt, fixed=TRUE),
   !grepl("rewrite_tutor_instances_yaml", prompt, fixed=TRUE),
   grepl('Solutions end in "solution".', prompt, fixed=TRUE)
+)
+parsed_response = ullme_parse_instance_builder_response(paste(
+  "Here is the completed file:",
+  "```yaml",
+  "course_docs: {}",
+  "instances:",
+  "  - instanceid: ps1",
+  "    label: Problem Set 1",
+  "    docs: {}",
+  "```",
+  "Done.",
+  sep="\n"
+))
+stopifnot(
+  parsed_response$ok,
+  identical(parsed_response$source, "fence"),
+  identical(
+    parsed_response$value$instances[[1]]$label,
+    "Problem Set 1"
+  )
+)
+retry_prompt = ullme_instance_builder_retry_prompt(
+  "not yaml",
+  "instances is missing"
+)
+stopifnot(
+  grepl("instances is missing", retry_prompt, fixed=TRUE),
+  grepl("not yaml", retry_prompt, fixed=TRUE),
+  grepl("BEGIN_ULLME_INSTANCES_YAML", retry_prompt, fixed=TRUE)
 )
 legacy_tutor = sub(
   "file_types: \\[md, docx, pdf\\]",
@@ -93,15 +125,6 @@ legacy_tutor = sub(
 stopifnot(!ullme_validate_definition_yaml(
   "tutor", "pstutor", legacy_tutor
 )$ok)
-stopifnot(
-  identical(
-    ullme_tool_prompt_summary("write_rtutor_instances_yaml"),
-    paste0(
-      "- write_rtutor_instances_yaml: ",
-      ullme_tool_registry()$write_rtutor_instances_yaml$description
-    )
-  )
-)
 
 app = new.env(parent=emptyenv())
 app$glob = list(main_dir=main)

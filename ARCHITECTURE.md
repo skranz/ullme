@@ -108,13 +108,16 @@ an instance-builder request through the normal assistant pane. The rendered
 `inst/prompts/instance_builder.txt` prompt includes a definition-derived
 example YAML, every recursive filename beneath `materials/ps`, and the
 teacher's guidance. The specialized assistant receives only
-`write_rtutor_instances_yaml`; it does not inspect or convert files. That tool
-validates YAML structure, document roles, unique instance IDs, and assigned
-file paths before atomically replacing `instances.yml`, and returns an
-assignment summary. It commits without an approval dialog while still using
-the shared transaction backup and history mechanism. Committed changes refresh
-the Tutor UI.
-`ullme_test_instance_builder()` exposes the same prompt and tool workflow
+the prompt and no tools; it does not inspect or convert files. Its response is
+parsed as direct YAML, delimiter-wrapped YAML, or a fenced YAML block. The
+normal Tutor validation checks YAML structure, document roles, unique instance
+IDs, and assigned file paths before atomically replacing `instances.yml`. A
+parse or validation failure with non-empty model output triggers a correction
+request containing the error and previous response. `teacherApp()` defaults to
+one correction attempt through `instance_builder_retries=1L`. The save commits
+without an approval dialog while still using the shared transaction backup and
+history mechanism. Committed changes refresh the Tutor UI.
+`ullme_test_instance_builder()` exposes the same prompt workflow
 outside Shiny for prompt development.
 
 All ULLME-managed Tutor YAML, instance YAML, course settings, Skill assignment,
@@ -462,6 +465,14 @@ For student apps, `never_save_chats=TRUE` is the default and overrides both
 `store_ai_interactions` and the Tutor's `chat_history` flag. Chat text then
 exists only in the live app process. Anonymous, content-free usage metadata is
 written separately to one CSV per chat under `main_dir/session_stats/`.
+The explicit development option `studentApp(chat_debug=TRUE)` is an exception:
+it creates `main_dir/debug_session/` and records every model call in the current
+process, including the complete system prompt, rendered node prompt, answer,
+thinking/error text, Tutor, instance, node, retry attempt, and parallel-call
+index. Constructing another debug-enabled Student App removes every old file
+below that directory with `file.remove()` before writing the new session header;
+empty legacy directories may remain. This log is independent of
+`never_save_chats` and must not be enabled in privacy-sensitive deployments.
 
 `R/usage_statistics.R` owns teacher analytics. Each teacher has an incremental
 manifest, per-session normalized caches, course summaries, and a teacher-wide

@@ -91,6 +91,18 @@ image_body = ullme_custom_stream_body(
 )
 stopifnot(length(image_body$tools %||% list()) == 0)
 
+instance_builder_body = ullme_custom_stream_body(
+  "Build instances.",
+  model="nvidia/nemotron-3-nano-30b-a3b",
+  messages=list(list(role="user", content="Build instances.")),
+  task_profile="instance_builder",
+  app=app
+)
+stopifnot(
+  length(instance_builder_body$tools %||% list()) == 0L,
+  is.null(instance_builder_body$tool_choice)
+)
+
 state = new.env(parent=emptyenv())
 state$tool_calls = list()
 event1 = list(choices=list(list(delta=list(tool_calls=list(list(
