@@ -4,11 +4,19 @@ example_studentApp = function() {
   main_dir = "C:/libraries/ullme/ullme_main"
   app = studentApp(
     main_dir=main_dir,
-    userid="seb",
-    teacherid="skranz",
-    courseid="Umwelt",
+    stream_chat = TRUE,
+    stream_backend = "custom",
+    sync_chat = FALSE,
+    catch_chat_errors = FALSE,
+    chat_debug = TRUE,
+    enable_ai_tools = FALSE,
+    show_chat_thinking = FALSE,
+    userid="sebastian_kranz",
+    teacherid = "skranz",
+    courseid="umwelt",
     api_key_file="C:/libraries/ullme/nvidia_api_key.txt",
-    api_provider="nvidia"
+    api_provider="nvidia",
+
   )
   viewApp(app, launch.browser=TRUE)
 }
