@@ -105,6 +105,7 @@ ullme_tutor_workflow_new = function(tutor, input, uploads=list(),
   state$uploads = uploads %||% list()
   state$conversation = conversation %||% list()
   state$internal_history = list()
+  state$trace = list()
   state$output = ""
   state$resuming = FALSE
   state$current_input_recorded = FALSE
@@ -289,13 +290,35 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
 
 ullme_tutor_workflow_advance = function(state,
                                         on_waiting=function(...) NULL,
-                                        on_final_update=function(...) NULL) {
+                                        on_final_update=function(...) NULL,
+                                        single_model_step=FALSE) {
   repeat {
     state$steps = state$steps + 1L
     if (state$steps > 40L) stop("The Tutor workflow exceeded 40 node steps.")
     node_id = state$node
     node = state$tutor$nodes[[node_id]]
     if (is.null(node)) stop("Unknown Tutor workflow node: ", node_id)
+
+    if (isTRUE(node$skip)) {
+      state$trace[[length(state$trace) + 1L]] = list(
+        node=node_id,
+        skipped=TRUE,
+        system_prompt="",
+        prompt="",
+        output=state$output %||% ""
+      )
+      if (!is.null(node$switch_to)) {
+        state$node = ullme_tutor_workflow_route(state, node)
+        next
+      }
+      if (nzchar(node[["next"]] %||% "")) {
+        state$node = node[["next"]]
+        next
+      }
+      return(list(
+        status="completed", text=state$output, state=state, node=node_id
+      ))
+    }
 
     if (isTRUE(node$ask_for_input) && !isTRUE(state$resuming)) {
       text = ullme_render_prompt_once(
@@ -311,6 +334,7 @@ ullme_tutor_workflow_advance = function(state,
       waiting = node$waiting_message %||% ""
       if (nzchar(waiting)) on_waiting(waiting, node_id)
       rendered = ullme_tutor_workflow_prompt(state, node)
+      call_started_at = Sys.time()
       call = ullme_tutor_workflow_call_node(
         state, node, node_id, rendered,
         on_final_update=if (
@@ -318,7 +342,26 @@ ullme_tutor_workflow_advance = function(state,
         ) on_final_update else function(...) NULL
       )
       return(promises::then(call, onFulfilled=function(output) {
+        call_finished_at = Sys.time()
         state$output = paste0(output %||% "", collapse="\n")
+        state$trace[[length(state$trace) + 1L]] = list(
+          node=node_id,
+          skipped=FALSE,
+          started_at=format(
+            call_started_at, "%Y-%m-%dT%H:%M:%OS3%z"
+          ),
+          finished_at=format(
+            call_finished_at, "%Y-%m-%dT%H:%M:%OS3%z"
+          ),
+          duration_seconds=unname(as.numeric(difftime(
+            call_finished_at, call_started_at, units="secs"
+          ))),
+          system_prompt=ullme_tutor_workflow_init_prompt(
+            state$tutor, app=state$app
+          ),
+          prompt=rendered,
+          output=state$output
+        )
         state$node_call_seq = state$node_call_seq + 1L
         ullme_ai_interaction_workflow_node(
           state$interaction_dir,
@@ -342,18 +385,30 @@ ullme_tutor_workflow_advance = function(state,
         }
         if (!is.null(node$switch_to)) {
           state$node = ullme_tutor_workflow_route(state, node)
+          if (isTRUE(single_model_step)) {
+            return(list(
+              status="advanced", text=state$output, state=state, node=node_id
+            ))
+          }
           return(ullme_tutor_workflow_advance(
             state,
             on_waiting=on_waiting,
-            on_final_update=on_final_update
+            on_final_update=on_final_update,
+            single_model_step=single_model_step
           ))
         }
         if (nzchar(node[["next"]] %||% "")) {
           state$node = node[["next"]]
+          if (isTRUE(single_model_step)) {
+            return(list(
+              status="advanced", text=state$output, state=state, node=node_id
+            ))
+          }
           return(ullme_tutor_workflow_advance(
             state,
             on_waiting=on_waiting,
-            on_final_update=on_final_update
+            on_final_update=on_final_update,
+            single_model_step=single_model_step
           ))
         }
         list(status="completed", text=state$output, state=state, node=node_id)

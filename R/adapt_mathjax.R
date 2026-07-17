@@ -1,3 +1,8 @@
+example = function() {
+  replace_math_delimiters("$3 - x$ $x^2+2$")
+  replace_math_delimiters("$I own a house + many more things and you?\nWas it math$")
+}
+
 replace_math_delimiters = function(x, allow_numeric_start = FALSE) {
   x = replace_double_dollar_math(x)
 
@@ -11,7 +16,14 @@ replace_dollar_math = function(x, allow_numeric_start = FALSE) {
   start_guard = if (allow_numeric_start) {
     r"{(?![[:space:]$])}"
   } else {
-    r"{(?![[:space:]$[:digit:]])}"
+    paste0(
+      r"{(?:}",
+      r"{(?![[:space:]$[:digit:]])}",
+      r"{|}",
+      r"{(?=[[:digit:]])}",
+      r"{(?=(?:\\.|[^$\\\r\n])*(?:[-+*/=<>^_]|\\[[:alpha:]]+))}",
+      r"{)}"
+    )
   }
 
   pattern = paste0(
