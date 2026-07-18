@@ -10,6 +10,7 @@ dir.create(tutor_dir, recursive=TRUE)
 writeLines(c(
   "tutorid: tutor_a",
   "enabled: true",
+  "lang: en",
   "label: Tutor A",
   "description: Test tutor",
   "shown_text: 'Welcome to Tutor A.'",
@@ -17,7 +18,7 @@ writeLines(c(
   "docs_per_instance: {}",
   "docs_per_course: {}",
   "allowed_tools: []",
-  "allowed_student_customization: []",
+  "allowed_student_customization: [personality]",
   "start_node: answer",
   "nodes:",
   "  answer:",
@@ -32,6 +33,27 @@ writeLines(c(
   "    label: Practice instance A",
   "    docs: {}"
 ), file.path(tutor_dir, "instances.yml"))
+
+invalid_tutor_dir = file.path(course_dir, "ai_tutors", "z_broken")
+dir.create(invalid_tutor_dir, recursive=TRUE)
+writeLines(c(
+  "tutorid: z_broken",
+  "enabled: true",
+  "label: Z Broken Tutor",
+  "description: Temporarily invalid tutor",
+  "shown_text: 'Unavailable'",
+  "default_personality: Be helpful.",
+  "docs_per_instance: {}",
+  "docs_per_course: {}",
+  "allowed_tools: []",
+  "allowed_student_customization: []",
+  "start_node: answer",
+  "nodes:",
+  "  answer:",
+  "    next: missing_node",
+  "prompt_fragments:",
+  "  init_prompt: Help."
+), file.path(invalid_tutor_dir, "tutor.yml"))
 
 app = studentApp(
   main_dir=main_dir,
@@ -62,7 +84,7 @@ tutors = ullme_student_tutors(app=app)
 stopifnot(identical(
   tutors[[1]]$instances[[1]]$label,
   "Practice instance A"
-))
+), !isTRUE(tutors[[2]]$is_valid))
 
 configured_app = studentApp(
   main_dir=main_dir,
@@ -113,6 +135,7 @@ stopifnot(
   grepl("ullme-student-workspace", ui, fixed=TRUE),
   grepl("id=\"ullme_camera_btn\"", ui, fixed=TRUE),
   grepl("id=\"ullme_camera_upload\"", ui, fixed=TRUE),
+  grepl("id=\"ullme_student_tutor_warning\"", ui, fixed=TRUE),
   grepl("capture=\"environment\"", ui, fixed=TRUE),
   !grepl("ullme_student_sidebar_toggle", ui, fixed=TRUE),
   !grepl("ullme-chat.css", ui, fixed=TRUE),
@@ -234,6 +257,25 @@ stopifnot(
   identical(switch_app$instanceid, "instance_a"),
   identical(student_context$tutors[[1]]$shown_text, "Welcome to Tutor A."),
   grepl("Welcome to Tutor A.", student_context$tutors[[1]]$shown_html, fixed=TRUE)
+)
+
+ullme_student_select_context(tutorid="z_broken", app=switch_app)
+invalid_context = ullme_student_context_for_js(app=switch_app)
+invalid_submit = try(
+  ullme_handle_student_tutor_submit(
+    text="hello",
+    model="fake-model",
+    app=switch_app
+  ),
+  silent=TRUE
+)
+stopifnot(
+  identical(switch_app$tutorid, "z_broken"),
+  is.null(switch_app$instanceid),
+  !isTRUE(invalid_context$tutors[[2]]$is_valid),
+  length(invalid_context$tutors[[2]]$validation_errors) > 0L,
+  inherits(invalid_submit, "try-error"),
+  grepl("invalid definition", paste0(invalid_submit), fixed=TRUE)
 )
 
 error_app = studentApp(

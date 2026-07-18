@@ -437,6 +437,9 @@ ullme_handle_student_tutor_submit = function(text, model, uploads=NULL,
                                               app=getApp()) {
   tutor = ullme_student_selected_tutor(app=app)
   if (is.null(tutor)) stop("No AI Tutor is selected.")
+  if (!isTRUE(tutor$is_valid)) {
+    stop("This AI Tutor has an invalid definition and cannot be used.")
+  }
   if (!length(tutor$nodes %||% list())) {
     stop("The selected AI Tutor has no workflow nodes.")
   }

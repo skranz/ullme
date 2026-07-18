@@ -143,9 +143,57 @@ ullme_teacher_workspace_ui = function(app=getApp()) {
       class="ullme-pane-resizer ullme-pane-resizer-ai",
       type="button",
       `data-pane-resizer`="ai",
-      `aria-label`="Resize AI assistant",
-      title="Drag to resize AI assistant"
+      `aria-label`="Resize right pane",
+      title="Drag to resize right pane"
     ),
-    ullme_chat_pane_ui(app=app, show_header=TRUE)
+    ullme_chat_pane_ui(app=app, show_header=TRUE, show_help=TRUE)
+  )
+}
+
+
+ullme_teacher_help_fragment = function(name) {
+  restore.point("ullme_teacher_help_fragment")
+  filename = paste0(name, ".html")
+  path = system.file("help", filename, package="ullme")
+  if (!nzchar(path)) path = file.path("inst", "help", filename)
+  if (!file.exists(path)) {
+    return(tags$p("Help is not available for this part of the workspace."))
+  }
+  HTML(paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n"))
+}
+
+
+ullme_teacher_help_ui = function(app=getApp()) {
+  restore.point("ullme_teacher_help_ui")
+  topics = c(
+    general="general",
+    new_teacher="new_teacher",
+    usage="usage",
+    materials="materials",
+    `ai-tutors`="ai-tutors",
+    `ai-tutors-instances`="ai-tutors-instances",
+    `ai-tutors-flow`="ai-tutors-flow",
+    `ai-tutors-yaml-definition`="ai-tutors-yaml-definition",
+    `ai-tutors-yaml-instances`="ai-tutors-yaml-instances",
+    settings="settings",
+    `allowed-users`="allowed-users",
+    file="file"
+  )
+  initial_view = if (nzchar(app$courseid %||% "")) "general" else "new_teacher"
+  tags$section(
+    id="ullme_help_panel",
+    class="ullme-assistant-panel ullme-help-panel ullme-assistant-panel-active",
+    role="tabpanel",
+    `aria-labelledby`="ullme_help_tab",
+    lapply(names(topics), function(view) {
+      tags$article(
+        class=paste(
+          "ullme-help-page",
+          if (identical(view, initial_view)) "ullme-help-page-active" else ""
+        ),
+        `data-help-view`=view,
+        ullme_teacher_help_fragment(topics[[view]])
+      )
+    })
   )
 }

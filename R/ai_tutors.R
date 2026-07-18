@@ -76,11 +76,9 @@ ullme_ai_tutor_definition_at = function(tutorid, source, app=getApp()) {
     NULL
   }
   if (is.null(path) || !file.exists(path)) return(NULL)
-  definition = tryCatch(yaml::read_yaml(path), error=function(e) NULL)
-  if (!is.list(definition)) return(NULL)
-  if (!identical(paste0(definition$tutorid %||% "")[1], tutorid)) return(NULL)
-  ullme_normalize_ai_tutor_definition(
-    definition=definition,
+  content = paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n")
+  ullme_normalize_ai_tutor_content(
+    content=content,
     tutorid=tutorid,
     source=source
   )
@@ -240,6 +238,9 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
   )
   nodes = definition$nodes %||% list()
   if (!is.list(nodes) || is.null(names(nodes))) nodes = list()
+  node_yaml = lapply(nodes, function(node) {
+    trimws(yaml::as.yaml(node))
+  })
   nodes = lapply(nodes, function(node) {
     if (!is.list(node)) return(list())
     node$prompt = paste0(node$prompt %||% "", collapse="\n")
@@ -279,10 +280,14 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     ),
     source=source,
     enabled=!identical(definition$enabled, FALSE),
+    is_valid=TRUE,
+    validation_errors=list(),
+    validation_warnings=list(),
     multiple_instances=!identical(definition$multiple_instances, FALSE),
     chat_history=isTRUE(definition$chat_history),
     start_node=paste0(definition$start_node %||% "")[1],
     nodes=nodes,
+    node_yaml=node_yaml,
     prompt_fragments=fragments,
     shown_text=paste0(definition$shown_text %||% "", collapse="\n"),
     default_personality=paste0(
@@ -310,6 +315,54 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     ),
     yaml_content=ullme_ai_tutor_yaml(definition)
   )
+}
+
+
+ullme_tutor_validation_state = function(tutorid, content) {
+  restore.point("ullme_tutor_validation_state")
+  validation = tryCatch(
+    ullme_validate_tutor_yaml(tutorid=tutorid, content=content),
+    error=function(error) ullme_validation_result(
+      ok=FALSE,
+      errors=conditionMessage(error)
+    )
+  )
+  list(
+    is_valid=isTRUE(validation$ok),
+    errors=as.list(paste0(unlist(validation$errors, use.names=FALSE))),
+    warnings=as.list(paste0(unlist(validation$warnings, use.names=FALSE)))
+  )
+}
+
+
+ullme_normalize_ai_tutor_content = function(content, tutorid,
+                                             source="course") {
+  restore.point("ullme_normalize_ai_tutor_content")
+  content = paste0(content %||% "", collapse="\n")
+  value = tryCatch(
+    yaml::yaml.load(content, eval.expr=FALSE),
+    error=function(error) NULL
+  )
+  if (!is.list(value)) {
+    value = list(
+      tutorid=tutorid,
+      label=tutorid,
+      description="Invalid Tutor definition",
+      enabled=TRUE,
+      nodes=list()
+    )
+  }
+  definition = ullme_normalize_ai_tutor_definition(
+    definition=value,
+    tutorid=tutorid,
+    source=source
+  )
+  validity = ullme_tutor_validation_state(tutorid=tutorid, content=content)
+  definition$is_valid = validity$is_valid
+  definition$validation_errors = validity$errors
+  definition$validation_warnings = validity$warnings
+  definition$yaml_content = content
+  definition
 }
 
 
@@ -563,16 +616,21 @@ ullme_course_ai_tutors = function(app=getApp()) {
   tutors = lapply(ids, function(tutorid) {
     path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
     if (!file.exists(path)) return(NULL)
-    value = tryCatch(yaml::read_yaml(path), error=function(e) NULL)
-    if (!is.list(value)) return(NULL)
-    value = ullme_materialize_course_ai_tutor(
-      tutorid=tutorid,
-      course_tutor=value,
-      path=path,
-      app=app
-    )
-    definition = ullme_normalize_ai_tutor_definition(
-      definition=value,
+    content = paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n")
+    value = tryCatch(yaml::yaml.load(content, eval.expr=FALSE), error=function(e) NULL)
+    if (is.list(value)) {
+      value = ullme_materialize_course_ai_tutor(
+        tutorid=tutorid,
+        course_tutor=value,
+        path=path,
+        app=app
+      )
+      content = ullme_ai_tutor_yaml(value)
+    } else {
+      value = list(tutorid=tutorid, enabled=TRUE)
+    }
+    definition = ullme_normalize_ai_tutor_content(
+      content=content,
       tutorid=tutorid,
       source="course"
     )
@@ -828,12 +886,17 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
   if (is.null(course_dir)) stop("Select a course first.")
   path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
   if (!file.exists(path)) stop("This AI Tutor is not part of the course.")
-  current = yaml::read_yaml(path)
-  if (!is.list(current)) stop("The course AI Tutor YAML is invalid.")
 
   if (identical(mode, "yaml")) {
     content = paste0(yaml_content %||% "", collapse="\n")
   } else {
+    current = tryCatch(
+      yaml::read_yaml(path, eval.expr=FALSE),
+      error=function(error) NULL
+    )
+    if (!is.list(current)) {
+      stop("Use Tutor YAML to repair the invalid Tutor definition.")
+    }
     if (!is.list(fields)) fields = list()
     current$tutorid = tutorid
     has_field = function(name) name %in% names(fields)
@@ -904,11 +967,9 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     }
     content = ullme_ai_tutor_yaml(current)
   }
-  validation = ullme_validate_tutor_yaml(
-    tutorid=tutorid,
-    content=content
-  )
-  ullme_validation_stop(validation)
+  syntax = ullme_parse_yaml_text(content, label="Tutor YAML")
+  ullme_validation_stop(syntax, prefix="Tutor YAML syntax is invalid")
+  validity = ullme_tutor_validation_state(tutorid=tutorid, content=content)
   operation = ullme_new_change(
     action="definition_edit",
     summary=paste0("Save course AI Tutor ", tutorid),
@@ -919,6 +980,7 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
   )
   result = ullme_submit_change(operation, app=app)
   if (!isTRUE(result$ok)) stop(result$message %||% "Could not save the AI Tutor.")
+  result$validation = validity
   result
 }
 
@@ -1132,7 +1194,7 @@ ullme_handle_ai_tutor_save = function(tutorid=NULL, mode="ui",
                                        app=getApp(), ...) {
   restore.point("ullme_handle_ai_tutor_save")
   result = tryCatch({
-    ullme_save_course_ai_tutor(
+    saved = ullme_save_course_ai_tutor(
       tutorid=tutorid,
       mode=mode,
       yaml_content=yaml_content,
@@ -1140,7 +1202,11 @@ ullme_handle_ai_tutor_save = function(tutorid=NULL, mode="ui",
       app=app
     )
     ullme_send_course_state(app=app)
-    list(ok=TRUE, message="AI Tutor saved.")
+    list(
+      ok=TRUE,
+      message="AI Tutor saved.",
+      validation=saved$validation
+    )
   }, error=function(e) {
     list(ok=FALSE, message=conditionMessage(e))
   })

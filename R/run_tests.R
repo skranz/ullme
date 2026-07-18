@@ -1,7 +1,7 @@
 # Run systematic tests outside the app with pre-specified inputs
 
 example = function() {
-  ullme_run_tests("C:/libraries/ullme/ullme_main/tests/umwelt")
+  ullme_run_tests("C:/libraries/ullme/ullme_main/tests/umwelt", options=list(batch_size=3))
 }
 
 ullme_run_tests = function(test_dir, options=list()) {
@@ -58,8 +58,26 @@ ullme_run_tests = function(test_dir, options=list()) {
     stop("batch_size must be a positive integer.", call.=FALSE)
   }
   opts$batch_size = as.integer(batch_size)
-  results_dir = file.path(test_dir, "results")
-  dir.create(results_dir, recursive=TRUE, showWarnings=FALSE)
+  results_root = file.path(test_dir, "results")
+  if (!dir.exists(results_root) && !dir.create(
+      results_root, recursive=TRUE, showWarnings=FALSE
+  )) {
+    stop("Could not create the results directory.", call.=FALSE)
+  }
+  run_folder = paste0(
+    "results_", format(Sys.time(), "%Y-%m-%d_%H%M%S")
+  )
+  results_dir = file.path(results_root, run_folder)
+  if (dir.exists(results_dir)) {
+    stop(
+      "A results directory already exists for the current second: ",
+      results_dir,
+      call.=FALSE
+    )
+  }
+  if (!dir.create(results_dir, recursive=FALSE, showWarnings=FALSE)) {
+    stop("Could not create results run directory: ", results_dir, call.=FALSE)
+  }
   stage_main = file.path(test_dir, "ullme_tmp")
   ullme_remove_test_dir(stage_main, test_dir=test_dir)
   dir.create(stage_main, recursive=TRUE, showWarnings=FALSE)
@@ -126,6 +144,7 @@ ullme_run_tests = function(test_dir, options=list()) {
     "Starting ", length(jobs), " test case(s) with batch_size=",
     opts$batch_size, "."
   )
+  ullme_tests_progress("Results directory: ", results_dir)
   batch_ids = split(
     seq_along(jobs),
     ceiling(seq_along(jobs) / opts$batch_size)
@@ -149,7 +168,7 @@ ullme_run_tests = function(test_dir, options=list()) {
       job = batch_jobs[[index]]
       result = results[[index]]
       writeLines(
-        yaml::as.yaml(ullme_tests_result_yaml(
+        ullme_tests_as_yaml(ullme_tests_result_yaml(
           result, job$variant, job$input, job$model, opts
         )),
         job$result_path,
@@ -619,6 +638,68 @@ ullme_tests_media_metadata = function(input) {
 }
 
 
+ullme_tests_yaml_text = function(text, always=FALSE) {
+  text = paste0(text %||% "", collapse="\n")
+  if (nzchar(text) && (isTRUE(always) || grepl("\n", text, fixed=TRUE))) {
+    class(text) = c("ullme_yaml_literal", "character")
+  }
+  text
+}
+
+
+ullme_tests_as_yaml = function(value) {
+  blocks = list()
+  replace_blocks = function(item) {
+    if (inherits(item, "ullme_yaml_literal")) {
+      token = sprintf("ULLMEYAMLBLOCK%06d", length(blocks) + 1L)
+      blocks[[token]] <<- paste0(item)[1]
+      return(token)
+    }
+    if (is.list(item)) return(lapply(item, replace_blocks))
+    item
+  }
+  yaml_text = yaml::as.yaml(replace_blocks(value), unicode=TRUE)
+  if (!length(blocks)) return(yaml_text)
+
+  lines = strsplit(yaml_text, "\n", fixed=TRUE)[[1]]
+  output = character(0)
+  for (line in lines) {
+    found = names(blocks)[vapply(
+      names(blocks),
+      function(token) endsWith(line, token),
+      logical(1)
+    )]
+    if (!length(found)) {
+      output = c(output, line)
+      next
+    }
+    if (length(found) != 1L) {
+      stop("Could not identify a unique YAML literal placeholder.", call.=FALSE)
+    }
+    token = found[[1]]
+    leading = regexpr("[^ ]", line)[[1]] - 1L
+    if (leading < 0L) leading = 0L
+    output = c(output, sub(token, "|-", line, fixed=TRUE))
+    text_lines = strsplit(
+      paste0(blocks[[token]], "\nULLMEYAMLBLOCKEND"),
+      "\n",
+      fixed=TRUE
+    )[[1]]
+    text_lines = text_lines[-length(text_lines)]
+    while (length(text_lines) && !nzchar(text_lines[[length(text_lines)]])) {
+      text_lines = text_lines[-length(text_lines)]
+    }
+    if (length(text_lines)) {
+      output = c(
+        output,
+        paste0(strrep(" ", leading + 2L), text_lines)
+      )
+    }
+  }
+  paste(output, collapse="\n")
+}
+
+
 ullme_tests_result_yaml = function(result, variant, input, model, opts) {
   trace = result$state$trace %||% list()
   media = ullme_tests_media_metadata(input)
@@ -632,13 +713,13 @@ ullme_tests_result_yaml = function(result, variant, input, model, opts) {
         finished_at=paste0(item$finished_at %||% "")[1],
         duration_seconds=as.numeric(item$duration_seconds %||% 0)[1],
         output=if (isTRUE(item$skipped)) "" else
-          paste0(item$output %||% "", collapse="\n")
+          ullme_tests_yaml_text(item$output, always=TRUE)
       )
       if (isTRUE(opts$add_full_prompts_in_results) && !isTRUE(item$skipped)) {
-        node$system_prompt = paste0(
-          item$system_prompt %||% "", collapse="\n"
+        node$system_prompt = ullme_tests_yaml_text(
+          item$system_prompt, always=TRUE
         )
-        node$prompt = paste0(item$prompt %||% "", collapse="\n")
+        node$prompt = ullme_tests_yaml_text(item$prompt, always=TRUE)
       }
       nodes[[length(nodes) + 1L]] = node
     }
@@ -647,8 +728,8 @@ ullme_tests_result_yaml = function(result, variant, input, model, opts) {
       if (isTRUE(item$skipped)) next
       nodes[[length(nodes) + 1L]] = list(
         node_id=paste0(item$node %||% "unknown")[1],
-        system_prompt=paste0(item$system_prompt %||% "", collapse="\n"),
-        prompt=paste0(item$prompt %||% "", collapse="\n")
+        system_prompt=ullme_tests_yaml_text(item$system_prompt, always=TRUE),
+        prompt=ullme_tests_yaml_text(item$prompt, always=TRUE)
       )
     }
   }
@@ -673,7 +754,7 @@ ullme_tests_result_yaml = function(result, variant, input, model, opts) {
     ),
     execution=result$execution %||% list(),
     input=list(
-      text=paste0(input$text %||% "", collapse="\n"),
+      text=ullme_tests_yaml_text(input$text),
       media_count=length(media),
       media_total_bytes=sum(vapply(
         media, function(item) item$size_bytes, numeric(1)
@@ -681,7 +762,7 @@ ullme_tests_result_yaml = function(result, variant, input, model, opts) {
       media=media
     ),
     response=list(
-      final_output=paste0(result$text %||% "", collapse="\n"),
+      final_output=ullme_tests_yaml_text(result$text, always=TRUE),
       error_message=error_message,
       node_count=length(nodes),
       nodes=nodes

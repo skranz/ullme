@@ -72,7 +72,8 @@
     if (!messages) return;
     var children = Array.prototype.slice.call(messages.children);
     children.forEach(function (child) {
-      if (child.id !== "ullme_intro_message") {
+      if (child.id !== "ullme_intro_message" &&
+          child.id !== "ullme_student_tutor_warning") {
         child.remove();
       }
     });
@@ -843,7 +844,7 @@
     var previousTutor = state.context ? state.context.tutorid : null;
     var previousInstance = state.context ? state.context.instanceid : null;
     state.context = payload;
-    state.contextReady = !payload.error && Boolean(payload.tutorid);
+    state.contextReady = false;
 
     // Clear chat when instance or tutor changes from an established state
     if (previousTutor !== null && (previousTutor !== payload.tutorid || previousInstance !== payload.instanceid)) {
@@ -859,6 +860,7 @@
     var instanceSelect = byId("ullme_student_instance_select");
     var instanceText = byId("ullme_student_instance_text");
     var errorLabel = byId("ullme_student_context_error");
+    var tutorWarning = byId("ullme_student_tutor_warning");
     var tutors = Array.isArray(payload.tutors) ? payload.tutors : [];
 
     if (courseSummary) courseSummary.textContent = payload.courseid || "Course";
@@ -885,11 +887,26 @@
     var selectedTutor = tutors.find(function (tutor) {
       return tutor.tutorid === payload.tutorid;
     }) || null;
+    var tutorValid = !selectedTutor || selectedTutor.is_valid !== false;
+    state.contextReady = !payload.error && Boolean(payload.tutorid) && tutorValid;
+
+    if (tutorWarning) {
+      var validationErrors = selectedTutor && Array.isArray(selectedTutor.validation_errors)
+        ? selectedTutor.validation_errors
+        : [];
+      tutorWarning.textContent = tutorValid ? "" :
+        "This AI Tutor is temporarily unavailable because its definition is invalid. " +
+        "The teacher must correct it before it can be used." +
+        (validationErrors.length ? "\n\n" + validationErrors.join("\n") : "");
+      tutorWarning.classList.toggle("ullme-student-tutor-warning-active", !tutorValid);
+    }
 
     if (tutorSelect && tutorText) {
       tutorSelect.innerHTML = "";
       tutors.forEach(function (tutor) {
-        tutorSelect.appendChild(option(tutor.tutorid, tutor.label || tutor.tutorid));
+        var label = tutor.label || tutor.tutorid;
+        if (tutor.is_valid === false) label += " (unavailable)";
+        tutorSelect.appendChild(option(tutor.tutorid, label));
       });
       if (payload.tutorid) tutorSelect.value = payload.tutorid;
 

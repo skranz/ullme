@@ -1,0 +1,12 @@
+<h2>Tutor definition YAML</h2>
+<p>This is the complete course-local definition that controls the Tutor's identity, documents, prompts, tools, and workflow.</p>
+<h3>Workflow essentials</h3>
+<ul>
+  <li><code>start_node</code> names the first workflow node.</li>
+  <li><code>prompt</code> calls the model, while <code>next</code> continues to another node.</li>
+  <li><code>switch_input</code> and <code>switch_to</code> select a branch.</li>
+  <li><code>ask_for_input</code> pauses and asks the student for more information.</li>
+  <li>A node without <code>next</code> or <code>switch_to</code> returns its output to the student.</li>
+</ul>
+<p>YAML indentation is meaningful. Keep spaces and mapping levels consistent, then choose <strong>Save definition YAML</strong>. Invalid definitions are rejected rather than used.</p>
+<div class="ullme-help-note"><strong>Tip:</strong> Open the Flow diagram after saving to check that the routes express the teaching logic you intended.</div>

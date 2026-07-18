@@ -255,17 +255,18 @@ ullme_student_tutor_definition = function(tutorid, app=getApp()) {
   if (is.null(course_dir)) return(NULL)
   path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
   if (!file.exists(path)) return(NULL)
+  content = paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n")
   value = tryCatch(
-    yaml::read_yaml(path, eval.expr=FALSE),
+    yaml::yaml.load(content, eval.expr=FALSE),
     error=function(e) NULL
   )
-  if (!is.list(value) || identical(value$enabled, FALSE)) return(NULL)
-  if (!identical(paste0(value$tutorid %||% "")[1], tutorid)) return(NULL)
-  definition = ullme_normalize_ai_tutor_definition(
-    definition=value,
+  if (is.list(value) && identical(value$enabled, FALSE)) return(NULL)
+  definition = ullme_normalize_ai_tutor_content(
+    content=content,
     tutorid=tutorid,
     source="course"
   )
+  if (!is.list(value)) value = list()
   has_instances = !identical(value$multiple_instances, FALSE)
   instance_data = if (has_instances) {
     ullme_read_course_ai_tutor_instances(course_dir, tutorid)
@@ -320,11 +321,20 @@ ullme_student_select_context = function(tutorid=app$tutorid,
     }, logical(1))
     if (any(compatible)) tutorid = tutorids[[which(compatible)[[1]]]]
   }
-  if (is.null(tutorid)) tutorid = tutorids[[1]]
+  if (is.null(tutorid)) {
+    valid = vapply(tutors, function(tutor) isTRUE(tutor$is_valid), logical(1))
+    tutorid = if (any(valid)) tutorids[[which(valid)[[1]]]] else tutorids[[1]]
+  }
   if (!tutorid %in% tutorids) {
     stop("AI Tutor '", tutorid, "' is not available in this course.", call.=FALSE)
   }
   tutor = tutors[[match(tutorid, tutorids)]]
+  if (!isTRUE(tutor$is_valid)) {
+    app$tutorid = tutorid
+    app$instanceid = NULL
+    app$student_tutors = tutors
+    return(invisible(tutor))
+  }
   if (!isTRUE(tutor$multiple_instances)) instanceid = NULL
   instanceids = vapply(
     tutor$instances,
@@ -364,7 +374,7 @@ ullme_student_context_for_js = function(error="", app=getApp()) {
     allow_tutor_switch=isTRUE(app$allow_tutor_switch),
     allow_instance_switch=isTRUE(app$allow_instance_switch),
     tutors=lapply(tutors, function(tutor) {
-      shown_text = ullme_student_shown_text(
+      shown_text = if (isTRUE(tutor$is_valid)) ullme_student_shown_text(
         tutor=tutor,
         instanceid=if (identical(tutor$tutorid, app$tutorid)) {
           app$instanceid
@@ -372,7 +382,7 @@ ullme_student_context_for_js = function(error="", app=getApp()) {
           NULL
         },
         app=app
-      )
+      ) else ""
       list(
         tutorid=tutor$tutorid,
         label=tutor$label,
@@ -384,6 +394,8 @@ ullme_student_context_for_js = function(error="", app=getApp()) {
         ),
         multiple_instances=isTRUE(tutor$multiple_instances),
         chat_history=isTRUE(tutor$chat_history),
+        is_valid=isTRUE(tutor$is_valid),
+        validation_errors=tutor$validation_errors %||% list(),
         instances=lapply(tutor$instances, function(instance) {
           list(
             instanceid=instance$instanceid,

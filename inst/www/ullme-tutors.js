@@ -47,6 +47,12 @@
         var viewButton = event.target.closest("[data-studio-view]");
         if (viewButton && nav.contains(viewButton)) {
           state.tutorPaneActive = false;
+          if (window.ullmeTutorValidation && window.ullmeTutorValidation.update) {
+            window.ullmeTutorValidation.update(null);
+          }
+          if (window.ullmeTutorFlow && window.ullmeTutorFlow.setActive) {
+            window.ullmeTutorFlow.setActive(false, null);
+          }
           renderTutorNavigation();
         }
       });
@@ -156,6 +162,12 @@
     container.innerHTML = "";
     var tutor = selectedTutor();
     if (!tutor) {
+      if (window.ullmeTutorValidation && window.ullmeTutorValidation.update) {
+        window.ullmeTutorValidation.update(null);
+      }
+      if (window.ullmeTutorFlow && window.ullmeTutorFlow.setActive) {
+        window.ullmeTutorFlow.setActive(false, null);
+      }
       container.appendChild(emptyState(
         "No AI Tutor selected",
         "Use Add to create an editable course copy."
@@ -168,14 +180,26 @@
     if (tutor.multiple_instances === false && state.yamlTab === "instances") {
       state.yamlTab = "definition";
     }
+    if (window.ullmeTutorFlow && window.ullmeTutorFlow.setActive) {
+      window.ullmeTutorFlow.setActive(
+        state.tutorPaneActive && state.activeTab === "flow",
+        tutor
+      );
+    }
+    if (window.ullmeTutorValidation && window.ullmeTutorValidation.update) {
+      window.ullmeTutorValidation.update(state.tutorPaneActive ? tutor : null);
+    }
 
     container.appendChild(tutorHeader(tutor));
     container.appendChild(tutorTabs(tutor));
     if (state.activeTab === "yaml") {
       container.appendChild(yamlEditor(tutor));
+    } else if (state.activeTab === "flow") {
+      container.appendChild(flowDiagram(tutor));
     } else {
       container.appendChild(instancePanel(tutor));
     }
+    notifyTutorHelp();
   }
 
   function tutorHeader(tutor) {
@@ -288,7 +312,10 @@
   function tutorTabs(tutor) {
     var tabs = document.createElement("nav");
     tabs.className = "ullme-tutor-tabs";
-    var tabSpecs = [{ id: "yaml", label: "Tutor YAML" }];
+    var tabSpecs = [
+      { id: "flow", label: "Flow" },
+      { id: "yaml", label: "Tutor YAML" }
+    ];
     if (tutor.multiple_instances !== false) {
       tabSpecs.unshift({
         id: "instances",
@@ -308,6 +335,31 @@
       tabs.appendChild(button);
     });
     return tabs;
+  }
+
+  function flowDiagram(tutor) {
+    if (window.ullmeTutorFlow && window.ullmeTutorFlow.render) {
+      return window.ullmeTutorFlow.render(tutor);
+    }
+    return emptyState(
+      "Flow diagram unavailable",
+      "The Tutor workflow renderer could not be loaded."
+    );
+  }
+
+  function notifyTutorHelp() {
+    if (!state.tutorPaneActive) return;
+    var view = "ai-tutors-instances";
+    if (state.activeTab === "flow") {
+      view = "ai-tutors-flow";
+    } else if (state.activeTab === "yaml") {
+      view = state.yamlTab === "instances"
+        ? "ai-tutors-yaml-instances"
+        : "ai-tutors-yaml-definition";
+    }
+    document.dispatchEvent(new CustomEvent("ullme:help-view", {
+      detail: { view: view }
+    }));
   }
 
   function instancePanel(tutor) {
@@ -1378,6 +1430,10 @@
     );
     if (!result || result.ok === false) {
       window.alert((result && result.message) || "The AI Tutor could not be saved.");
+      return;
+    }
+    if (window.ullmeTutorValidation && window.ullmeTutorValidation.reportSave) {
+      window.ullmeTutorValidation.reportSave(result.validation);
     }
   }
 

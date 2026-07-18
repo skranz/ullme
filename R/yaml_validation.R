@@ -408,6 +408,44 @@ ullme_validate_tutor_workflow = function(value, document_ids,
       paste(missing_targets, collapse=", "), "."
     ))
   }
+  if (!length(missing_targets) && length(node_ids)) {
+    adjacency = setNames(vector("list", length(node_ids)), node_ids)
+    indegree = setNames(integer(length(node_ids)), node_ids)
+    for (node_id in node_ids) {
+      node = nodes[[node_id]]
+      if (!is.list(node)) next
+      outgoing = character(0)
+      next_node = paste0(node[["next"]] %||% "")[1]
+      if (nzchar(next_node)) outgoing = c(outgoing, next_node)
+      if (is.list(node$switch_to)) {
+        outgoing = c(
+          outgoing,
+          paste0(unlist(node$switch_to, use.names=FALSE))
+        )
+      }
+      outgoing = unique(outgoing[outgoing %in% node_ids])
+      adjacency[[node_id]] = outgoing
+      for (target in outgoing) indegree[[target]] = indegree[[target]] + 1L
+    }
+    queue = node_ids[indegree == 0L]
+    visited = character(0)
+    while (length(queue)) {
+      node_id = queue[[1]]
+      queue = queue[-1]
+      visited = c(visited, node_id)
+      for (target in adjacency[[node_id]]) {
+        indegree[[target]] = indegree[[target]] - 1L
+        if (identical(indegree[[target]], 0L)) queue = c(queue, target)
+      }
+    }
+    cycle_nodes = setdiff(node_ids, visited)
+    if (length(cycle_nodes)) {
+      errors = c(errors, paste0(
+        "Workflow nodes must form a directed acyclic graph; a cycle involves: ",
+        paste(cycle_nodes, collapse=", "), "."
+      ))
+    }
+  }
   errors
 }
 

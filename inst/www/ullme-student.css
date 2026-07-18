@@ -445,6 +445,26 @@ input {
   color: #4b5565;
 }
 
+.ullme-student-tutor-warning {
+  display: none;
+  box-sizing: border-box;
+  width: min(100%, 780px);
+  margin: 0 auto 24px;
+  border: 1px solid #e8aea5;
+  border-radius: 10px;
+  background: #fff2ef;
+  color: #872d24;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.5;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+}
+
+.ullme-student-tutor-warning-active {
+  display: block;
+}
+
 .ullme-message-actions {
   display: flex;
   gap: 4px;

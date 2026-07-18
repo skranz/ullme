@@ -594,7 +594,115 @@ body {
   font-weight: 700;
 }
 
+.ullme-assistant-tabs {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 3px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ullme-assistant-tab {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #676c69;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 4px 9px;
+}
+
+.ullme-assistant-tab:hover {
+  background: #f0f3f1;
+  color: #252926;
+}
+
+.ullme-assistant-tab-active,
+.ullme-assistant-tab-active:hover {
+  background: #e4ece8;
+  color: #174d39;
+}
+
+.ullme-assistant-tab:focus-visible {
+  outline: 2px solid #6c9f8b;
+  outline-offset: 1px;
+}
+
+.ullme-assistant-panel {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ullme-assistant-panel-active {
+  display: grid;
+}
+
+.ullme-ai-chat-panel {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.ullme-help-panel.ullme-assistant-panel-active {
+  display: block;
+  overflow-y: auto;
+  padding: 20px 20px 34px;
+}
+
+.ullme-help-page {
+  display: none;
+  color: #414642;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ullme-help-page-active {
+  display: block;
+}
+
+.ullme-help-page h2 {
+  margin: 0 0 10px;
+  color: #202421;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.ullme-help-page h3 {
+  margin: 20px 0 7px;
+  color: #303531;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.ullme-help-page p {
+  margin: 0 0 12px;
+}
+
+.ullme-help-page ol,
+.ullme-help-page ul {
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+
+.ullme-help-page li + li {
+  margin-top: 6px;
+}
+
+.ullme-help-note {
+  margin-top: 18px;
+  border-left: 3px solid #6c9f8b;
+  border-radius: 0 6px 6px 0;
+  background: #f0f6f3;
+  padding: 10px 11px;
+}
+
 .ullme-role-teacher.ullme-ai-pane-collapsed .ullme-ai-pane-heading,
+.ullme-role-teacher.ullme-ai-pane-collapsed .ullme-assistant-tabs,
+.ullme-role-teacher.ullme-ai-pane-collapsed .ullme-assistant-panel,
 .ullme-role-teacher.ullme-ai-pane-collapsed .ullme-chat-messages,
 .ullme-role-teacher.ullme-ai-pane-collapsed .ullme-composer-wrap {
   display: none;

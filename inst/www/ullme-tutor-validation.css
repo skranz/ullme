@@ -1,0 +1,105 @@
+.ullme-role-teacher .ullme-chat-pane {
+  position: relative;
+}
+
+.ullme-tutor-validation-tab[hidden] {
+  display: none !important;
+}
+
+.ullme-tutor-validation-tab {
+  color: #a23c31;
+}
+
+.ullme-tutor-validation-tab.ullme-assistant-tab-active,
+.ullme-tutor-validation-tab.ullme-assistant-tab-active:hover {
+  background: #fde9e6;
+  color: #8d271e;
+}
+
+.ullme-tutor-validation-panel.ullme-assistant-panel-active {
+  display: block;
+  overflow-y: auto;
+  color: #5d302a;
+  padding: 23px 20px 34px;
+}
+
+.ullme-tutor-validation-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: #f8d7d2;
+  color: #952d24;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.ullme-tutor-validation-panel h2 {
+  margin: 0 0 8px;
+  color: #75241e;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.ullme-tutor-validation-panel p {
+  margin: 0 0 15px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ullme-tutor-validation-panel ul {
+  margin: 0 0 18px;
+  border: 1px solid #efc8c2;
+  border-radius: 8px;
+  background: #fff6f4;
+  padding: 10px 12px 10px 29px;
+}
+
+.ullme-tutor-validation-panel li {
+  color: #7c3129;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.ullme-tutor-validation-panel li + li {
+  margin-top: 7px;
+}
+
+.ullme-tutor-validation-guidance {
+  color: #73534f;
+}
+
+.ullme-tutor-validation-notice {
+  position: absolute;
+  z-index: 25;
+  top: 43px;
+  right: 10px;
+  left: 10px;
+  display: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(33, 42, 37, 0.17);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+  padding: 10px 12px;
+}
+
+.ullme-tutor-validation-notice-active {
+  display: block;
+}
+
+.ullme-tutor-validation-notice-valid {
+  border-color: #a9d4bf;
+  background: #eaf7f0;
+  color: #235e42;
+}
+
+.ullme-tutor-validation-notice-invalid {
+  border-color: #e4aaa3;
+  background: #fff0ed;
+  color: #8c2f27;
+}

@@ -9,7 +9,18 @@ Teacher mode uses a workbench layout with three regions:
 
 1. a compact navigation rail;
 2. a large central work surface; and
-3. a collapsible, context-aware AI pane.
+3. a collapsible right pane with **Help** and **AI chat** tabs.
+
+The right pane opens on **Help**. It first gives a short introduction to the
+Teacher Studio and then follows the work surface selected in the middle pane.
+The help topics are package HTML fragments under `inst/help/`. **AI chat**
+contains the existing context-aware assistant, and AI-driven actions such as
+**Make Instances** open that tab automatically. The pane can still be resized
+or hidden as a whole.
+
+When no course exists in the selected semester, Help shows the first-course
+guide. Within an AI Tutor, the Instances, Flow, definition YAML, and instance
+YAML views each have their own help page.
 
 Student mode remains chat-first.
 
@@ -45,6 +56,22 @@ The Tutor work surface has:
 - **Definition**, form-based editing for common metadata, teaching
   instructions, per-instance documents, and per-course documents; and
 - **YAML**, direct editing of the complete course-local definition.
+- **Flow**, a read-only diagram generated from `start_node`, `next`, and
+  `switch_to`. A longest-path topological layout places every successor below
+  its predecessors, so arrows in a valid workflow point downward. It also
+  identifies model calls, student-input pauses, terminal responses, parallel
+  calls, missing targets, and unreachable nodes. The
+  dependency-free renderer is implemented in `inst/www/ullme-tutor-flow.js`
+  with styles in `inst/www/ullme-tutor-flow.css`.
+
+Clicking a diagram node opens the contextual **Node editor** tab in the right
+pane. It edits the canonical YAML mapping for that node and can create or
+delete nodes. `R/tutor_flow.R` parses the fragment, applies it to an in-memory
+copy of the complete Tutor, checks node references and the DAG constraint, and
+commits it through the normal undoable change mechanism. Parseable intermediate
+states may be invalid: the teacher receives the validation errors in a
+right-pane warning, and the Tutor remains unavailable in the student app until
+a later save makes it valid again. Invalid YAML syntax itself is rejected.
 
 Package Tutor templates are flat files at
 `inst/ai_tutors/<tutorid>.yml`. Their `docs_per_instance` and

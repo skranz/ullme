@@ -1,0 +1,13 @@
+<h2>Tutor flow diagram</h2>
+<p>This read-only diagram shows how one student message moves through the Tutor's workflow nodes. The highlighted start node runs first.</p>
+<h3>Reading the diagram</h3>
+<ul>
+  <li>A plain arrow follows a node's <code>next</code> setting.</li>
+  <li>A labelled arrow is a possible <code>switch_to</code> branch.</li>
+  <li><strong>Wait for student</strong> means the workflow pauses and resumes after another student message.</li>
+  <li>A terminal node has no outgoing route; its model output is returned to the student.</li>
+  <li>Dashed nodes cannot be reached from the configured start node.</li>
+</ul>
+<h3>Edit the workflow</h3>
+<p>Click a node to open its YAML in the <strong>Node editor</strong> tab on this pane. There you can save or delete the selected node, or choose <strong>New node</strong>. YAML syntax is checked before writing. The complete Tutor is then checked and its validity is reported; an invalid Tutor remains editable but is unavailable to students.</p>
+<p>Use the zoom controls when the workflow is large. All valid DAG transitions are placed from an earlier row to a later row, so arrows point downward.</p>

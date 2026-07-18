@@ -498,6 +498,12 @@ ullme_register_handlers = function(app=getApp()) {
     app = app
   )
   eventHandler(
+    eventId = "ullme_ai_tutor_node_event",
+    id = NULL,
+    fun = ullme_handle_ai_tutor_node,
+    app = app
+  )
+  eventHandler(
     eventId = "ullme_ai_tutor_instances_save_event",
     id = NULL,
     fun = ullme_handle_ai_tutor_instances_save,
@@ -559,6 +565,16 @@ ullme_app_ui = function(app=getApp()) {
         href=if (is_teacher) "ullme/ullme-teacher.css" else
           "ullme/ullme-student.css"
       ),
+      if (is_teacher) tags$link(
+        rel="stylesheet",
+        type="text/css",
+        href="ullme/ullme-tutor-flow.css"
+      ),
+      if (is_teacher) tags$link(
+        rel="stylesheet",
+        type="text/css",
+        href="ullme/ullme-tutor-validation.css"
+      ),
       if (is_teacher) tags$script(src="ullme/ullme-materials.js"),
       tags$script(src="ullme/ullme-chat.js"),
       if (is_teacher) tags$script(src="ullme/ullme-usage.js"),
@@ -566,6 +582,8 @@ ullme_app_ui = function(app=getApp()) {
         src=if (is_teacher) "ullme/ullme-teacher.js" else
           "ullme/ullme-student.js"
       ),
+      if (is_teacher) tags$script(src="ullme/ullme-tutor-flow.js"),
+      if (is_teacher) tags$script(src="ullme/ullme-tutor-validation.js"),
       if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),
       tags$script(src="ullme/ullme-audio.js"),
       tags$script(
@@ -664,36 +682,102 @@ ullme_role_workspace_ui = function(app=getApp()) {
 }
 
 
-ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE) {
+ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE,
+                               show_help=FALSE) {
   restore.point("ullme_chat_pane_ui")
   intro = ullme_intro_msg()
   intro_html = ullme_chat_output_html(intro$text, app=app)
-  tags$section(
-    class = "ullme-chat-pane",
-    if (isTRUE(show_header)) tags$header(
-      class="ullme-ai-pane-header",
-      tags$div(
-        class="ullme-ai-pane-heading",
-        tags$span(class="ullme-ai-pane-title", "AI assistant")
-      ),
-      tags$button(
-        id="ullme_ai_pane_toggle",
-        class="ullme-icon-button",
-        type="button",
-        `aria-label`="Collapse AI pane",
-        title="Collapse AI pane",
-        HTML(ullme_icon_svg("panel"))
-      )
-    ),
+  chat_contents = tagList(
     tags$section(
       id = "ullme_chat_messages",
       class = "ullme-chat-messages",
       `data-intro-role` = intro$role,
       `data-intro-text` = intro$text,
       `data-intro-meta` = intro$meta,
-      `data-intro-html` = intro_html
+      `data-intro-html` = intro_html,
+      if (identical(app$app_kind, "student")) tags$div(
+        id="ullme_student_tutor_warning",
+        class="ullme-student-tutor-warning",
+        role="alert"
+      )
     ),
     ullme_composer_ui(app=app)
+  )
+  tags$section(
+    class = "ullme-chat-pane",
+    if (isTRUE(show_header)) tags$header(
+      class="ullme-ai-pane-header",
+      if (isTRUE(show_help)) tags$nav(
+        class="ullme-assistant-tabs",
+        role="tablist",
+        `aria-label`="Right pane",
+        tags$button(
+          id="ullme_help_tab",
+          class="ullme-assistant-tab ullme-assistant-tab-active",
+          type="button",
+          role="tab",
+          `data-assistant-tab`="help",
+          `aria-controls`="ullme_help_panel",
+          `aria-selected`="true",
+          "Help"
+        ),
+        tags$button(
+          id="ullme_ai_chat_tab",
+          class="ullme-assistant-tab",
+          type="button",
+          role="tab",
+          `data-assistant-tab`="chat",
+          `aria-controls`="ullme_ai_chat_panel",
+          `aria-selected`="false",
+          "AI chat"
+        ),
+        tags$button(
+          id="ullme_tutor_validation_tab",
+          class="ullme-assistant-tab ullme-tutor-validation-tab",
+          type="button",
+          role="tab",
+          `data-assistant-tab`="validation",
+          `aria-controls`="ullme_tutor_validation_panel",
+          `aria-selected`="false",
+          tabindex="-1",
+          hidden="hidden",
+          "Invalid Tutor"
+        ),
+        tags$button(
+          id="ullme_node_editor_tab",
+          class="ullme-assistant-tab ullme-node-editor-tab",
+          type="button",
+          role="tab",
+          `data-assistant-tab`="node",
+          `aria-controls`="ullme_node_editor_panel",
+          `aria-selected`="false",
+          tabindex="-1",
+          hidden="hidden",
+          "Node editor"
+        )
+      ) else tags$div(
+          class="ullme-ai-pane-heading",
+          tags$span(class="ullme-ai-pane-title", "AI assistant")
+        ),
+      tags$button(
+        id="ullme_ai_pane_toggle",
+        class="ullme-icon-button",
+        type="button",
+        `aria-label`="Collapse right pane",
+        title="Collapse right pane",
+        HTML(ullme_icon_svg("panel"))
+      )
+    ),
+    if (isTRUE(show_help)) ullme_teacher_help_ui(app=app),
+    if (isTRUE(show_help)) ullme_tutor_validation_ui(),
+    if (isTRUE(show_help)) ullme_tutor_node_editor_ui(),
+    if (isTRUE(show_help)) tags$section(
+      id="ullme_ai_chat_panel",
+      class="ullme-assistant-panel ullme-ai-chat-panel",
+      role="tabpanel",
+      `aria-labelledby`="ullme_ai_chat_tab",
+      chat_contents
+    ) else chat_contents
   )
 }
 

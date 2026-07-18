@@ -189,6 +189,7 @@
     var studioNav = byId("ullme_studio_nav");
     var studioUploadButton = byId("ullme_studio_upload_btn");
     var aiPaneToggle = byId("ullme_ai_pane_toggle");
+    var assistantTabs = document.querySelector(".ullme-assistant-tabs");
     var materialPanel = byId("ullme_material_panel");
     var courseFileBack = byId("ullme_course_file_back");
     var courseFileSave = byId("ullme_course_file_save");
@@ -238,6 +239,14 @@
     }
 
     document.addEventListener("paste", handlePaste);
+    document.addEventListener("ullme:help-view", function (event) {
+      var view = event.detail && event.detail.view;
+      if (view) showHelpForView(view);
+    });
+    document.addEventListener("ullme:assistant-tab", function (event) {
+      var tab = event.detail && event.detail.tab;
+      if (tab) activateAssistantTab(tab);
+    });
     document.addEventListener("shiny:disconnected", function () {
       if (!state.chatBusy || !state.activeAssistantMessageId) return;
       finishClientChatError(
@@ -335,9 +344,29 @@
         var collapsed = appElement.classList.toggle("ullme-ai-pane-collapsed");
         aiPaneToggle.setAttribute(
           "aria-label",
-          collapsed ? "Expand AI pane" : "Collapse AI pane"
+          collapsed ? "Expand right pane" : "Collapse right pane"
         );
-        aiPaneToggle.title = collapsed ? "Expand AI pane" : "Collapse AI pane";
+        aiPaneToggle.title = collapsed ? "Expand right pane" : "Collapse right pane";
+      });
+    }
+
+    if (assistantTabs) {
+      assistantTabs.addEventListener("click", function (event) {
+        var tab = event.target.closest(".ullme-assistant-tab");
+        if (!tab || !assistantTabs.contains(tab)) return;
+        activateAssistantTab(tab.getAttribute("data-assistant-tab") || "help");
+      });
+      assistantTabs.addEventListener("keydown", function (event) {
+        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        var tabs = Array.prototype.slice.call(
+          assistantTabs.querySelectorAll(".ullme-assistant-tab")
+        ).filter(function (tab) { return !tab.hidden; });
+        var current = tabs.indexOf(document.activeElement);
+        var next = event.key === "ArrowRight" ? current + 1 : current - 1;
+        next = (next + tabs.length) % tabs.length;
+        tabs[next].focus();
+        activateAssistantTab(tabs[next].getAttribute("data-assistant-tab"));
       });
     }
 
@@ -538,6 +567,7 @@
     var text = input.value.trim();
     var uploads = state.uploads.slice();
     if (!text && uploads.length === 0) return;
+    activateAssistantTab("chat");
 
     var clientMessageId = nextId("user");
     var assistantMessageId = nextId("assistant");
@@ -599,6 +629,7 @@
     }
     var tutorid = String(options.tutorid || "");
     if (!tutorid) return;
+    activateAssistantTab("chat");
     var guidance = String(options.guidance || "").trim();
     var modelSelect = byId("ullme_model_select");
     var clientMessageId = nextId("user");
@@ -735,6 +766,40 @@
     });
     if (uploadButton) {
       uploadButton.classList.toggle("ullme-material-tab-upload-visible", panelName === "materials");
+    }
+    showHelpForView(panelName);
+  }
+
+  function activateAssistantTab(tabName) {
+    var tabs = document.querySelectorAll(".ullme-assistant-tab");
+    var panels = document.querySelectorAll(".ullme-assistant-panel");
+    if (!tabs.length || !panels.length) return;
+    var activePanelId = "";
+    Array.prototype.forEach.call(tabs, function (tab) {
+      var active = tab.getAttribute("data-assistant-tab") === tabName;
+      tab.classList.toggle("ullme-assistant-tab-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+      tab.tabIndex = active ? 0 : -1;
+      if (active) activePanelId = tab.getAttribute("aria-controls") || "";
+    });
+    Array.prototype.forEach.call(panels, function (panel) {
+      var active = panel.id === activePanelId;
+      panel.classList.toggle("ullme-assistant-panel-active", active);
+    });
+  }
+
+  function showHelpForView(view) {
+    var pages = document.querySelectorAll(".ullme-help-page");
+    if (!pages.length) return;
+    var found = false;
+    Array.prototype.forEach.call(pages, function (page) {
+      var active = page.getAttribute("data-help-view") === view;
+      page.classList.toggle("ullme-help-page-active", active);
+      found = found || active;
+    });
+    if (!found) {
+      var general = document.querySelector('.ullme-help-page[data-help-view="general"]');
+      if (general) general.classList.add("ullme-help-page-active");
     }
   }
 
@@ -2439,6 +2504,7 @@
   }
 
   function updateActiveCourse(summary, selectedCourseid) {
+    var hadSelectedCourse = Boolean(state.selectedCourseid);
     if (state.selectedCourseid && state.selectedCourseid !== selectedCourseid) {
       state.courseFile = null;
       state.courseFileOriginalContent = "";
@@ -2476,6 +2542,10 @@
         state.studioView !== "usage" &&
         state.studioView !== "allowed-users") {
       activateStudioView("usage");
+    }
+    if (!selectedCourseid) showHelpForView("new_teacher");
+    if (selectedCourseid && !hadSelectedCourse) {
+      showHelpForView(state.studioView || "usage");
     }
   }
 
