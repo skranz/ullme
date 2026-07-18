@@ -33,9 +33,20 @@ in the selected course gets its own Tutor entry.
 The **Add** menu currently offers:
 
 - **Add Tutor**, which copies a reusable template into the course; and
-- **New Course**, which creates and selects a course.
+- **New Course**, which creates and selects a course; and
+- **New Test Suite**, which snapshots a course AI Tutor for reproducible tests.
 
 There is no separate Organize or Definitions work surface.
+
+## Test Suites
+
+The fixed **Tests** work surface manages course-local suites under
+`tests/<suiteid>/`. Each suite uses the filesystem contract implemented by
+`R/run_tests.R`: `tutor.yml`, `instances.yml`, `tests.yml`, Tutor variant YAML,
+instance input directories, and timestamped result directories. Text and image
+inputs can be managed in the app, variants are validated after merging with the
+Tutor snapshot, and long runs execute in a background R process. The result
+browser shows case status, timing, final output, and per-node traces.
 
 ## AI Tutor work surface
 

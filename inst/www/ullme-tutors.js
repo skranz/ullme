@@ -77,6 +77,8 @@
             window.ullme.openAddCourseDialog();
           } else if (kind === "tutors" && window.ullme.openCatalogDialog) {
             window.ullme.openCatalogDialog("tutors");
+          } else if (kind === "test-suite" && window.ullmeTests && window.ullmeTests.openCreateDialog) {
+            window.ullmeTests.openCreateDialog();
           }
         }
       });

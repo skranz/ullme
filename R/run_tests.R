@@ -18,6 +18,20 @@ ullme_run_tests = function(test_dir, options=list()) {
   if (!is.list(options)) stop("options must be a list.", call.=FALSE)
   opts[names(options)] = options
 
+  # Relative material paths in tests.yml are resolved from the suite directory.
+  # This keeps course-local suites portable while preserving support for the
+  # absolute paths used by older command-line suites.
+  if (!is.null(opts$materials_dir) && length(opts$materials_dir)) {
+    materials_dir = paste0(opts$materials_dir)[1]
+    is_absolute = grepl("^[A-Za-z]:[/\\\\]|^/|^\\\\\\\\", materials_dir)
+    if (nzchar(materials_dir) && !is_absolute) {
+      materials_dir = file.path(test_dir, materials_dir)
+    }
+    opts$materials_dir = normalizePath(
+      materials_dir, winslash="/", mustWork=FALSE
+    )
+  }
+
   tutor_file = file.path(test_dir, "tutor.yml")
   instances_file = file.path(test_dir, "instances.yml")
   if (!file.exists(tutor_file)) stop("Missing tutor.yml.", call.=FALSE)
@@ -229,8 +243,13 @@ ullme_tests_safe_id = function(value, fallback="value") {
 
 
 ullme_tests_progress = function(...) {
-  cat(..., "\n", sep="")
+  message = paste0(...)
+  cat(message, "\n", sep="")
   flush.console()
+  callback = getOption("ullme.tests.progress_callback")
+  if (is.function(callback)) {
+    try(callback(message), silent=TRUE)
+  }
   invisible(NULL)
 }
 

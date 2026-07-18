@@ -389,6 +389,11 @@ ullme_register_handlers = function(app=getApp()) {
       app = app
     )
   })
+  changeHandler(
+    id = "ullme_test_input_upload",
+    fun = ullme_handle_test_suite_upload,
+    app = app
+  )
   eventHandler(
     eventId = "ullme_semester_select_event",
     id = NULL,
@@ -497,6 +502,24 @@ ullme_register_handlers = function(app=getApp()) {
     fun = ullme_handle_ai_tutor_save,
     app = app
   )
+  eventHandler(eventId="ullme_test_suite_create_event", id=NULL,
+               fun=ullme_handle_test_suite_create, app=app)
+  eventHandler(eventId="ullme_test_suite_config_save_event", id=NULL,
+               fun=ullme_handle_test_suite_config_save, app=app)
+  eventHandler(eventId="ullme_test_suite_refresh_event", id=NULL,
+               fun=ullme_handle_test_suite_refresh, app=app)
+  eventHandler(eventId="ullme_test_suite_variant_save_event", id=NULL,
+               fun=ullme_handle_test_suite_variant_save, app=app)
+  eventHandler(eventId="ullme_test_suite_input_save_event", id=NULL,
+               fun=ullme_handle_test_suite_input_save, app=app)
+  eventHandler(eventId="ullme_test_suite_upload_prepare_event", id=NULL,
+               fun=ullme_handle_test_suite_upload_prepare, app=app)
+  eventHandler(eventId="ullme_test_suite_run_event", id=NULL,
+               fun=ullme_handle_test_suite_run, app=app)
+  eventHandler(eventId="ullme_test_suite_poll_event", id=NULL,
+               fun=ullme_handle_test_suite_poll, app=app)
+  eventHandler(eventId="ullme_test_suite_results_event", id=NULL,
+               fun=ullme_handle_test_suite_results, app=app)
   eventHandler(
     eventId = "ullme_ai_tutor_node_event",
     id = NULL,
@@ -575,6 +598,9 @@ ullme_app_ui = function(app=getApp()) {
         type="text/css",
         href="ullme/ullme-tutor-validation.css"
       ),
+      if (is_teacher) tags$link(
+        rel="stylesheet", type="text/css", href="ullme/ullme-tests.css"
+      ),
       if (is_teacher) tags$script(src="ullme/ullme-materials.js"),
       tags$script(src="ullme/ullme-chat.js"),
       if (is_teacher) tags$script(src="ullme/ullme-usage.js"),
@@ -585,6 +611,7 @@ ullme_app_ui = function(app=getApp()) {
       if (is_teacher) tags$script(src="ullme/ullme-tutor-flow.js"),
       if (is_teacher) tags$script(src="ullme/ullme-tutor-validation.js"),
       if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),
+      if (is_teacher) tags$script(src="ullme/ullme-tests.js"),
       tags$script(src="ullme/ullme-audio.js"),
       tags$script(
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
@@ -898,6 +925,7 @@ ullme_course_workspace_ui = function(app=getApp()) {
     class = paste("ullme-course-workspace", if (!nzchar(app$courseid)) "ullme-course-workspace-empty" else ""),
     ullme_usage_statistics_ui(app=app),
     ullme_ai_tutors_ui(app=app),
+    ullme_test_suites_ui(app=app),
     ullme_material_ui(app=app),
     ullme_course_file_ui(app=app),
     ullme_course_settings_ui(app=app),
@@ -931,6 +959,7 @@ ullme_studio_navigation_ui = function(app=getApp()) {
   items = list(
     list(view="usage", label="Usage", icon="analytics"),
     list(view="materials", label="Materials", icon="folder"),
+    list(view="tests", label="Tests", icon="tests"),
     list(view="settings", label="Settings", icon="settings")
   )
   tags$nav(
@@ -966,13 +995,20 @@ ullme_studio_navigation_ui = function(app=getApp()) {
           `data-add-kind`="course",
           HTML(ullme_icon_svg("plus")),
           tags$span("New Course")
+        ),
+        tags$button(
+          type="button",
+          role="menuitem",
+          `data-add-kind`="test-suite",
+          HTML(ullme_icon_svg("tests")),
+          tags$span("New Test Suite")
         )
       )
     ),
     lapply(seq_along(items), function(i) {
       item = items[[i]]
       tagList(
-        if (i == 3) tags$div(
+        if (i == 4) tags$div(
           id="ullme_tutor_nav_items",
           class="ullme-dynamic-nav-items",
           `aria-label`="Course AI Tutors"
@@ -1559,6 +1595,7 @@ ullme_icon_svg = function(name) {
     tutor = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path><path d="M18 4l2-2M19 8h3"></path></svg>',
     settings = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>',
     analytics = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10"></path><path d="M10 20V4"></path><path d="M16 20v-7"></path><path d="M22 20H2"></path></svg>',
+    tests = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 3h3v15H5V6h3z"></path><path d="M9 12l2 2 4-4"></path><path d="M9 18h6"></path></svg>',
     undo = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9 8l-4 4 4 4"></path><path d="M5 12h8a4 4 0 0 1 4 4"></path></svg>',
     redo = '<svg class="ullme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 8l4 4-4 4"></path><path d="M19 12h-8a4 4 0 0 0-4 4"></path></svg>'
   )
@@ -1902,6 +1939,7 @@ ullme_send_course_shell_state = function(app=getApp()) {
     ai_tutors=ullme_course_ai_tutor_stubs(app=app),
     ai_tutors_loading=TRUE,
     ai_tutor_catalog=list(),
+    test_suites=list(),
     edit_history=list(),
     course_files=list()
   )
@@ -1938,6 +1976,8 @@ ullme_course_summary_for_js = function(app=getApp()) {
       )
     )
     summary$ai_tutor_catalog = ullme_ai_tutor_catalog(app=app)
+    summary$test_suites = if (is.null(course_dir)) list() else
+      ullme_test_suites_for_js(app=app)
     summary$allowed_users = ullme_allowed_users_for_js(app=app)
     summary$student_urls = ullme_course_student_urls_for_js(app=app)
     summary$course_files = if (is.null(course_dir)) list() else
@@ -1948,6 +1988,7 @@ ullme_course_summary_for_js = function(app=getApp()) {
     summary$ai_tutors = list()
     summary$edit_history = list()
     summary$ai_tutor_catalog = list()
+    summary$test_suites = list()
     summary$course_files = list()
     course_dir = ullme_active_course_dir(app=app)
     summary$material_tree = if (is.null(course_dir)) list() else

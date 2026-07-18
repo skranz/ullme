@@ -39,7 +39,7 @@ plain_chat = htmltools::renderTags(
 plain_chat_html = paste(plain_chat$head, plain_chat$html, collapse="\n")
 
 views = c(
-  "general", "new_teacher", "usage", "materials", "ai-tutors",
+  "general", "new_teacher", "usage", "materials", "tests", "ai-tutors",
   "ai-tutors-instances", "ai-tutors-flow",
   "ai-tutors-yaml-definition", "ai-tutors-yaml-instances",
   "settings", "allowed-users", "file"
@@ -73,6 +73,8 @@ stopifnot(
   grepl("Still computing", tutor_js, fixed=TRUE),
   grepl("ai-tutors-yaml-definition", tutor_js, fixed=TRUE),
   grepl('src="ullme/ullme-tutor-flow.js"', chat_ui_source, fixed=TRUE),
+  grepl('src="ullme/ullme-tests.js"', chat_ui_source, fixed=TRUE),
+  grepl('href="ullme/ullme-tests.css"', chat_ui_source, fixed=TRUE),
   grepl('href="ullme/ullme-tutor-flow.css"', chat_ui_source, fixed=TRUE),
   grepl("showHelpForView(panelName)", teacher_js, fixed=TRUE),
   grepl("ullme-ai-pane-collapsed .ullme-assistant-panel", teacher_css, fixed=TRUE)

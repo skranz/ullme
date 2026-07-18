@@ -808,6 +808,7 @@
     var titles = {
       usage: "Usage statistics",
       materials: "Materials",
+      tests: "Test Suites",
       "ai-tutors": "AI Tutors",
       settings: "Course settings",
       "allowed-users": "Allowed users",
@@ -2520,6 +2521,7 @@
     var aiTutors = summary && Array.isArray(summary.ai_tutors) ? summary.ai_tutors : [];
     var aiTutorsLoading = Boolean(summary && summary.ai_tutors_loading);
     var aiTutorCatalog = summary && Array.isArray(summary.ai_tutor_catalog) ? summary.ai_tutor_catalog : [];
+    var testSuites = summary && Array.isArray(summary.test_suites) ? summary.test_suites : [];
     var courseFiles = summary && Array.isArray(summary.course_files) ? summary.course_files : [];
     var allowedUsers = summary ? summary.allowed_users : null;
     var editHistory = summary && summary.edit_history ? summary.edit_history : {};
@@ -2539,6 +2541,9 @@
     renderCourseFileTree(courseFiles);
     renderAllowedUsers(allowedUsers);
     renderAITutors(aiTutors, aiTutorsLoading);
+    if (window.ullmeTests && window.ullmeTests.update) {
+      window.ullmeTests.update(testSuites, aiTutors);
+    }
     updateAIContext();
     if (!selectedCourseid &&
         state.studioView !== "usage" &&

@@ -10,7 +10,7 @@ Authors@R: c(
     )
   )
 Description: Experimental app. See README.md for details
-Depends: shinyEvents, restorepoint, stringi, stringtools, yaml, httr2, commonmark, coro, promises, later, jsonlite, curl
+Depends: shinyEvents, restorepoint, stringi, stringtools, yaml, httr2, commonmark, coro, promises, later, jsonlite, curl, callr
 Suggests: plumber, rstudioapi, pandoc, shinyEventsLogin, digest
 Remotes: skranz/shinyEventsLogin
 License: GPL 3.0 (all non-R stuff also MIT)

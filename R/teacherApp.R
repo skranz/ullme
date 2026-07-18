@@ -170,6 +170,7 @@ ullme_teacher_help_ui = function(app=getApp()) {
     new_teacher="new_teacher",
     usage="usage",
     materials="materials",
+    tests="tests",
     `ai-tutors`="ai-tutors",
     `ai-tutors-instances`="ai-tutors-instances",
     `ai-tutors-flow`="ai-tutors-flow",

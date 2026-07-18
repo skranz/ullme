@@ -1,0 +1,43 @@
+.ullme-tests-shell { max-width: 1500px; margin: 0 auto; }
+.ullme-tests-toolbar { display: flex; gap: 10px; align-items: center; margin: 18px 0 12px; }
+.ullme-tests-toolbar select { min-width: 240px; }
+.ullme-tests-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ullme-border, #d9dee7); }
+.ullme-tests-tab { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 14px; color: inherit; cursor: pointer; }
+.ullme-tests-tab-active { border-bottom-color: var(--ullme-accent, #275efe); font-weight: 650; }
+.ullme-tests-body { padding-top: 18px; }
+.ullme-tests-empty { max-width: 560px; margin: 70px auto; padding: 32px; text-align: center; border: 1px dashed var(--ullme-border, #ccd3df); border-radius: 14px; }
+.ullme-tests-split, .ullme-tests-results-layout { display: grid; grid-template-columns: minmax(210px, 0.32fr) minmax(420px, 1fr); gap: 22px; }
+.ullme-tests-list, .ullme-tests-editor, .ullme-tests-settings, .ullme-tests-run-card, .ullme-tests-result-surface { min-width: 0; }
+.ullme-tests-list-item { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 11px 12px; margin-bottom: 7px; text-align: left; color: inherit; background: var(--ullme-surface, #fff); border: 1px solid var(--ullme-border, #d9dee7); border-radius: 8px; cursor: pointer; }
+.ullme-tests-list-item:hover { border-color: var(--ullme-accent, #275efe); }
+.ullme-tests-list-item span, .ullme-tests-list-item code { color: var(--ullme-muted, #667085); font-size: 12px; }
+.ullme-tests-editor, .ullme-tests-settings, .ullme-tests-run-card, .ullme-tests-result-surface { padding: 18px; background: var(--ullme-surface, #fff); border: 1px solid var(--ullme-border, #d9dee7); border-radius: 10px; }
+.ullme-tests-settings { max-width: 760px; }
+.ullme-tests-field { display: grid; gap: 6px; margin: 0 0 13px; }
+.ullme-tests-field-label { font-size: 13px; font-weight: 650; }
+.ullme-tests-field input, .ullme-tests-field textarea, .ullme-tests-field select, .ullme-tests-toolbar select { box-sizing: border-box; width: 100%; padding: 9px 10px; color: inherit; background: var(--ullme-input, #fff); border: 1px solid var(--ullme-border, #cfd6e2); border-radius: 7px; font: inherit; }
+.ullme-tests-field textarea, .ullme-tests-editor textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ullme-tests-check { display: flex; gap: 8px; align-items: center; margin: 9px 0; }
+.ullme-tests-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+.ullme-tests-hint, .ullme-tests-source, .ullme-muted { color: var(--ullme-muted, #667085); font-size: 13px; }
+.ullme-tests-file-list { margin: 8px 0; color: var(--ullme-muted, #667085); font-size: 13px; }
+.ullme-tests-run-card { position: relative; margin-bottom: 22px; }
+.ullme-tests-status { position: absolute; top: 18px; right: 18px; padding: 3px 9px; border-radius: 999px; background: #eef1f6; font-size: 12px; text-transform: capitalize; }
+.ullme-tests-status-running, .ullme-tests-status-starting { color: #155eef; background: #eff4ff; }
+.ullme-tests-status-completed { color: #067647; background: #ecfdf3; }
+.ullme-tests-status-error, .ullme-tests-error { color: #b42318; background: #fef3f2; }
+.ullme-tests-error { margin-top: 12px; padding: 10px; border-radius: 7px; }
+.ullme-tests-variant-checks { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0; }
+.ullme-tests-log { max-height: 230px; overflow: auto; margin-top: 14px; padding: 12px; background: #111827; color: #e5e7eb; border-radius: 7px; font-size: 12px; white-space: pre-wrap; }
+.ullme-tests-result-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ullme-tests-result-table th, .ullme-tests-result-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--ullme-border, #e1e5ec); }
+.ullme-tests-result-table tbody tr { cursor: pointer; }
+.ullme-tests-result-table tbody tr:hover { background: rgba(39, 94, 254, 0.06); }
+.ullme-tests-case-detail { margin-top: 20px; border-top: 1px solid var(--ullme-border, #d9dee7); padding-top: 16px; }
+.ullme-tests-case-detail pre { overflow: auto; max-height: 440px; padding: 12px; background: var(--ullme-subtle, #f7f8fa); border-radius: 7px; white-space: pre-wrap; }
+.ullme-tests-case-detail details { margin-top: 8px; border: 1px solid var(--ullme-border, #d9dee7); border-radius: 7px; padding: 8px 10px; }
+.ullme-tests-case-detail summary { cursor: pointer; font-weight: 600; }
+.ullme-tests-prompt { color: var(--ullme-muted, #667085); }
+@media (max-width: 900px) {
+  .ullme-tests-split, .ullme-tests-results-layout { grid-template-columns: 1fr; }
+}

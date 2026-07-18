@@ -37,6 +37,7 @@ ullme_course_file_records = function(course_dir, max_files=2500L,
   )
   relative = sort(gsub("\\\\", "/", relative))
   relative = relative[!grepl("(^|/)\\.ullme-", relative)]
+  relative = relative[!grepl("^tests/", relative, ignore.case=TRUE)]
   relative = head(relative, max_files)
   lapply(relative, function(path) {
     full_path = file.path(course_dir, path)
