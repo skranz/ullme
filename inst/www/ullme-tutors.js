@@ -7,6 +7,8 @@
     yamlTab: "definition",
     courseFiles: [],
     tutorPaneActive: false,
+    loading: false,
+    instanceAutoSave: null,
     initialized: false
   };
 
@@ -98,7 +100,7 @@
     if (button) button.setAttribute("aria-expanded", "false");
   }
 
-  function update(tutors, templates, courseFiles) {
+  function update(tutors, templates, courseFiles, loading) {
     state.tutors = Array.isArray(tutors) ? tutors : [];
     state.templates = Array.isArray(templates) ? templates : [];
     if (arguments.length > 2) {
@@ -107,10 +109,15 @@
           return String(file.path || "").indexOf("materials/") === 0;
         });
     }
+    state.loading = Boolean(loading);
     if (!state.tutors.some(function (tutor) {
       return tutor.tutorid === state.selectedTutorId;
     })) {
       state.selectedTutorId = state.tutors.length ? state.tutors[0].tutorid : "";
+    }
+    if (state.instanceAutoSave && state.instanceAutoSave.saving) {
+      renderTutorNavigation();
+      return;
     }
     render();
   }
@@ -159,6 +166,15 @@
   function renderTutorDetail() {
     var container = byId("ullme_ai_tutor_detail");
     if (!container) return;
+    var previousAutoSave = state.instanceAutoSave;
+    if (previousAutoSave && previousAutoSave.panel.isConnected &&
+        !previousAutoSave.saving &&
+        instanceAssignmentSnapshot(previousAutoSave) !== previousAutoSave.lastSubmitted) {
+      submitInstanceAutosave(previousAutoSave);
+    }
+    if (previousAutoSave && !previousAutoSave.saving) {
+      state.instanceAutoSave = null;
+    }
     container.innerHTML = "";
     var tutor = selectedTutor();
     if (!tutor) {
@@ -169,8 +185,23 @@
         window.ullmeTutorFlow.setActive(false, null);
       }
       container.appendChild(emptyState(
-        "No AI Tutor selected",
-        "Use Add to create an editable course copy."
+        state.loading ? "Still computing AI Tutors" : "No AI Tutor selected",
+        state.loading
+          ? "The Tutor buttons and full editor will appear as soon as the course data is ready."
+          : "Use Add to create an editable course copy."
+      ));
+      return;
+    }
+    if (tutor.loading) {
+      if (window.ullmeTutorValidation && window.ullmeTutorValidation.update) {
+        window.ullmeTutorValidation.update(null);
+      }
+      if (window.ullmeTutorFlow && window.ullmeTutorFlow.setActive) {
+        window.ullmeTutorFlow.setActive(false, null);
+      }
+      container.appendChild(emptyState(
+        "Still computing " + (tutor.label || tutor.tutorid),
+        "The Tutor instances and flow data are being prepared. You can keep using the rest of the Teacher App."
       ));
       return;
     }
@@ -377,7 +408,7 @@
       var suggestion = document.createElement("div");
       suggestion.className = "ullme-suggestion-summary";
       suggestion.innerHTML = "<strong>Suggested from course files</strong>" +
-        "<span>Review these document assignments, then save them.</span>";
+        "<span>Review these document assignments. Changes save automatically.</span>";
       panel.appendChild(suggestion);
     }
 
@@ -415,7 +446,7 @@
     var actions = document.createElement("div");
     var suggest = document.createElement("button");
     var add = document.createElement("button");
-    var save = document.createElement("button");
+    var status = document.createElement("span");
     actions.className = "ullme-tutor-form-actions ullme-instance-actions";
     suggest.type = "button";
     suggest.className = "ullme-secondary-action";
@@ -430,20 +461,13 @@
     add.addEventListener("click", function () {
       body.appendChild(instanceEditorRow({ instanceid: "", label: "", docs: {} }, roles, tutor));
     });
-    save.type = "button";
-    save.className = "ullme-primary-action ullme-tutor-save-button";
-    save.textContent = "Save assignments";
-    save.addEventListener("click", function () {
-      save.disabled = true;
-      sendEvent("ullme_ai_tutor_instances_save_event", {
-        tutorid: tutor.tutorid,
-        instances: collectInstanceRows(roles),
-        course_docs: collectCourseDocs(courseRoles)
-      });
-    });
+    status.className = "ullme-instance-autosave-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.textContent = "Changes save automatically";
     actions.appendChild(suggest);
     actions.appendChild(add);
-    actions.appendChild(save);
+    actions.appendChild(status);
     panel.appendChild(actions);
     if (!instances.length) {
       panel.insertBefore(emptyState(
@@ -451,7 +475,75 @@
         "Add an instance manually. Document suggestions appear automatically when matching course files are found."
       ), wrap);
     }
+    var coordinator = {
+      tutor: tutor,
+      roles: roles,
+      courseRoles: courseRoles,
+      panel: panel,
+      status: status,
+      timer: null,
+      saving: false,
+      pending: false,
+      lastSubmitted: ""
+    };
+    coordinator.lastSubmitted = instanceAssignmentSnapshot(coordinator);
+    state.instanceAutoSave = coordinator;
+    panel.addEventListener("focusout", function (event) {
+      if (event.target && event.target.matches("input, textarea")) {
+        scheduleInstanceAutosave(coordinator);
+      }
+    });
+    panel.addEventListener("change", function (event) {
+      if (event.target && event.target.matches("select, input[type='checkbox']")) {
+        scheduleInstanceAutosave(coordinator);
+      }
+    });
+    panel.addEventListener("click", function (event) {
+      if (event.target && event.target.classList.contains("ullme-text-action")) {
+        scheduleInstanceAutosave(coordinator);
+      }
+    });
     return panel;
+  }
+
+  function instanceAssignmentPayload(coordinator) {
+    return {
+      tutorid: coordinator.tutor.tutorid,
+      instances: collectInstanceRows(coordinator.roles),
+      course_docs: collectCourseDocs(coordinator.courseRoles)
+    };
+  }
+
+  function instanceAssignmentSnapshot(coordinator) {
+    return JSON.stringify(instanceAssignmentPayload(coordinator));
+  }
+
+  function scheduleInstanceAutosave(coordinator) {
+    if (!coordinator || !coordinator.panel.isConnected) return;
+    if (coordinator.timer) window.clearTimeout(coordinator.timer);
+    coordinator.timer = window.setTimeout(function () {
+      coordinator.timer = null;
+      submitInstanceAutosave(coordinator);
+    }, 50);
+  }
+
+  function submitInstanceAutosave(coordinator) {
+    if (!coordinator || !coordinator.panel.isConnected) return;
+    var snapshot = instanceAssignmentSnapshot(coordinator);
+    if (snapshot === coordinator.lastSubmitted) {
+      if (!coordinator.saving) coordinator.status.textContent = "Saved";
+      return;
+    }
+    if (coordinator.saving) {
+      coordinator.pending = true;
+      coordinator.status.textContent = "More changes waiting to save…";
+      return;
+    }
+    coordinator.saving = true;
+    coordinator.pending = false;
+    coordinator.lastSubmitted = snapshot;
+    coordinator.status.textContent = "Saving…";
+    sendEvent("ullme_ai_tutor_instances_save_event", instanceAssignmentPayload(coordinator));
   }
 
   function openInstanceBuilderDialog(tutor) {
@@ -1428,6 +1520,34 @@
       ),
       function (button) { button.disabled = false; }
     );
+    var coordinator = state.instanceAutoSave;
+    if (result && result.kind === "instances" && coordinator) {
+      coordinator.saving = false;
+      if (result.ok === false) {
+        coordinator.lastSubmitted = "";
+        coordinator.status.textContent = "Could not save automatically";
+        window.alert(result.message || "The Tutor instances could not be saved.");
+        return;
+      }
+      coordinator.status.textContent = "Saved";
+      if (!coordinator.panel.isConnected) {
+        state.instanceAutoSave = null;
+        renderTutorDetail();
+        return;
+      }
+      if (coordinator.panel.contains(document.activeElement)) {
+        coordinator.pending = false;
+        return;
+      }
+      coordinator.pending = false;
+      if (instanceAssignmentSnapshot(coordinator) !== coordinator.lastSubmitted) {
+        submitInstanceAutosave(coordinator);
+        return;
+      }
+      state.instanceAutoSave = null;
+      renderTutorDetail();
+      return;
+    }
     if (!result || result.ok === false) {
       window.alert((result && result.message) || "The AI Tutor could not be saved.");
       return;

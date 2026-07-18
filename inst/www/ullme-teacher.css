@@ -3007,6 +3007,13 @@ body {
   gap: 8px;
 }
 
+.ullme-instance-autosave-status {
+  align-self: center;
+  color: #69716d;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
 .ullme-instance-builder-button,
 .ullme-instance-builder-dialog .ullme-primary-action {
   display: inline-flex;

@@ -841,13 +841,14 @@
     if (studioContext) studioContext.textContent = courseid || "Select a course";
   }
 
-  function renderAITutors(tutors) {
+  function renderAITutors(tutors, loading) {
     tutors = Array.isArray(tutors) ? tutors : [];
     if (window.ullmeTutors && window.ullmeTutors.update) {
       window.ullmeTutors.update(
         tutors,
         state.aiTutorCatalog,
-        state.courseFiles
+        state.courseFiles,
+        Boolean(loading)
       );
     }
   }
@@ -2517,6 +2518,7 @@
       ? summary.material_tree
       : [];
     var aiTutors = summary && Array.isArray(summary.ai_tutors) ? summary.ai_tutors : [];
+    var aiTutorsLoading = Boolean(summary && summary.ai_tutors_loading);
     var aiTutorCatalog = summary && Array.isArray(summary.ai_tutor_catalog) ? summary.ai_tutor_catalog : [];
     var courseFiles = summary && Array.isArray(summary.course_files) ? summary.course_files : [];
     var allowedUsers = summary ? summary.allowed_users : null;
@@ -2536,7 +2538,7 @@
     renderMaterialTree();
     renderCourseFileTree(courseFiles);
     renderAllowedUsers(allowedUsers);
-    renderAITutors(aiTutors);
+    renderAITutors(aiTutors, aiTutorsLoading);
     updateAIContext();
     if (!selectedCourseid &&
         state.studioView !== "usage" &&

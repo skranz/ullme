@@ -81,6 +81,14 @@ writeLines(c(
   "  init_prompt: Help."
 ), file.path(tutor_dir, "tutor.yml"))
 
+startup_stubs = ullme_course_ai_tutor_stubs(app=app)
+stopifnot(
+  length(startup_stubs) == 1L,
+  identical(startup_stubs[[1]]$tutorid, "tutor1"),
+  isTRUE(startup_stubs[[1]]$loading),
+  identical(names(startup_stubs[[1]]), c("tutorid", "label", "loading"))
+)
+
 created = ullme_save_course_ai_tutor_node(
   "tutor1", "review", "create",
   "prompt: Review the draft.",

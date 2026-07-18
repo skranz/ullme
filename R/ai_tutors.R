@@ -1231,9 +1231,19 @@ ullme_handle_ai_tutor_instances_save = function(tutorid=NULL, instances=NULL,
       app=app
     )
     ullme_send_course_state(app=app)
-    list(ok=TRUE, message="Tutor instances saved.")
+    list(
+      ok=TRUE,
+      kind="instances",
+      tutorid=tutorid,
+      message="Tutor instances saved."
+    )
   }, error=function(e) {
-    list(ok=FALSE, message=conditionMessage(e))
+    list(
+      ok=FALSE,
+      kind="instances",
+      tutorid=tutorid,
+      message=conditionMessage(e)
+    )
   })
   callJS(
     .fun="window.ullme.aiTutorInstancesSaveComplete",

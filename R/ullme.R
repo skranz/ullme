@@ -1880,6 +1880,46 @@ ullme_send_course_state = function(app=getApp()) {
 }
 
 
+ullme_course_ai_tutor_stubs = function(app=getApp()) {
+  restore.point("ullme_course_ai_tutor_stubs")
+  course_dir = ullme_active_course_dir(app=app)
+  if (is.null(course_dir)) return(list())
+  ids = ullme_definition_ids(ullme_course_ai_tutors_dir(course_dir))
+  lapply(ids, function(tutorid) list(
+    tutorid=tutorid,
+    label=tutorid,
+    loading=TRUE
+  ))
+}
+
+
+ullme_send_course_shell_state = function(app=getApp()) {
+  restore.point("ullme_send_course_shell_state")
+  summary = list(
+    course=list(courseid=app$courseid %||% ""),
+    material=list(),
+    material_tree=list(),
+    ai_tutors=ullme_course_ai_tutor_stubs(app=app),
+    ai_tutors_loading=TRUE,
+    ai_tutor_catalog=list(),
+    edit_history=list(),
+    course_files=list()
+  )
+  callJS(
+    .fun = "window.ullme.updateCourseList",
+    .args = list(
+      as.list(app$courseids),
+      app$courseid,
+      app$role %in% c("teacher", "student"),
+      summary,
+      app$semester
+    ),
+    .app = app
+  )
+  invisible(TRUE)
+}
+
+
 ullme_course_summary_for_js = function(app=getApp()) {
   restore.point("ullme_course_summary_for_js")
   summary = ullme_course_summary(app=app)
@@ -1923,11 +1963,19 @@ ullme_init_app = function(session=NULL, app=getApp()) {
   if (identical(app$role, "student")) {
     ullme_student_session_stats_init(app=app)
     ullme_init_student_app(session=session, app=app)
+    ullme_refresh_model_catalog(app=app)
   } else {
-    ullme_send_course_state(app=app)
+    # Show the course and Tutor navigation before computing instance
+    # suggestions, file matches, histories, and conversion metadata.
+    ullme_send_course_shell_state(app=app)
+    later::later(function() {
+      ullme_send_course_state(app=app)
+    }, delay=0.01)
+    later::later(function() {
+      ullme_refresh_model_catalog(app=app)
+    }, delay=0.02)
     ullme_init_teacher_usage_statistics(app=app)
   }
-  ullme_refresh_model_catalog(app=app)
 }
 
 
