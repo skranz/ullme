@@ -236,6 +236,11 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
   placeholder_documents = ullme_normalize_tutor_placeholder_documents(
     definition$placeholder_documents
   )
+  default_node_args = definition$default_node_args %||% list()
+  if (!is.list(default_node_args) ||
+      (length(default_node_args) && is.null(names(default_node_args)))) {
+    default_node_args = list()
+  }
   nodes = definition$nodes %||% list()
   if (!is.list(nodes) || is.null(names(nodes))) nodes = list()
   node_yaml = lapply(nodes, function(node) {
@@ -243,6 +248,9 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
   })
   nodes = lapply(nodes, function(node) {
     if (!is.list(node)) return(list())
+    inherited = default_node_args
+    inherited[names(node)] = node
+    node = inherited
     node$prompt = paste0(node$prompt %||% "", collapse="\n")
     node$waiting_message = paste0(
       node$waiting_message %||% "",
@@ -261,6 +269,11 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     }
     node$n_parallel = as.integer(node$n_parallel %||% 1L)[1]
     node$n_retries = as.integer(node$n_retries %||% 0L)[1]
+    node$retries_if_empty = as.integer(node$retries_if_empty %||% 0L)[1]
+    node$postfix_wait_retry_if_empty = paste0(
+      node$postfix_wait_retry_if_empty %||% "",
+      collapse="\n"
+    )
     node$aggregate = paste0(node$aggregate %||% "")[1]
     node$ask_for_input = isTRUE(node$ask_for_input)
     node$add_to_history = !identical(node$add_to_history, FALSE)
@@ -288,6 +301,7 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     multiple_instances=!identical(definition$multiple_instances, FALSE),
     chat_history=isTRUE(definition$chat_history),
     show_final_output=!identical(definition$show_final_output, FALSE),
+    default_node_args=default_node_args,
     start_node=paste0(definition$start_node %||% "")[1],
     nodes=nodes,
     node_yaml=node_yaml,

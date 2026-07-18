@@ -263,6 +263,12 @@ ullme_validate_tutor_workflow = function(value, document_ids,
   errors = character(0)
   start = paste0(value$start_node %||% "")[1]
   nodes = value$nodes
+  default_node_args = value$default_node_args %||% list()
+  if (!is.list(default_node_args) ||
+      (length(default_node_args) && is.null(names(default_node_args)))) {
+    errors = c(errors, "default_node_args must be a mapping.")
+    default_node_args = list()
+  }
   fragments = value$prompt_fragments
   if (!grepl("^[A-Za-z][A-Za-z0-9_]*$", start)) {
     errors = c(errors, "start_node must be a valid node ID.")
@@ -330,6 +336,9 @@ ullme_validate_tutor_workflow = function(value, document_ids,
       errors = c(errors, paste0(label, " must be a mapping."))
       next
     }
+    inherited = default_node_args
+    inherited[names(node)] = node
+    node = inherited
     prompt = paste0(node$prompt %||% "", collapse="\n")
     next_node = paste0(node[["next"]] %||% "")[1]
     switch_input = paste0(node$switch_input %||% "")[1]
@@ -395,6 +404,23 @@ ullme_validate_tutor_workflow = function(value, document_ids,
         errors = c(errors, paste0(label, ".n_retries must be between 0 and 3."))
       }
     }
+    if (!is.null(node$retries_if_empty)) {
+      value = suppressWarnings(as.numeric(node$retries_if_empty)[1])
+      if (length(node$retries_if_empty) != 1L || is.na(value) ||
+          value < 0 || value > 10 || value != floor(value)) {
+        errors = c(errors, paste0(
+          label, ".retries_if_empty must be an integer between 0 and 10."
+        ))
+      }
+    }
+    if (!is.null(node$postfix_wait_retry_if_empty) &&
+        (!is.character(node$postfix_wait_retry_if_empty) ||
+         length(node$postfix_wait_retry_if_empty) != 1L ||
+         is.na(node$postfix_wait_retry_if_empty))) {
+      errors = c(errors, paste0(
+        label, ".postfix_wait_retry_if_empty must be text."
+      ))
+    }
     aggregate = paste0(node$aggregate %||% "")[1]
     if (nzchar(aggregate) && !identical(aggregate, "majority_vote")) {
       errors = c(errors, paste0(label, ".aggregate must be majority_vote."))
@@ -408,7 +434,10 @@ ullme_validate_tutor_workflow = function(value, document_ids,
     if (!is.na(parallel_n) && parallel_n > 1L && !nzchar(aggregate)) {
       errors = c(errors, paste0(label, ".aggregate is required when n_parallel is greater than 1."))
     }
-    for (field in c("prompt", "waiting_message", "show_before", "show_after", "show_text")) {
+    for (field in c(
+      "prompt", "waiting_message", "postfix_wait_retry_if_empty",
+      "show_before", "show_after", "show_text"
+    )) {
       unknown = unknown_placeholders(node[[field]] %||% "")
       if (length(unknown)) {
         errors = c(errors, paste0(

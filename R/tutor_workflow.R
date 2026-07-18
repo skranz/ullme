@@ -271,8 +271,11 @@ ullme_tutor_workflow_model_call = function(state, node, node_id, prompt,
 
 
 ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
-                                           on_final_update=function(...) NULL) {
+                                           on_final_update=function(...) NULL,
+                                           on_empty_retry=function(...) NULL,
+                                           model_call=ullme_tutor_workflow_model_call) {
   attempts_left = as.integer(node$n_retries %||% 0L)
+  empty_retries_left = as.integer(node$retries_if_empty %||% 0L)
   attempt = 0L
   run_attempt = NULL
   run_attempt = function() {
@@ -280,7 +283,7 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
     n = as.integer(node$n_parallel %||% 1L)
     calls = lapply(seq_len(n), function(i) {
       callback = if (n == 1L) on_final_update else function(...) NULL
-      ullme_tutor_workflow_model_call(
+      model_call(
         state, node, node_id, prompt,
         attempt=attempt,
         parallel_call=i,
@@ -292,7 +295,7 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
       combined,
       onFulfilled=function(results) {
         outputs = lapply(results, function(result) result$text %||% "")
-        if (identical(node$aggregate %||% "", "majority_vote")) {
+        output = if (identical(node$aggregate %||% "", "majority_vote")) {
           voted = tryCatch(
             ullme_tutor_workflow_vote(outputs, node),
             error=function(error) error
@@ -306,6 +309,20 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
         } else {
           paste0(outputs[[1]] %||% "")
         }
+        if (!nzchar(trimws(paste0(output %||% "", collapse="\n")))) {
+          if (empty_retries_left > 0L) {
+            empty_retries_left <<- empty_retries_left - 1L
+            on_empty_retry(attempt, empty_retries_left)
+            return(run_attempt())
+          }
+          warning(
+            "Tutor node '", node_id, "' returned an empty answer after ",
+            attempt, if (attempt == 1L) " attempt." else " attempts.",
+            call.=FALSE,
+            immediate.=TRUE
+          )
+        }
+        output
       },
       onRejected=function(error) {
         if (attempts_left <= 0L) stop(error)
@@ -378,7 +395,19 @@ ullme_tutor_workflow_advance = function(state,
         state, node, node_id, rendered,
         on_final_update=if (
           !nzchar(node[["next"]] %||% "") && is.null(node$switch_to)
-        ) on_final_update else function(...) NULL
+        ) on_final_update else function(...) NULL,
+        on_empty_retry=function(...) {
+          retry_waiting = ullme_tutor_workflow_append_text(
+            waiting,
+            node$postfix_wait_retry_if_empty %||% ""
+          )
+          if (nzchar(retry_waiting)) {
+            on_waiting(
+              ullme_tutor_workflow_render(state, retry_waiting),
+              node_id
+            )
+          }
+        }
       )
       return(promises::then(call, onFulfilled=function(output) {
         call_finished_at = Sys.time()

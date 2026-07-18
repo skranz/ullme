@@ -33,6 +33,16 @@ groups:
         short: Retry failed model calls
         long: Number of additional attempts after a failed model call. Valid values are zero through three.
         template: 'n_retries: 1'
+      - path: retries_if_empty
+        label: retries_if_empty
+        short: Retry empty model answers
+        long: Number of additional model calls when this node returns no visible answer or only whitespace. The Tutor-wide default is zero and can be set under default_node_args.
+        template: 'retries_if_empty: 1'
+      - path: postfix_wait_retry_if_empty
+        label: postfix_wait_retry_if_empty
+        short: Extra waiting text on empty retry
+        long: Appended to waiting_message while retrying because the model returned no visible answer. It may also be set Tutor-wide under default_node_args.
+        template: 'postfix_wait_retry_if_empty: No answer received; trying again.'
       - path: n_parallel
         label: n_parallel
         short: Run several model calls

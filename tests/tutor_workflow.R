@@ -63,7 +63,61 @@ stopifnot(
   identical(tutor$nodes$switch_image$switch_to$`TRUE`, "describe_image"),
   identical(tutor$nodes$describe_image[["next"]], "switch_found_exercise"),
   identical(tutor$nodes$switch_found_exercise$n_parallel, 3L),
+  identical(tutor$nodes$describe_image$retries_if_empty, 0L),
   identical(tutor$nodes$switch_found_exercise$add_to_history, FALSE)
+)
+
+# Tutor-wide node arguments are inherited unless a node supplies its own value.
+defaults_definition = definition
+defaults_definition$default_node_args = list(
+  retries_if_empty=1L,
+  postfix_wait_retry_if_empty="No answer; trying again."
+)
+defaults_definition$nodes$general$retries_if_empty = 2L
+defaults_tutor = ullme_normalize_ai_tutor_definition(
+  defaults_definition, "ps_tutor_en", "course"
+)
+stopifnot(
+  identical(defaults_tutor$nodes$describe_image$retries_if_empty, 1L),
+  identical(defaults_tutor$nodes$general$retries_if_empty, 2L),
+  identical(
+    defaults_tutor$nodes$describe_image$postfix_wait_retry_if_empty,
+    "No answer; trying again."
+  ),
+  !grepl(
+    "retries_if_empty",
+    defaults_tutor$node_yaml$describe_image,
+    fixed=TRUE
+  )
+)
+
+# Empty visible answers retry independently of transport-error retries.
+empty_answers = c("", "  ", "usable answer")
+empty_attempts = 0L
+empty_retry_events = integer(0)
+empty_model_call = function(...) {
+  empty_attempts <<- empty_attempts + 1L
+  promises::promise(function(resolve, reject) resolve(list(
+    text=empty_answers[[empty_attempts]], thinking=""
+  )))
+}
+empty_result = ullme_await_promise(
+  ullme_tutor_workflow_call_node(
+    state=new.env(parent=emptyenv()),
+    node=list(n_parallel=1L, n_retries=0L, retries_if_empty=2L),
+    node_id="empty_test",
+    prompt="Answer",
+    on_empty_retry=function(attempt, remaining) {
+      empty_retry_events <<- c(empty_retry_events, attempt)
+    },
+    model_call=empty_model_call
+  ),
+  seconds=5
+)
+stopifnot(
+  identical(empty_result, "usable answer"),
+  identical(empty_attempts, 3L),
+  identical(empty_retry_events, c(1L, 2L))
 )
 stopifnot(identical(
   ullme_tutor_workflow_vote(

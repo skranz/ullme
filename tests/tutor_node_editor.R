@@ -30,7 +30,8 @@ stopifnot(
   all(c(
     "prompt", "show_before", "show_after", "next",
     "switch_to.DEFAULT", "ask_for_input", "placeholder.hist",
-    "placeholder.output_node"
+    "placeholder.output_node", "retries_if_empty",
+    "postfix_wait_retry_if_empty"
   ) %in% field_paths),
   !anyDuplicated(field_paths),
   grepl('id="test_node_field"', field_html, fixed=TRUE),
@@ -47,6 +48,30 @@ valid = ullme_validate_tutor_yaml(
   content=yaml::as.yaml(definition)
 )
 stopifnot(isTRUE(valid$ok))
+
+definition$default_node_args = list(
+  retries_if_empty=1L,
+  postfix_wait_retry_if_empty="No answer; trying again."
+)
+valid_defaults = ullme_validate_tutor_yaml(
+  tutorid="ps_tutor_en",
+  content=yaml::as.yaml(definition)
+)
+stopifnot(isTRUE(valid_defaults$ok))
+definition$default_node_args$retries_if_empty = -1L
+invalid_defaults = ullme_validate_tutor_yaml(
+  tutorid="ps_tutor_en",
+  content=yaml::as.yaml(definition)
+)
+stopifnot(
+  !isTRUE(invalid_defaults$ok),
+  any(grepl(
+    "retries_if_empty must be an integer",
+    unlist(invalid_defaults$errors),
+    fixed=TRUE
+  ))
+)
+definition$default_node_args = NULL
 
 definition$nodes$safety_review[["next"]] = "general"
 cyclic = ullme_validate_tutor_yaml(
