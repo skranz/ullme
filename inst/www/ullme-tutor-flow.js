@@ -419,6 +419,7 @@
     active: false,
     tutor: null,
     selectedNodeId: "",
+    originalNodeId: "",
     creating: false,
     busy: false
   };
@@ -461,8 +462,9 @@
     if (!elements.nodeId || !elements.yaml) return;
     editorState.tutor = tutor || editorState.tutor;
     editorState.selectedNodeId = creating ? "" : String(nodeId || "");
+    editorState.originalNodeId = creating ? "" : editorState.selectedNodeId;
     editorState.creating = Boolean(creating);
-    elements.nodeId.readOnly = !creating;
+    elements.nodeId.readOnly = false;
     elements.nodeId.value = creating ? "" : editorState.selectedNodeId;
     elements.yaml.value = creating
       ? "prompt: |\n  Describe what this workflow node should do."
@@ -473,7 +475,7 @@
     setEditorStatus(
       creating
         ? "Enter a new node ID and edit its YAML. The complete Tutor will be checked before creation."
-        : "Edit this node's YAML. The complete Tutor will be checked before saving.",
+        : "Edit the Node ID or YAML. Renaming updates start_node, next, and switch_to references.",
       false
     );
   }
@@ -507,6 +509,7 @@
     var payload = {
       tutorid: String(tutor.tutorid || ""),
       nodeid: nodeId,
+      original_nodeid: editorState.creating ? "" : editorState.originalNodeId,
       action: action,
       yaml_content: action === "delete" ? "" : elements.yaml.value,
       nonce: Math.random()
@@ -555,6 +558,7 @@
     }
     if (previousTutorId && previousTutorId !== nextTutorId) {
       editorState.selectedNodeId = "";
+      editorState.originalNodeId = "";
       editorState.creating = false;
     }
     if (editorState.selectedNodeId && !editorState.busy &&
@@ -580,6 +584,7 @@
     var action = String(result.action || "save");
     if (action === "delete") {
       editorState.selectedNodeId = "";
+      editorState.originalNodeId = "";
       editorState.creating = false;
       if (!result.validation || result.validation.is_valid !== false) {
         dispatchAssistantTab("help");
@@ -588,8 +593,9 @@
       return;
     }
     editorState.selectedNodeId = String(result.nodeid || "");
+    editorState.originalNodeId = editorState.selectedNodeId;
     editorState.creating = false;
-    elements.nodeId.readOnly = true;
+    elements.nodeId.readOnly = false;
     elements.remove.hidden = false;
     elements.save.textContent = "Save node";
     setEditorStatus(result.message || "Workflow node saved.", false);

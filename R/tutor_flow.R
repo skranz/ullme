@@ -23,7 +23,8 @@ ullme_tutor_node_editor_ui = function() {
         type="text",
         autocomplete="off",
         spellcheck="false",
-        placeholder="new_node"
+        placeholder="new_node",
+        title="Renaming a node also updates start_node, next, and switch_to references."
       )
     ),
     tags$label(
@@ -77,12 +78,19 @@ ullme_clean_tutor_node_id = function(nodeid) {
 ullme_save_course_ai_tutor_node = function(tutorid, nodeid,
                                             action=c("save", "create", "delete"),
                                             yaml_content=NULL,
-                                            app=getApp()) {
+                                            app=getApp(),
+                                            original_nodeid=NULL) {
   restore.point("ullme_save_course_ai_tutor_node")
   if (!identical(app$role, "teacher")) stop("Only teachers can edit AI Tutors.")
   tutorid = ullme_clean_definition_id(tutorid)
   nodeid = ullme_clean_tutor_node_id(nodeid)
   action = match.arg(action)
+  original_nodeid = if (is.null(original_nodeid) ||
+      !nzchar(paste0(original_nodeid %||% "")[1])) {
+    nodeid
+  } else {
+    ullme_clean_tutor_node_id(original_nodeid)
+  }
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) stop("Select a course first.")
   path = ullme_existing_course_ai_tutor_path(course_dir, tutorid)
@@ -94,16 +102,16 @@ ullme_save_course_ai_tutor_node = function(tutorid, nodeid,
     stop("The course AI Tutor has no valid node mapping.")
   }
 
-  exists = nodeid %in% names(nodes)
+  exists = original_nodeid %in% names(nodes)
   if (identical(action, "create") && exists) {
     stop("A workflow node named '", nodeid, "' already exists.")
   }
   if (action %in% c("save", "delete") && !exists) {
-    stop("The workflow node '", nodeid, "' no longer exists.")
+    stop("The workflow node '", original_nodeid, "' no longer exists.")
   }
 
   if (identical(action, "delete")) {
-    nodes[[nodeid]] = NULL
+    nodes[[original_nodeid]] = NULL
   } else {
     parsed = ullme_parse_yaml_text(
       paste0(yaml_content %||% "", collapse="\n"),
@@ -113,6 +121,31 @@ ullme_save_course_ai_tutor_node = function(tutorid, nodeid,
     node = parsed$value
     if (!is.list(node) || is.null(names(node)) || !length(node)) {
       stop("Node YAML must be a non-empty YAML mapping.", call.=FALSE)
+    }
+    if (identical(action, "save") && !identical(nodeid, original_nodeid)) {
+      if (nodeid %in% names(nodes)) {
+        stop("A workflow node named '", nodeid, "' already exists.")
+      }
+      names(nodes)[match(original_nodeid, names(nodes))] = nodeid
+      if (identical(paste0(definition$start_node %||% "")[1], original_nodeid)) {
+        definition$start_node = nodeid
+      }
+      nodes = lapply(nodes, function(item) {
+        if (!is.list(item)) return(item)
+        if (identical(paste0(item[["next"]] %||% "")[1], original_nodeid)) {
+          item[["next"]] = nodeid
+        }
+        if (is.list(item$switch_to)) {
+          item$switch_to = lapply(item$switch_to, function(target) {
+            if (identical(paste0(target %||% "")[1], original_nodeid)) {
+              nodeid
+            } else {
+              target
+            }
+          })
+        }
+        item
+      })
     }
     nodes[[nodeid]] = node
   }
@@ -132,6 +165,7 @@ ullme_save_course_ai_tutor_node = function(tutorid, nodeid,
       kind="tutor_node",
       definitionid=tutorid,
       nodeid=nodeid,
+      original_nodeid=original_nodeid,
       action=action,
       source="course"
     ),
@@ -147,6 +181,7 @@ ullme_save_course_ai_tutor_node = function(tutorid, nodeid,
 
 ullme_handle_ai_tutor_node = function(tutorid=NULL, nodeid=NULL,
                                        action="save", yaml_content=NULL,
+                                       original_nodeid=NULL,
                                        app=getApp(), ...) {
   restore.point("ullme_handle_ai_tutor_node")
   result = tryCatch({
@@ -154,6 +189,7 @@ ullme_handle_ai_tutor_node = function(tutorid=NULL, nodeid=NULL,
       tutorid=tutorid,
       nodeid=nodeid,
       action=action,
+      original_nodeid=original_nodeid,
       yaml_content=yaml_content,
       app=app
     )

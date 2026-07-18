@@ -99,13 +99,27 @@ stopifnot(
     "review"
   )
 )
+renamed = ullme_save_course_ai_tutor_node(
+  "tutor1", "feedback", "save",
+  original_nodeid="review",
+  yaml_content="prompt: Review the draft.",
+  app=app
+)
+renamed_value = yaml::read_yaml(file.path(tutor_dir, "tutor.yml"))
+stopifnot(
+  renamed$ok,
+  isTRUE(renamed$validation$is_valid),
+  !"review" %in% names(renamed_value$nodes),
+  "feedback" %in% names(renamed_value$nodes),
+  identical(renamed_value$nodes$answer[["next"]], "feedback")
+)
 referenced_delete = ullme_save_course_ai_tutor_node(
-  "tutor1", "review", "delete", app=app
+  "tutor1", "feedback", "delete", app=app
 )
 stopifnot(
   referenced_delete$ok,
   !isTRUE(referenced_delete$validation$is_valid),
-  !"review" %in% names(
+  !"feedback" %in% names(
     yaml::read_yaml(file.path(tutor_dir, "tutor.yml"))$nodes
   )
 )
@@ -115,6 +129,28 @@ unlinked = ullme_save_course_ai_tutor_node(
 stopifnot(
   unlinked$ok,
   isTRUE(unlinked$validation$is_valid)
+)
+start_renamed = ullme_save_course_ai_tutor_node(
+  "tutor1", "entry", "save",
+  original_nodeid="answer",
+  yaml_content="prompt: '{{input}}'",
+  app=app
+)
+start_renamed_value = yaml::read_yaml(file.path(tutor_dir, "tutor.yml"))
+stopifnot(
+  start_renamed$ok,
+  isTRUE(start_renamed$validation$is_valid),
+  identical(start_renamed_value$start_node, "entry")
+)
+renamed_back = ullme_save_course_ai_tutor_node(
+  "tutor1", "answer", "save",
+  original_nodeid="entry",
+  yaml_content="prompt: '{{input}}'",
+  app=app
+)
+stopifnot(
+  renamed_back$ok,
+  isTRUE(renamed_back$validation$is_valid)
 )
 
 semantic_value = yaml::read_yaml(file.path(tutor_dir, "tutor.yml"))
