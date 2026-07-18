@@ -504,6 +504,8 @@ ullme_register_handlers = function(app=getApp()) {
   )
   eventHandler(eventId="ullme_test_suite_create_event", id=NULL,
                fun=ullme_handle_test_suite_create, app=app)
+  eventHandler(eventId="ullme_test_suite_delete_event", id=NULL,
+               fun=ullme_handle_test_suite_delete, app=app)
   eventHandler(eventId="ullme_test_suite_config_save_event", id=NULL,
                fun=ullme_handle_test_suite_config_save, app=app)
   eventHandler(eventId="ullme_test_suite_refresh_event", id=NULL,

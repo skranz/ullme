@@ -59,8 +59,6 @@ ullme_create_test_suite = function(suiteid, label, tutorid, app=getApp()) {
   if (!identical(app$role, "teacher")) stop("Only teachers can create Test Suites.")
   suiteid = ullme_clean_test_suite_id(suiteid)
   tutorid = ullme_clean_definition_id(tutorid)
-  label = trimws(paste0(label %||% suiteid)[1])
-  if (!nzchar(label)) label = suiteid
   course_dir = ullme_active_course_dir(app=app)
   if (is.null(course_dir)) stop("Select a course first.")
   target = ullme_test_suite_dir(course_dir, suiteid)
@@ -80,7 +78,7 @@ ullme_create_test_suite = function(suiteid, label, tutorid, app=getApp()) {
   }
   config = list(
     schema_version=1L,
-    suite=list(id=suiteid, label=label, source_tutor=tutorid),
+    suite=list(id=suiteid, source_tutor=tutorid),
     materials_dir="../../materials",
     run_base=FALSE,
     models=as.list(app$api_models %||% app$api_config$model %||% character(0)),
@@ -213,7 +211,7 @@ ullme_test_suite_record = function(test_dir) {
   )
   list(
     id=basename(test_dir),
-    label=paste0(config$suite$label %||% basename(test_dir))[1],
+    label=basename(test_dir),
     source_tutor=paste0(config$suite$source_tutor %||% "")[1],
     tutor=tutor,
     config=config_for_js,
@@ -245,7 +243,7 @@ ullme_save_test_suite_config = function(suiteid, fields, app=getApp()) {
   test_dir = ullme_active_test_suite_dir(suiteid, app=app)
   config = ullme_test_suite_read_config(test_dir)
   suite = config$suite %||% list(id=suiteid)
-  suite$label = trimws(paste0(fields$label %||% suite$label %||% suiteid)[1])
+  suite$label = NULL
   models = trimws(paste0(unlist(fields$models %||% list(), use.names=FALSE)))
   models = unique(models[nzchar(models)])
   if (!length(models)) stop("Select at least one model.")
@@ -268,6 +266,22 @@ ullme_save_test_suite_config = function(suiteid, fields, app=getApp()) {
     app=app
   ), app=app)
   if (!isTRUE(result$ok)) stop(result$message %||% "Could not save Test Suite settings.")
+  invisible(result)
+}
+
+
+ullme_delete_test_suite = function(suiteid, app=getApp()) {
+  test_dir = ullme_active_test_suite_dir(suiteid, app=app)
+  status = ullme_test_suite_status(test_dir)
+  if (status$state %in% c("starting", "running")) {
+    stop("Stop the active Test Suite run before deleting the suite.")
+  }
+  result = ullme_submit_change(ullme_new_change(
+    action="test_suite_delete", summary=paste0("Delete Test Suite ", suiteid),
+    origin="ui", details=list(kind="test_suite", suiteid=suiteid),
+    changes=list(ullme_change_delete(test_dir)), app=app
+  ), app=app)
+  if (!isTRUE(result$ok)) stop(result$message %||% "Could not delete the Test Suite.")
   invisible(result)
 }
 
@@ -591,14 +605,6 @@ ullme_test_suites_ui = function(app=getApp()) {
     `data-course-panel`="tests",
     tags$div(
       class="ullme-panel-inner ullme-tests-shell",
-      tags$div(
-        class="ullme-section-heading",
-        tags$div(
-          tags$div(class="ullme-eyebrow", "Quality assurance"),
-          tags$h2("Test Suites"),
-          tags$p("Run reproducible inputs and Tutor variants across one or more models.")
-        )
-      ),
       tags$div(id="ullme_tests_workspace")
     ),
     tags$input(
@@ -656,6 +662,20 @@ ullme_handle_test_suite_create = function(suiteid=NULL, label=NULL, tutorid=NULL
     ullme_send_course_state(app=app)
     list(ok=TRUE, suiteid=suiteid, message="Test Suite created.")
   }, error=function(error) list(ok=FALSE, message=conditionMessage(error)))
+  callJS(.fun="window.ullmeTests.actionComplete", .args=list(result), .app=app)
+  invisible(result)
+}
+
+
+ullme_handle_test_suite_delete = function(suiteid=NULL, app=getApp(), ...) {
+  result = tryCatch({
+    ullme_delete_test_suite(suiteid, app=app)
+    ullme_send_course_state(app=app)
+    list(ok=TRUE, kind="suite_delete", suiteid=suiteid,
+         message="Test Suite deleted.")
+  }, error=function(error) list(
+    ok=FALSE, kind="suite_delete", message=conditionMessage(error)
+  ))
   callJS(.fun="window.ullmeTests.actionComplete", .args=list(result), .app=app)
   invisible(result)
 }

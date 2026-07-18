@@ -58,7 +58,7 @@ stopifnot(
 record = ullme_test_suite_record(test_dir)
 stopifnot(
   identical(record$id, "suite1"),
-  identical(record$label, "Demo suite"),
+  identical(record$label, "suite1"),
   length(record$instances) == 1L,
   length(record$variants) == 1L,
   length(record$inputs) == 1L,
@@ -92,6 +92,7 @@ stopifnot(
   grepl('id="ullme_tests_workspace"', ui_html, fixed=TRUE),
   grepl('id="ullme_test_input_upload"', ui_html, fixed=TRUE),
   grepl('id="ullme_test_variant_node_yaml"', node_ui_html, fixed=TRUE),
+  !grepl("Quality assurance", ui_html, fixed=TRUE),
   grepl('data-studio-view="tests"', nav_html, fixed=TRUE),
   grepl("New Test Suite", nav_html, fixed=TRUE)
 )
@@ -161,5 +162,11 @@ stopifnot(inherits(
   try(ullme_test_suite_result_payload("suite1", "../bad", app=new.env()), silent=TRUE),
   "try-error"
 ))
+
+delete_dir = file.path(course_dir, "tests", "delete_me")
+dir.create(delete_dir, recursive=TRUE)
+writeLines("schema_version: 1", file.path(delete_dir, "tests.yml"))
+ullme_delete_test_suite("delete_me", app=app)
+stopifnot(!dir.exists(delete_dir))
 
 cat("Test Suite backend checks passed.\n")

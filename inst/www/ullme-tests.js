@@ -5,7 +5,8 @@
     suites: [], tutors: [], selectedSuiteId: "", tab: "inputs",
     pollTimer: null, pendingUpload: false, pendingImageFiles: [],
     pendingImageTarget: null, results: null, courseid: "",
-    selectedVariantId: "", variantMode: "nodes", variantNode: null
+    selectedVariantId: "", variantMode: "nodes", variantNode: null,
+    hasRendered: false
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -65,8 +66,29 @@
     return [String(value)];
   }
 
+  function renderSignature(suites) {
+    var suite = (suites || []).find(function (item) {
+      return item.id === state.selectedSuiteId;
+    }) || null;
+    var view = null;
+    if (suite && state.tab === "inputs") {
+      view = { instances: suite.instances, inputs: suite.inputs };
+    } else if (suite && state.tab === "variants") {
+      view = { tutor: suite.tutor, variants: suite.variants };
+    } else if (suite && state.tab === "settings") {
+      view = { source_tutor: suite.source_tutor, config: suite.config };
+    } else if (suite) {
+      view = suite;
+    }
+    return JSON.stringify({
+      ids: (suites || []).map(function (item) { return item.id; }),
+      selected: state.selectedSuiteId, tab: state.tab, view: view
+    });
+  }
+
   function update(suites, tutors) {
     suites = Array.isArray(suites) ? suites : [];
+    var previousSignature = renderSignature(state.suites);
     var courseid = suites.length ? (suites[0].courseid || "") : "";
     if (state.courseid && courseid !== state.courseid) {
       state.selectedSuiteId = "";
@@ -81,13 +103,15 @@
       state.results = null;
       state.selectedVariantId = "";
     }
-    render();
+    var nextSignature = renderSignature(state.suites);
+    if (!state.hasRendered || previousSignature !== nextSignature) render();
     updatePolling();
   }
 
   function render() {
     var root = byId("ullme_tests_workspace");
     if (!root) return;
+    state.hasRendered = true;
     root.innerHTML = "";
     if (!state.suites.length) {
       var empty = element("div", "ullme-tests-empty");
@@ -99,12 +123,13 @@
     }
 
     var toolbar = element("div", "ullme-tests-toolbar");
+    toolbar.appendChild(element("span", "ullme-tests-toolbar-label", "Test Suite:"));
     var select = document.createElement("select");
     select.setAttribute("aria-label", "Test Suite");
     state.suites.forEach(function (suite) {
       var option = document.createElement("option");
       option.value = suite.id;
-      option.textContent = suite.label || suite.id;
+      option.textContent = suite.id;
       option.selected = suite.id === state.selectedSuiteId;
       select.appendChild(option);
     });
@@ -115,6 +140,11 @@
     });
     toolbar.appendChild(select);
     toolbar.appendChild(button("New suite", "ullme-secondary-action", openCreateDialog));
+    toolbar.appendChild(button("Delete", "ullme-secondary-action ullme-tests-delete-suite", function () {
+      var suite = selectedSuite();
+      if (!suite || !window.confirm("Delete Test Suite '" + suite.id + "' and all of its inputs, variants, runs, and results?")) return;
+      sendEvent("ullme_test_suite_delete_event", { suiteid: suite.id });
+    }));
     root.appendChild(toolbar);
 
     var tabs = element("div", "ullme-tests-tabs");
@@ -430,7 +460,6 @@
   function renderSettings(root, suite) {
     var config = suite.config || {};
     var form = element("div", "ullme-tests-settings");
-    var label = field("Suite label", suite.label || suite.id);
     var models = field("Models (one per line)", listValue(config.models).join("\n"), "textarea");
     models.input.rows = 4;
     var api = field("API provider", config.api || "nvidia");
@@ -440,13 +469,12 @@
     var prompts = checkbox("Store full prompts in results", config.add_full_prompts_in_results);
     var nodes = checkbox("Store results by workflow node", config.results_by_node !== false);
     form.appendChild(element("p", "ullme-tests-source", "Based on AI Tutor: " + (suite.source_tutor || "unknown")));
-    [label.wrap, models.wrap, api.wrap, batch.wrap, timeout.wrap,
+    [models.wrap, api.wrap, batch.wrap, timeout.wrap,
       runBase.wrap, prompts.wrap, nodes.wrap].forEach(function (item) { form.appendChild(item); });
     form.appendChild(button("Save settings", "ullme-primary-action", function () {
       sendEvent("ullme_test_suite_config_save_event", {
         suiteid: suite.id,
         fields: {
-          label: label.input.value.trim(),
           models: models.input.value.split(/[\n,]+/).map(function (x) { return x.trim(); }).filter(Boolean),
           api: api.input.value.trim(), batch_size: Number(batch.input.value),
           timeout_seconds: Number(timeout.input.value), run_base: runBase.input.checked,
@@ -583,7 +611,7 @@
     dialog.setAttribute("role", "dialog"); dialog.setAttribute("aria-modal", "true");
     dialog.appendChild(element("div", "ullme-dialog-title", "New Test Suite"));
     dialog.appendChild(element("p", "", "The suite starts as a reproducible snapshot of a course AI Tutor."));
-    var id = field("Suite ID", "tests1"); var label = field("Label", "Tutor tests");
+    var id = field("Suite ID", "tests1");
     var tutorWrap = element("label", "ullme-tests-field");
     tutorWrap.appendChild(element("span", "ullme-tests-field-label", "AI Tutor"));
     var tutor = document.createElement("select");
@@ -592,12 +620,12 @@
       option.textContent = item.label || item.tutorid; tutor.appendChild(option);
     });
     tutorWrap.appendChild(tutor);
-    dialog.appendChild(id.wrap); dialog.appendChild(label.wrap); dialog.appendChild(tutorWrap);
+    dialog.appendChild(id.wrap); dialog.appendChild(tutorWrap);
     var actions = element("div", "ullme-dialog-actions");
     actions.appendChild(button("Cancel", "ullme-secondary-action", closeDialog));
     actions.appendChild(button("Create suite", "ullme-primary-action", function () {
       sendEvent("ullme_test_suite_create_event", {
-        suiteid: id.input.value.trim(), label: label.input.value.trim(), tutorid: tutor.value
+        suiteid: id.input.value.trim(), tutorid: tutor.value
       });
     }));
     dialog.appendChild(actions); overlay.appendChild(dialog); document.body.appendChild(overlay); id.input.focus();
@@ -625,7 +653,14 @@
       window.alert((result && result.message) || "The Test Suite action failed.");
       return;
     }
-    if (result.suiteid) { state.selectedSuiteId = result.suiteid; closeDialog(); }
+    if (result.suiteid && result.kind !== "suite_delete") {
+      state.selectedSuiteId = result.suiteid; closeDialog();
+    }
+    if (result.kind === "suite_delete") {
+      state.results = null;
+      state.selectedVariantId = "";
+      hideVariantNodeEditor();
+    }
     if (result.kind === "variant" && result.variantid) {
       state.selectedVariantId = result.variantid;
       state.variantMode = "nodes";
