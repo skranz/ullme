@@ -349,8 +349,9 @@
       card.type = "button";
       if (variant.id === state.selectedVariantId) card.classList.add("ullme-tests-list-item-active");
       card.appendChild(element("strong", "", variant.label || variant.id));
-      card.appendChild(element("code", "", variant.id + " · " +
-        (variant.modified_nodes || []).length + " changed node(s)"));
+      card.appendChild(element("code", "", variant.base
+        ? "base · always tested"
+        : variant.id + " · " + (variant.modified_nodes || []).length + " changed node(s)"));
       card.addEventListener("click", function () {
         state.selectedVariantId = variant.id; state.variantMode = "nodes"; render();
       });
@@ -367,7 +368,7 @@
     editor.innerHTML = "";
     var head = element("div", "ullme-tests-variant-head");
     head.appendChild(element("h3", "", variant ? (variant.label || variant.id) : "New variant"));
-    if (variant) {
+    if (variant && !variant.base) {
       var modes = element("div", "ullme-tests-mode-tabs");
       [["nodes", "Nodes"], ["yaml", "YAML"]].forEach(function (item) {
         modes.appendChild(button(item[1], "ullme-tests-mode-tab" +
@@ -375,9 +376,22 @@
           state.variantMode = item[0]; render();
         }));
       });
+      modes.appendChild(button("Delete variant", "ullme-secondary-action ullme-tests-delete-variant", function () {
+        if (!window.confirm("Delete variant '" + variant.id + "'? Existing results remain unchanged.")) return;
+        hideVariantNodeEditor();
+        beginBusy("Deleting variant " + variant.id);
+        sendEvent("ullme_test_suite_variant_delete_event", {
+          suiteid: suite.id, variantid: variant.id
+        });
+      }));
       head.appendChild(modes);
     }
     editor.appendChild(head);
+    if (variant && variant.base) {
+      editor.appendChild(element("p", "ullme-tests-hint",
+        "This is the exact tutor.yml snapshot. It is read-only and always included in every test run."));
+      return;
+    }
     if (variant && state.variantMode === "nodes") {
       editor.appendChild(element("p", "ullme-tests-hint ullme-tests-variant-hint",
         "Grey nodes use the base Tutor. Colored nodes contain variant overrides. Click a node to edit it on the right."));
@@ -503,19 +517,18 @@
     var api = field("API provider", config.api || "nvidia");
     var batch = field("Batch size", config.batch_size || 1, "number");
     var timeout = field("Timeout per wave (seconds)", config.timeout_seconds || 600, "number");
-    var runBase = checkbox("Run the unmodified Tutor snapshot", config.run_base);
     var prompts = checkbox("Store full prompts in results", config.add_full_prompts_in_results);
     var nodes = checkbox("Store results by workflow node", config.results_by_node !== false);
     form.appendChild(element("p", "ullme-tests-source", "Based on AI Tutor: " + (suite.source_tutor || "unknown")));
     [models.wrap, api.wrap, batch.wrap, timeout.wrap,
-      runBase.wrap, prompts.wrap, nodes.wrap].forEach(function (item) { form.appendChild(item); });
+      prompts.wrap, nodes.wrap].forEach(function (item) { form.appendChild(item); });
     form.appendChild(button("Save settings", "ullme-primary-action", function () {
       sendEvent("ullme_test_suite_config_save_event", {
         suiteid: suite.id,
         fields: {
           models: models.input.value.split(/[\n,]+/).map(function (x) { return x.trim(); }).filter(Boolean),
           api: api.input.value.trim(), batch_size: Number(batch.input.value),
-          timeout_seconds: Number(timeout.input.value), run_base: runBase.input.checked,
+          timeout_seconds: Number(timeout.input.value),
           add_full_prompts_in_results: prompts.input.checked,
           results_by_node: nodes.input.checked
         }
@@ -538,6 +551,10 @@
     (suite.variants || []).forEach(function (variant) {
       var item = checkbox(variant.label || variant.id, true);
       item.input.value = variant.id;
+      if (variant.base) {
+        item.input.disabled = true;
+        item.wrap.title = "The base Tutor is always tested.";
+      }
       variantBox.appendChild(item.wrap);
     });
     top.appendChild(variantBox);
@@ -549,7 +566,7 @@
       );
       sendEvent("ullme_test_suite_run_event", { suiteid: suite.id, variants: variants });
     });
-    run.disabled = running || !(suite.inputs || []).length || !(suite.variants || []).length;
+    run.disabled = running || !(suite.inputs || []).length;
     top.appendChild(run);
     if (status.error) top.appendChild(element("div", "ullme-tests-error", status.error));
     if ((status.messages || []).length) {
@@ -700,6 +717,11 @@
       state.results = null;
       state.selectedVariantId = "";
       hideVariantNodeEditor();
+    }
+    if (result.kind === "variant_delete") {
+      state.selectedVariantId = "base";
+      hideVariantNodeEditor();
+      render();
     }
     if (result.kind === "variant" && result.variantid) {
       state.selectedVariantId = result.variantid;

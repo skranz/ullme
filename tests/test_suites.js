@@ -65,7 +65,7 @@ window.ullmeTests.update([{
   config: { models: ["fake"], api: "fake" },
   tutor: { start_node: "answer", nodes: { answer: { prompt: "Answer" } } },
   instances: [{ instanceid: "week1", label: "Week 1" }],
-  inputs: [], variants: [{ id: "baseline", label: "Baseline", yaml_content: "" }],
+  inputs: [], variants: [{ id: "base", label: "Base Tutor", base: true, yaml_content: "" }],
   runs: [], status: { state: "idle", messages: [] }
 }], [{ tutorid: "demo", label: "Demo" }]);
 assert(workspace.children.length >= 3);
@@ -76,7 +76,7 @@ window.ullmeTests.update([{
   config: { models: ["fake"], api: "fake" },
   tutor: { start_node: "answer", nodes: { answer: { prompt: "Answer" } } },
   instances: [{ instanceid: "week1", label: "Week 1" }],
-  inputs: [], variants: [{ id: "baseline", label: "Baseline", yaml_content: "" }],
+  inputs: [], variants: [{ id: "base", label: "Base Tutor", base: true, yaml_content: "" }],
   runs: [], status: { state: "idle", messages: [] }
 }], [{ tutorid: "demo", label: "Demo" }]);
 assert.strictEqual(workspace.children.length, stableChildCount);
@@ -88,7 +88,7 @@ window.ullmeTests.update([{
   config: { models: ["fake"], api: "fake" },
   tutor: { start_node: "answer", nodes: { answer: { prompt: "Answer" } } },
   instances: [{ instanceid: "week1", label: "Week 1" }], inputs: [],
-  variants: [{ id: "baseline", label: "Baseline", yaml_content: "" }],
+  variants: [{ id: "base", label: "Base Tutor", base: true, yaml_content: "" }],
   runs: [], status: { state: "running", messages: ["Polling update"] }
 }], [{ tutorid: "demo", label: "Demo" }]);
 assert.strictEqual(createdNodes, variantRenderNodeCount, "status polling must not redraw the variant diagram");

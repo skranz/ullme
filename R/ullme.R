@@ -512,6 +512,8 @@ ullme_register_handlers = function(app=getApp()) {
                fun=ullme_handle_test_suite_refresh, app=app)
   eventHandler(eventId="ullme_test_suite_variant_save_event", id=NULL,
                fun=ullme_handle_test_suite_variant_save, app=app)
+  eventHandler(eventId="ullme_test_suite_variant_delete_event", id=NULL,
+               fun=ullme_handle_test_suite_variant_delete, app=app)
   eventHandler(eventId="ullme_test_suite_variant_node_save_event", id=NULL,
                fun=ullme_handle_test_suite_variant_node_save, app=app)
   eventHandler(eventId="ullme_test_suite_input_save_event", id=NULL,
@@ -2021,6 +2023,11 @@ ullme_init_app = function(session=NULL, app=getApp()) {
     ullme_init_student_app(session=session, app=app)
     ullme_refresh_model_catalog(app=app)
   } else {
+    if (!is.null(session) && is.function(session$onSessionEnded)) {
+      session$onSessionEnded(function() {
+        ullme_stop_test_suite_processes(app=app)
+      })
+    }
     # Show the course and Tutor navigation before computing instance
     # suggestions, file matches, histories, and conversion metadata.
     ullme_send_course_shell_state(app=app)

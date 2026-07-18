@@ -61,25 +61,40 @@ stopifnot(
   identical(record$label, "suite1"),
   length(record$instances) == 1L,
   length(record$variants) == 1L,
+  identical(record$variants[[1]]$id, "base"),
+  isTRUE(record$variants[[1]]$base),
   length(record$inputs) == 1L,
   identical(record$inputs[[1]]$text, "Please explain the first step.")
 )
 
-# Node-mode editing stores only the selected node in the variant and can
+# The real base is protected, while node-mode editing stores only the selected
+# node in an ordinary variant and can
 # return it to the unchanged Tutor snapshot.
+stopifnot(inherits(try(
+  ullme_save_test_suite_variant("suite1", "base", "Base", "", app=app),
+  silent=TRUE
+), "try-error"))
+writeLines(c("test_variant:", "  label: Concise"),
+           file.path(test_dir, "tutor_var_concise.yml"))
 ullme_save_test_suite_variant_node(
-  "suite1", "baseline", "answer", "prompt: A variant-specific answer.", app=app
+  "suite1", "concise", "answer", "prompt: A variant-specific answer.", app=app
 )
 record = ullme_test_suite_record(test_dir)
 stopifnot(
-  identical(record$variants[[1]]$modified_nodes, list("answer")),
-  grepl("variant-specific", record$variants[[1]]$node_yaml$answer, fixed=TRUE)
+  length(record$variants) == 2L,
+  identical(record$variants[[2]]$modified_nodes, list("answer")),
+  grepl("variant-specific", record$variants[[2]]$node_yaml$answer, fixed=TRUE)
 )
 ullme_save_test_suite_variant_node(
-  "suite1", "baseline", "answer", action="revert", app=app
+  "suite1", "concise", "answer", action="revert", app=app
 )
 record = ullme_test_suite_record(test_dir)
-stopifnot(length(record$variants[[1]]$modified_nodes) == 0L)
+stopifnot(length(record$variants[[2]]$modified_nodes) == 0L)
+ullme_delete_test_suite_variant("suite1", "concise", app=app)
+stopifnot(!file.exists(file.path(test_dir, "tutor_var_concise.yml")))
+stopifnot(inherits(try(
+  ullme_delete_test_suite_variant("suite1", "base", app=app), silent=TRUE
+), "try-error"))
 
 ui = htmltools::renderTags(ullme_test_suites_ui())
 ui_html = paste(ui$head, ui$html, collapse="\n")
@@ -110,6 +125,21 @@ status_path = file.path(test_dir, ".ullme-run-status.yml")
 ullme_test_suite_write_status(status_path, "running", c("one", "two"))
 status = ullme_test_suite_status(test_dir)
 stopifnot(identical(status$state, "running"), length(status$messages) == 2L)
+
+# Closing a TeacherApp session explicitly terminates its supervised Test Suite
+# workers instead of leaving RStudio to wait on their process handles.
+killed = FALSE
+fake_process = list(
+  is_alive=function() TRUE,
+  kill=function() killed <<- TRUE
+)
+app$test_suite_processes = list(suite1=fake_process)
+stopifnot(identical(ullme_stop_test_suite_processes(app=app), 1L))
+stopifnot(
+  isTRUE(killed),
+  length(app$test_suite_processes) == 0L,
+  identical(ullme_test_suite_status(test_dir)$state, "error")
+)
 
 # The GUI contract remains a thin layer around the canonical runner.
 records = ullme_run_tests(test_dir)

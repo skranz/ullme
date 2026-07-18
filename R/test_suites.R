@@ -80,7 +80,7 @@ ullme_create_test_suite = function(suiteid, label, tutorid, app=getApp()) {
     schema_version=1L,
     suite=list(id=suiteid, source_tutor=tutorid),
     materials_dir="../../materials",
-    run_base=FALSE,
+    run_base=TRUE,
     models=as.list(app$api_models %||% app$api_config$model %||% character(0)),
     api=paste0(app$api_config$provider %||% "nvidia")[1],
     api_key_file=app$api_config$api_key_file %||% NULL,
@@ -93,11 +93,7 @@ ullme_create_test_suite = function(suiteid, label, tutorid, app=getApp()) {
   changes = list(
     ullme_change_write(file.path(target, "tutor.yml"), tutor_content),
     ullme_change_write(file.path(target, "instances.yml"), instances_content),
-    ullme_change_write(file.path(target, "tests.yml"), ullme_test_suite_yaml(config)),
-    ullme_change_write(
-      file.path(target, "tutor_var_baseline.yml"),
-      ullme_test_suite_yaml(list(test_variant=list(label="Baseline snapshot")))
-    )
+    ullme_change_write(file.path(target, "tests.yml"), ullme_test_suite_yaml(config))
   )
   result = ullme_submit_change(ullme_new_change(
     action="test_suite_create",
@@ -115,21 +111,32 @@ ullme_create_test_suite = function(suiteid, label, tutorid, app=getApp()) {
 ullme_test_suite_variant_records = function(test_dir) {
   paths = list.files(test_dir, "^tutor_var_.+[.]ya?ml$", full.names=TRUE,
                      ignore.case=TRUE, no..=TRUE)
-  lapply(sort(paths), function(path) {
+  records = lapply(sort(paths), function(path) {
     value = tryCatch(yaml::read_yaml(path, eval.expr=FALSE), error=function(error) list())
+    id = sub("[.]ya?ml$", "", sub("^tutor_var_", "", basename(path)), ignore.case=TRUE)
+    # Older TeacherApp versions created an empty, editable "baseline" file.
+    # Hide only that untouched placeholder; retain it as a normal variant once
+    # it contains actual overrides so no existing work is lost.
+    if (identical(tolower(id), "baseline") &&
+        !length(setdiff(names(value), "test_variant"))) return(NULL)
     metadata = value$test_variant %||% list()
     modified_nodes = names(value$nodes %||% list())
     node_yaml = lapply(value$nodes %||% list(), function(node) {
       trimws(yaml::as.yaml(node, unicode=TRUE))
     })
     list(
-      id=sub("[.]ya?ml$", "", sub("^tutor_var_", "", basename(path)), ignore.case=TRUE),
+      id=id,
       label=paste0(metadata$label %||% basename(path))[1],
+      base=FALSE,
       yaml_content=paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n"),
       modified_nodes=as.list(modified_nodes),
       node_yaml=node_yaml
     )
   })
+  c(list(list(
+    id="base", label="Base Tutor", base=TRUE, yaml_content="",
+    modified_nodes=list(), node_yaml=list()
+  )), Filter(Negate(is.null), records))
 }
 
 
@@ -256,7 +263,8 @@ ullme_save_test_suite_config = function(suiteid, fields, app=getApp()) {
   config$api = paste0(fields$api %||% config$api %||% "nvidia")[1]
   config$batch_size = batch_size
   config$timeout_seconds = timeout
-  config$run_base = isTRUE(fields$run_base)
+  # A Test Suite always exercises the exact Tutor snapshot as its base case.
+  config$run_base = TRUE
   config$add_full_prompts_in_results = isTRUE(fields$add_full_prompts_in_results)
   config$results_by_node = isTRUE(fields$results_by_node)
   result = ullme_submit_change(ullme_new_change(
@@ -318,6 +326,7 @@ ullme_save_test_suite_variant = function(suiteid, variantid, label, yaml_content
                                           app=getApp()) {
   test_dir = ullme_active_test_suite_dir(suiteid, app=app)
   variantid = ullme_clean_test_input_id(variantid, "Variant")
+  if (tolower(variantid) == "base") stop("The base Tutor variant cannot be modified.")
   value = ullme_tests_read_yaml_text(paste0(yaml_content %||% "", collapse="\n"), "Variant YAML")
   value$test_variant = list(label=trimws(paste0(label %||% variantid)[1]))
   base = ullme_tests_read_yaml(file.path(test_dir, "tutor.yml"), "tutor.yml")
@@ -347,10 +356,13 @@ ullme_save_test_suite_variant_node = function(suiteid, variantid, nodeid,
                                                app=getApp()) {
   test_dir = ullme_active_test_suite_dir(suiteid, app=app)
   variantid = ullme_clean_test_input_id(variantid, "Variant")
+  if (tolower(variantid) == "base") stop("The base Tutor variant cannot be modified.")
   nodeid = ullme_clean_tutor_node_id(nodeid)
   action = match.arg(action)
-  path = file.path(test_dir, paste0("tutor_var_", variantid, ".yml"))
-  if (!file.exists(path)) stop("The selected Tutor variant does not exist.")
+  candidates = file.path(test_dir, paste0("tutor_var_", variantid, c(".yml", ".yaml")))
+  existing = candidates[file.exists(candidates)]
+  if (!length(existing)) stop("The selected Tutor variant does not exist.")
+  path = existing[[1]]
   value = ullme_tests_read_yaml(path, basename(path))
   nodes = value$nodes %||% list()
   if (!is.list(nodes)) nodes = list()
@@ -393,6 +405,26 @@ ullme_save_test_suite_variant_node = function(suiteid, variantid, nodeid,
 }
 
 
+ullme_delete_test_suite_variant = function(suiteid, variantid, app=getApp()) {
+  test_dir = ullme_active_test_suite_dir(suiteid, app=app)
+  variantid = ullme_clean_test_input_id(variantid, "Variant")
+  if (tolower(variantid) == "base") stop("The base Tutor variant cannot be deleted.")
+  candidates = file.path(test_dir, paste0("tutor_var_", variantid, c(".yml", ".yaml")))
+  existing = candidates[file.exists(candidates)]
+  if (!length(existing)) stop("The selected Tutor variant does not exist.")
+  path = existing[[1]]
+  result = ullme_submit_change(ullme_new_change(
+    action="test_suite_variant_delete",
+    summary=paste0("Delete Test Suite variant ", variantid),
+    origin="ui",
+    details=list(kind="test_variant", suiteid=suiteid, variantid=variantid),
+    changes=list(ullme_change_delete(path)), app=app
+  ), app=app)
+  if (!isTRUE(result$ok)) stop(result$message %||% "Could not delete the variant.")
+  invisible(result)
+}
+
+
 ullme_tests_read_yaml_text = function(content, label="YAML") {
   value = tryCatch(yaml::yaml.load(content, eval.expr=FALSE), error=function(error) {
     stop(label, " is invalid: ", conditionMessage(error), call.=FALSE)
@@ -428,6 +460,11 @@ ullme_test_suite_preflight = function(test_dir, options=list()) {
   opts = ullme_tests_default_options()
   opts[names(config)] = config
   opts[names(options)] = options
+  opts$run_base = TRUE
+  if (is.null(opts$just_variants)) {
+    visible = ullme_test_suite_variant_records(test_dir)
+    opts$just_variants = as.list(vapply(visible, `[[`, character(1), "id"))
+  }
   base = ullme_tests_read_yaml(file.path(test_dir, "tutor.yml"), "tutor.yml")
   raw_instances = ullme_tests_read_yaml(file.path(test_dir, "instances.yml"), "instances.yml")
   instance_data = list(instances=lapply(raw_instances$instances %||% list(), function(instance) list(
@@ -556,6 +593,32 @@ ullme_start_test_suite_run = function(suiteid, options=list(), app=getApp()) {
   processes[[suiteid]] = process
   app$test_suite_processes = processes
   preflight
+}
+
+
+ullme_stop_test_suite_processes = function(app=getApp()) {
+  processes = app$test_suite_processes %||% list()
+  for (suiteid in names(processes)) {
+    process = processes[[suiteid]]
+    alive = isTRUE(tryCatch(process$is_alive(), error=function(error) FALSE))
+    if (!alive) next
+    try(process$kill(), silent=TRUE)
+    test_dir = tryCatch(
+      ullme_active_test_suite_dir(suiteid, app=app),
+      error=function(error) NULL
+    )
+    if (!is.null(test_dir)) {
+      status = ullme_test_suite_status(test_dir)
+      try(ullme_test_suite_write_status(
+        file.path(test_dir, ".ullme-run-status.yml"), "error",
+        status$messages %||% list(),
+        error="The test run stopped because the TeacherApp session ended.",
+        result_dir=status$result_dir %||% ""
+      ), silent=TRUE)
+    }
+  }
+  app$test_suite_processes = list()
+  invisible(length(processes))
 }
 
 
@@ -717,6 +780,21 @@ ullme_handle_test_suite_variant_save = function(suiteid=NULL, variantid=NULL,
 }
 
 
+ullme_handle_test_suite_variant_delete = function(suiteid=NULL, variantid=NULL,
+                                                    app=getApp(), ...) {
+  result = tryCatch({
+    ullme_delete_test_suite_variant(suiteid, variantid, app=app)
+    ullme_send_test_suite_state(app=app)
+    list(ok=TRUE, kind="variant_delete", suiteid=suiteid, variantid=variantid,
+         message="Variant deleted.")
+  }, error=function(error) list(
+    ok=FALSE, kind="variant_delete", message=conditionMessage(error)
+  ))
+  callJS(.fun="window.ullmeTests.actionComplete", .args=list(result), .app=app)
+  invisible(result)
+}
+
+
 ullme_handle_test_suite_variant_node_save = function(
     suiteid=NULL, variantid=NULL, nodeid=NULL, yaml_content="", action="save",
     app=getApp(), ...) {
@@ -809,12 +887,8 @@ ullme_handle_test_suite_run = function(suiteid=NULL, variants=NULL, app=getApp()
   result = tryCatch({
     selected = paste0(unlist(variants %||% list(), use.names=FALSE))
     test_dir = ullme_active_test_suite_dir(suiteid, app=app)
-    run_base = isTRUE(ullme_test_suite_read_config(test_dir)$run_base)
-    if (!length(selected) && !run_base) stop("Select at least one Tutor variant.")
-    if (run_base) {
-      selected = c("base", selected)
-    }
-    options = if (length(selected)) list(just_variants=as.list(selected)) else list()
+    selected = unique(c("base", selected[selected != "base"]))
+    options = list(run_base=TRUE, just_variants=as.list(selected))
     preflight = ullme_start_test_suite_run(suiteid, options=options, app=app)
     ullme_send_test_suite_state(app=app)
     list(ok=TRUE, message=paste0("Started ", preflight$case_count, " test case(s)."))
