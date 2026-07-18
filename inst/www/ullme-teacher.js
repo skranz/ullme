@@ -2398,7 +2398,7 @@
 
   function receiveAssistantStream(messageId, text, html, thinking,
                                   thinkingHtml, done, error, activity,
-                                  waitingForUser) {
+                                  waitingForUser, renderMath) {
     if (state.cancelledAssistantRequests[messageId]) return;
     var messages = byId("ullme_chat_messages");
     var previousScrollTop = messages ? messages.scrollTop : 0;
@@ -2477,6 +2477,10 @@
     }
     if (done && bubble && !bubble.querySelector(".ullme-message-actions")) {
       bubble.appendChild(renderAssistantActions(messageId, text || ""));
+    }
+    if (renderMath && !done) {
+      typesetMath(messageText);
+      typesetMath(thinkingTextElement);
     }
     if (done) {
       state.chatBusy = false;

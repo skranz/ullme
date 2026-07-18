@@ -1,12 +1,14 @@
 const assert = require("assert");
 const fields = require("../inst/www/ullme-node-fields.js");
 
-function option(path, template, nestedTemplate = "") {
+function option(path, template, nestedTemplate = "", kind = "field", insert = "") {
   return {
     value: path,
     getAttribute(name) {
       if (name === "data-template") return template;
       if (name === "data-nested-template") return nestedTemplate;
+      if (name === "data-kind") return kind;
+      if (name === "data-insert") return insert;
       return "";
     }
   };
@@ -29,5 +31,14 @@ result = fields.insertField(
 assert.strictEqual(result.ok, true);
 assert.match(result.value, /switch_to:\n  ok: answer\n  DEFAULT: next_node/);
 assert.strictEqual((result.value.match(/^switch_to:/gm) || []).length, 1);
+
+result = fields.insertPlaceholder(
+  "prompt: Ask  now.",
+  option("placeholder.hist", "", "", "placeholder", "{{hist}}"),
+  12, 12
+);
+assert.strictEqual(result.ok, true);
+assert.strictEqual(result.value, "prompt: Ask {{hist}} now.");
+assert.strictEqual(result.cursor, 20);
 
 console.log("Node field insertion checks passed.");

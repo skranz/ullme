@@ -85,6 +85,22 @@
     return { ok: true, value: updated, message: "Added " + path + "." };
   }
 
+  function insertPlaceholder(text, option, selectionStart, selectionEnd) {
+    var token = String(option && option.getAttribute("data-insert") || "");
+    if (!token) return { ok: false, message: "Choose a placeholder first." };
+    text = String(text || "");
+    var start = Number.isInteger(selectionStart) ? selectionStart : text.length;
+    var end = Number.isInteger(selectionEnd) ? selectionEnd : start;
+    start = Math.max(0, Math.min(text.length, start));
+    end = Math.max(start, Math.min(text.length, end));
+    return {
+      ok: true,
+      value: text.slice(0, start) + token + text.slice(end),
+      cursor: start + token.length,
+      message: "Inserted " + token + "."
+    };
+  }
+
   function bind(config) {
     config = config || {};
     var select = config.select;
@@ -98,11 +114,15 @@
       var description = option.getAttribute("title") || "";
       select.title = description;
       if (help) help.title = description;
-      var result = insertField(textarea.value, option);
+      var kind = option.getAttribute("data-kind") || "field";
+      var result = kind === "placeholder"
+        ? insertPlaceholder(textarea.value, option, textarea.selectionStart, textarea.selectionEnd)
+        : insertField(textarea.value, option);
       if (result.ok) {
         textarea.value = result.value;
         textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        var cursor = Number.isInteger(result.cursor) ? result.cursor : textarea.value.length;
+        textarea.setSelectionRange(cursor, cursor);
       }
       if (typeof config.onStatus === "function") {
         config.onStatus(result.message, Boolean(result.duplicate));
@@ -111,6 +131,9 @@
     });
   }
 
-  root.ullmeNodeFields = { bind: bind, insertField: insertField, hasPath: hasPath };
+  root.ullmeNodeFields = {
+    bind: bind, insertField: insertField,
+    insertPlaceholder: insertPlaceholder, hasPath: hasPath
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = root.ullmeNodeFields;
 })(typeof window !== "undefined" ? window : globalThis);

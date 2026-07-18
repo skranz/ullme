@@ -14,6 +14,20 @@ groups:
         short: Text shown while the model works
         long: A brief progress message displayed to the student while this node is waiting for the model response.
         template: 'waiting_message: Thinking…'
+      - path: show_before
+        label: show_before
+        short: Append text before the model call
+        long: Renders and permanently appends this text to the student response immediately before this node calls the model. Unlike waiting_message, it remains visible.
+        template: |-
+          show_before: |
+            I will first examine this step.
+      - path: show_after
+        label: show_after
+        short: Append text after the model call
+        long: Renders and permanently appends this text after the model answers. Use {{output}} for this node's returned output.
+        template: |-
+          show_after: |
+            {{output}}
       - path: n_retries
         label: n_retries
         short: Retry failed model calls
@@ -93,3 +107,42 @@ groups:
         short: Temporarily bypass this node
         long: When true, the node does not call the model and follows its configured next or switch route.
         template: 'skip: true'
+  placeholders:
+    label: Runtime placeholders
+    fields:
+      - path: placeholder.input
+        kind: placeholder
+        label: '{{input}}'
+        short: Current student input
+        long: The text submitted by the student for the current workflow turn.
+        insert: '{{input}}'
+      - path: placeholder.output
+        kind: placeholder
+        label: '{{output}}'
+        short: Most recent node output
+        long: The model output from the immediately preceding completed workflow node, or the current node inside show_after.
+        insert: '{{output}}'
+      - path: placeholder.output_node
+        kind: placeholder
+        label: '{{output.node_id}}'
+        short: Output of a named node
+        long: The stored model output of a specific completed node. Replace node_id with its ID; when unavailable, the runtime inserts an explanatory fallback and writes a warning to the R console.
+        insert: '{{output.node_id}}'
+      - path: placeholder.hist
+        kind: placeholder
+        label: '{{hist}}'
+        short: Conversation and workflow history
+        long: The conversation so far plus internal outputs from nodes whose add_to_history setting is enabled.
+        insert: '{{hist}}'
+      - path: placeholder.hist_or_init_prompt
+        kind: placeholder
+        label: '{{hist_or_init_prompt}}'
+        short: History, otherwise initial prompt
+        long: Uses the conversation and workflow history when available; otherwise uses the rendered init_prompt fragment.
+        insert: '{{hist_or_init_prompt}}'
+      - path: placeholder.image_uploaded
+        kind: placeholder
+        label: '{{image_uploaded}}'
+        short: Whether an image is available
+        long: Expands to TRUE when the workflow has an uploaded image and FALSE otherwise.
+        insert: '{{image_uploaded}}'

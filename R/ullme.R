@@ -2674,6 +2674,7 @@ ullme_handle_chat_cancel = function(assistantMessageId=NULL,
 ullme_send_chat_stream_update = function(message_id, text="", thinking="",
                                           done=FALSE, error="", activity="",
                                           waiting_for_user=FALSE,
+                                          render_math=FALSE,
                                           app=getApp()) {
   restore.point("ullme_send_chat_stream_update")
   text = paste0(text %||% "", collapse="")
@@ -2693,7 +2694,8 @@ ullme_send_chat_stream_update = function(message_id, text="", thinking="",
       isTRUE(done),
       paste0(error %||% "")[1],
       paste0(activity %||% "")[1],
-      isTRUE(waiting_for_user)
+      isTRUE(waiting_for_user),
+      isTRUE(render_math)
     ),
     .app=app
   )

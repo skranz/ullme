@@ -896,6 +896,12 @@
       Boolean(tutor.chat_history),
       "Shows course- and Tutor-specific conversations in the student sidebar."
     ));
+    basics.appendChild(checkboxField(
+      "Show final node output",
+      "ullme_tutor_show_final_output",
+      tutor.show_final_output !== false,
+      "Enabled by default. Disable it when show_before/show_after provide the complete student-facing response."
+    ));
     if (tutor.multiple_instances !== false) {
       basics.appendChild(field(
         "Typical instances for the AI helper",
@@ -961,6 +967,7 @@
             : valueOf("ullme_tutor_instance_guidance"),
           multiple_instances: checkedOf("ullme_tutor_multiple_instances"),
           chat_history: checkedOf("ullme_tutor_chat_history"),
+          show_final_output: checkedOf("ullme_tutor_show_final_output"),
           default_personality: valueOf("ullme_tutor_default_personality"),
           allowed_tools: splitList(valueOf("ullme_tutor_tools")),
           allowed_student_customization: splitList(valueOf("ullme_tutor_customization")),

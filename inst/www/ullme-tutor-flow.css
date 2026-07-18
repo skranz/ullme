@@ -101,7 +101,7 @@
   filter: none;
 }
 
-.ullme-flow-variant .ullme-flow-node-modified rect {
+.ullme-flow-variant .ullme-flow-node.ullme-flow-node-modified:not(.ullme-flow-node-response):not(.ullme-flow-node-missing) rect {
   fill: #e2f2ea;
   stroke: #247657;
   stroke-width: 2.2;

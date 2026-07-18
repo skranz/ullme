@@ -248,6 +248,8 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
       node$waiting_message %||% "",
       collapse="\n"
     )
+    node$show_before = paste0(node$show_before %||% "", collapse="\n")
+    node$show_after = paste0(node$show_after %||% "", collapse="\n")
     node$show_text = paste0(node$show_text %||% "", collapse="\n")
     node[["next"]] = paste0(node[["next"]] %||% "")[1]
     node$switch_input = paste0(node$switch_input %||% "")[1]
@@ -285,6 +287,7 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
     validation_warnings=list(),
     multiple_instances=!identical(definition$multiple_instances, FALSE),
     chat_history=isTRUE(definition$chat_history),
+    show_final_output=!identical(definition$show_final_output, FALSE),
     start_node=paste0(definition$start_node %||% "")[1],
     nodes=nodes,
     node_yaml=node_yaml,
@@ -925,6 +928,9 @@ ullme_save_course_ai_tutor = function(tutorid, mode=c("ui", "yaml"),
     }
     if (has_field("chat_history")) {
       current$chat_history = isTRUE(fields$chat_history)
+    }
+    if (has_field("show_final_output")) {
+      current$show_final_output = isTRUE(fields$show_final_output)
     }
     if (has_field("file_permissions")) {
       current$file_permissions = ullme_tutor_file_permissions_from_rows(

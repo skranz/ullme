@@ -23,7 +23,7 @@ ullme_read_prompt = function(name) {
 ullme_render_prompt = function(text, values=list(), strict=TRUE) {
   restore.point("ullme_render_prompt")
   text = paste0(text, collapse="\n")
-  pattern = "\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}"
+  pattern = "\\{\\{[A-Za-z][A-Za-z0-9_.]*\\}\\}"
   repeat {
     hit = regexpr(pattern, text, perl=TRUE)
     if (hit[[1]] < 0) break

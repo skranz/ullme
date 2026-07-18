@@ -163,6 +163,7 @@ stopifnot(
   grepl("openCamera(cameraDialog, cameraVideo)", student_js, fixed=TRUE),
   grepl("navigator.mediaDevices.getUserMedia", student_js, fixed=TRUE),
   grepl("captureCameraPhoto", student_js, fixed=TRUE),
+  grepl("renderMath && !done", student_js, fixed=TRUE),
   grepl("ullme-color-theme", student_js, fixed=TRUE)
 )
 
@@ -181,6 +182,8 @@ teacher_tutor_js = paste(
 stopifnot(
   grepl("ullme_tutor_shown_text", teacher_tutor_js, fixed=TRUE),
   grepl("shown_text: valueOf", teacher_tutor_js, fixed=TRUE),
+  grepl("ullme_tutor_show_final_output", teacher_tutor_js, fixed=TRUE),
+  grepl("show_final_output: checkedOf", teacher_tutor_js, fixed=TRUE),
   !grepl('{ id: "prompt", label: "Prompt" }', teacher_tutor_js, fixed=TRUE),
   !grepl('{ id: "config", label: "Config" }', teacher_tutor_js, fixed=TRUE)
 )

@@ -1,4 +1,5 @@
 const assert = require("assert");
+const fs = require("fs");
 const flow = require("../inst/www/ullme-tutor-flow.js");
 
 const graph = flow.buildGraph({
@@ -50,5 +51,11 @@ graph.edges.forEach(edge => {
   );
 });
 assert.deepStrictEqual(layout.cyclic, []);
+
+const flowCss = fs.readFileSync("inst/www/ullme-tutor-flow.css", "utf8");
+assert.match(
+  flowCss,
+  /\.ullme-flow-node\.ullme-flow-node-modified:not\(\.ullme-flow-node-response\):not\(\.ullme-flow-node-missing\)/
+);
 
 console.log("Tutor flow graph tests passed.");

@@ -559,7 +559,7 @@
 
   function receiveAssistantStream(messageId, text, html, thinking,
                                   thinkingHtml, done, error, activity,
-                                  waitingForUser) {
+                                  waitingForUser, renderMath) {
     if (state.cancelledAssistantRequests[messageId] && text !== "Stopped.") return;
     var article = byId(messageId);
     if (!article) {
@@ -593,6 +593,7 @@
     } else if (meta && !error) {
       meta.remove();
     }
+    if (renderMath && !done) typesetMath(messageText);
     if (done) {
       article.classList.remove("ullme-thinking");
       typesetMath(messageText);

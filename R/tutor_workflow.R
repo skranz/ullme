@@ -1,6 +1,6 @@
 ullme_render_prompt_once = function(text, values=list(), strict=TRUE) {
   text = paste0(text %||% "", collapse="\n")
-  pattern = "\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}"
+  pattern = "\\{\\{[A-Za-z][A-Za-z0-9_.]*\\}\\}"
   hits = gregexpr(pattern, text, perl=TRUE)[[1]]
   if (length(hits) == 1L && hits[[1]] < 0L) return(text)
   lengths = attr(hits, "match.length")
@@ -11,8 +11,14 @@ ullme_render_prompt_once = function(text, values=list(), strict=TRUE) {
     key = substr(token, 3L, nchar(token) - 2L)
     value = values[[key]]
     if (is.null(value)) {
-      if (isTRUE(strict)) stop("Missing prompt value: ", key)
-      next
+      if (grepl("^output[.][A-Za-z][A-Za-z0-9_]*$", key)) {
+        if (!isTRUE(strict)) next
+        value = paste0(key, " not available")
+        warning(value, call.=FALSE, immediate.=TRUE)
+      } else {
+        if (isTRUE(strict)) stop("Missing prompt value: ", key)
+        next
+      }
     }
     text = paste0(
       if (start > 1L) substr(text, 1L, start - 1L) else "",
@@ -75,21 +81,43 @@ ullme_tutor_workflow_history_text = function(state) {
 }
 
 
-ullme_tutor_workflow_prompt = function(state, node) {
+ullme_tutor_workflow_values = function(state) {
   tutor = state$tutor
   documents = ullme_student_tutor_values(tutor=tutor, app=state$app)
   fragments = lapply(tutor$prompt_fragments %||% list(), function(fragment) {
     ullme_render_prompt_once(fragment, documents, strict=FALSE)
   })
   history = ullme_tutor_workflow_history_text(state)
-  values = c(fragments, list(
+  node_outputs = state$node_outputs %||% list()
+  output_values = if (length(node_outputs)) {
+    stats::setNames(node_outputs, paste0("output.", names(node_outputs)))
+  } else list()
+  c(fragments, list(
     input=state$input %||% "",
     output=state$output %||% "",
     hist=history,
-    hist_or_init_prompt=history,
+    hist_or_init_prompt=if (nzchar(history)) history else
+      ullme_tutor_workflow_init_prompt(tutor, app=state$app),
     image_uploaded=if (length(state$uploads %||% list())) "TRUE" else "FALSE"
-  ))
-  ullme_render_prompt_once(node$prompt %||% "", values=values, strict=TRUE)
+  ), output_values)
+}
+
+
+ullme_tutor_workflow_render = function(state, text, strict=TRUE) {
+  ullme_render_prompt_once(
+    text, values=ullme_tutor_workflow_values(state), strict=strict
+  )
+}
+
+
+ullme_tutor_workflow_append_text = function(...) {
+  values = paste0(unlist(list(...), use.names=FALSE))
+  paste(values[nzchar(values)], collapse="\n\n")
+}
+
+
+ullme_tutor_workflow_prompt = function(state, node) {
+  ullme_tutor_workflow_render(state, node$prompt %||% "", strict=TRUE)
 }
 
 
@@ -105,6 +133,8 @@ ullme_tutor_workflow_new = function(tutor, input, uploads=list(),
   state$uploads = uploads %||% list()
   state$conversation = conversation %||% list()
   state$internal_history = list()
+  state$node_outputs = list()
+  state$shown_messages = list()
   state$trace = list()
   state$output = ""
   state$resuming = FALSE
@@ -290,6 +320,7 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
 
 ullme_tutor_workflow_advance = function(state,
                                         on_waiting=function(...) NULL,
+                                        on_show=function(...) NULL,
                                         on_final_update=function(...) NULL,
                                         single_model_step=FALSE) {
   repeat {
@@ -321,18 +352,26 @@ ullme_tutor_workflow_advance = function(state,
     }
 
     if (isTRUE(node$ask_for_input) && !isTRUE(state$resuming)) {
-      text = ullme_render_prompt_once(
-        node$show_text %||% "",
-        ullme_student_tutor_values(tutor=state$tutor, app=state$app),
-        strict=FALSE
+      text = ullme_tutor_workflow_render(
+        state, node$show_text %||% "", strict=TRUE
       )
       return(list(status="waiting", text=text, state=state, node=node_id))
     }
     state$resuming = FALSE
     prompt = node$prompt %||% ""
     if (nzchar(trimws(prompt))) {
+      show_before = node$show_before %||% ""
+      if (nzchar(show_before)) {
+        shown = ullme_tutor_workflow_render(state, show_before)
+        state$shown_messages[[length(state$shown_messages) + 1L]] = list(
+          node=node_id, when="before", text=shown
+        )
+        on_show(shown, node_id, "before")
+      }
       waiting = node$waiting_message %||% ""
-      if (nzchar(waiting)) on_waiting(waiting, node_id)
+      if (nzchar(waiting)) {
+        on_waiting(ullme_tutor_workflow_render(state, waiting), node_id)
+      }
       rendered = ullme_tutor_workflow_prompt(state, node)
       call_started_at = Sys.time()
       call = ullme_tutor_workflow_call_node(
@@ -344,6 +383,7 @@ ullme_tutor_workflow_advance = function(state,
       return(promises::then(call, onFulfilled=function(output) {
         call_finished_at = Sys.time()
         state$output = paste0(output %||% "", collapse="\n")
+        state$node_outputs[[node_id]] = state$output
         state$trace[[length(state$trace) + 1L]] = list(
           node=node_id,
           skipped=FALSE,
@@ -383,6 +423,14 @@ ullme_tutor_workflow_advance = function(state,
             output=state$output
           )
         }
+        show_after = node$show_after %||% ""
+        if (nzchar(show_after)) {
+          shown = ullme_tutor_workflow_render(state, show_after)
+          state$shown_messages[[length(state$shown_messages) + 1L]] = list(
+            node=node_id, when="after", text=shown
+          )
+          on_show(shown, node_id, "after")
+        }
         if (!is.null(node$switch_to)) {
           state$node = ullme_tutor_workflow_route(state, node)
           if (isTRUE(single_model_step)) {
@@ -393,6 +441,7 @@ ullme_tutor_workflow_advance = function(state,
           return(ullme_tutor_workflow_advance(
             state,
             on_waiting=on_waiting,
+            on_show=on_show,
             on_final_update=on_final_update,
             single_model_step=single_model_step
           ))
@@ -407,6 +456,7 @@ ullme_tutor_workflow_advance = function(state,
           return(ullme_tutor_workflow_advance(
             state,
             on_waiting=on_waiting,
+            on_show=on_show,
             on_final_update=on_final_update,
             single_model_step=single_model_step
           ))
@@ -485,6 +535,7 @@ ullme_handle_student_tutor_submit = function(text, model, uploads=NULL,
   request$state = new.env(parent=emptyenv())
   request$state$text = ""
   request$state$thinking = ""
+  request$state$durable_text = ""
   request$controller = list(cancel=function(reason="Stopped by user") {
     ullme_tutor_workflow_cancel(workflow, reason)
   })
@@ -500,9 +551,15 @@ ullme_handle_student_tutor_submit = function(text, model, uploads=NULL,
 
   finish = function(result) {
     if (!isTRUE(request$active)) return(invisible(result))
-    text_out = paste0(result$text %||% "", collapse="\n")
-    request$state$text = text_out
     waiting = identical(result$status %||% "", "waiting")
+    final_text = if (waiting ||
+        !identical(workflow$tutor$show_final_output, FALSE)) {
+      paste0(result$text %||% "", collapse="\n")
+    } else ""
+    text_out = ullme_tutor_workflow_append_text(
+      request$state$durable_text, final_text
+    )
+    request$state$text = text_out
     app$student_pending_workflow = if (waiting) result$state else NULL
     request$active = FALSE
     app$chat_response_active = FALSE
@@ -563,7 +620,25 @@ ullme_handle_student_tutor_submit = function(text, model, uploads=NULL,
     if (!isTRUE(request$active)) return(invisible(NULL))
     ullme_send_chat_stream_update(
       message_id=assistantMessageId,
-      text=message,
+      text=ullme_tutor_workflow_append_text(
+        request$state$durable_text, message
+      ),
+      render_math=nzchar(request$state$durable_text),
+      done=FALSE,
+      app=app
+    )
+  }
+  on_show = function(message, node_id, when) {
+    if (!isTRUE(request$active) || !nzchar(message)) return(invisible(NULL))
+    request$state$durable_text = ullme_tutor_workflow_append_text(
+      request$state$durable_text, message
+    )
+    request$state$text = request$state$durable_text
+    ullme_student_stats_mark_output(stats)
+    ullme_send_chat_stream_update(
+      message_id=assistantMessageId,
+      text=request$state$durable_text,
+      render_math=TRUE,
       done=FALSE,
       app=app
     )
@@ -576,8 +651,11 @@ ullme_handle_student_tutor_submit = function(text, model, uploads=NULL,
     if (!isTRUE(done)) {
       ullme_send_chat_stream_update(
         message_id=assistantMessageId,
-        text=text,
+        text=ullme_tutor_workflow_append_text(
+          request$state$durable_text, text
+        ),
         thinking=thinking,
+        render_math=nzchar(request$state$durable_text),
         done=FALSE,
         app=app
       )
@@ -587,6 +665,7 @@ ullme_handle_student_tutor_submit = function(text, model, uploads=NULL,
     ullme_tutor_workflow_advance(
       workflow,
       on_waiting=on_waiting,
+      on_show=on_show,
       on_final_update=on_final_update
     ),
     error=function(error) error

@@ -251,7 +251,7 @@ ullme_prompt_placeholders = function(text) {
   text = paste0(text %||% "", collapse="\n")
   hits = regmatches(
     text,
-    gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_]*\\}\\}", text, perl=TRUE)
+    gregexpr("\\{\\{[A-Za-z][A-Za-z0-9_.]*\\}\\}", text, perl=TRUE)
   )[[1]]
   if (length(hits) == 1L && identical(hits, "")) return(character(0))
   unique(substring(hits, 3L, nchar(hits) - 2L))
@@ -306,11 +306,15 @@ ullme_validate_tutor_workflow = function(value, document_ids,
   known_placeholders = unique(c(
     document_ids, customization_ids, fragment_ids, runtime_ids
   ))
-  for (fragment_id in fragment_ids) {
-    unknown = setdiff(
-      ullme_prompt_placeholders(fragments[[fragment_id]]),
+  unknown_placeholders = function(text) {
+    found = ullme_prompt_placeholders(text)
+    setdiff(
+      found[!grepl("^output[.][A-Za-z][A-Za-z0-9_]*$", found)],
       known_placeholders
     )
+  }
+  for (fragment_id in fragment_ids) {
+    unknown = unknown_placeholders(fragments[[fragment_id]])
     if (length(unknown)) {
       errors = c(errors, paste0(
         "prompt_fragments.", fragment_id,
@@ -331,6 +335,17 @@ ullme_validate_tutor_workflow = function(value, document_ids,
     switch_input = paste0(node$switch_input %||% "")[1]
     switch_to = node$switch_to
     ask = isTRUE(node$ask_for_input)
+    for (field in c("show_before", "show_after")) {
+      if (!is.null(node[[field]]) &&
+          (!is.character(node[[field]]) || length(node[[field]]) != 1L ||
+           is.na(node[[field]]))) {
+        errors = c(errors, paste0(label, ".", field, " must be text."))
+      }
+      if (!nzchar(trimws(prompt)) &&
+          nzchar(trimws(paste0(node[[field]] %||% "", collapse="\n")))) {
+        errors = c(errors, paste0(label, ".", field, " requires a model prompt."))
+      }
+    }
     if (!is.null(node$ask_for_input) &&
         (!is.logical(node$ask_for_input) || length(node$ask_for_input) != 1L)) {
       errors = c(errors, paste0(label, ".ask_for_input must be true or false."))
@@ -393,12 +408,14 @@ ullme_validate_tutor_workflow = function(value, document_ids,
     if (!is.na(parallel_n) && parallel_n > 1L && !nzchar(aggregate)) {
       errors = c(errors, paste0(label, ".aggregate is required when n_parallel is greater than 1."))
     }
-    unknown = setdiff(ullme_prompt_placeholders(prompt), known_placeholders)
-    if (length(unknown)) {
-      errors = c(errors, paste0(
-        label, ".prompt contains unknown placeholders: ",
-        paste(unknown, collapse=", "), "."
-      ))
+    for (field in c("prompt", "waiting_message", "show_before", "show_after", "show_text")) {
+      unknown = unknown_placeholders(node[[field]] %||% "")
+      if (length(unknown)) {
+        errors = c(errors, paste0(
+          label, ".", field, " contains unknown placeholders: ",
+          paste(unknown, collapse=", "), "."
+        ))
+      }
     }
   }
   missing_targets = setdiff(unique(targets[nzchar(targets)]), node_ids)
@@ -519,7 +536,9 @@ ullme_validate_tutor_yaml = function(tutorid, content) {
     if (any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", customization))) {
       errors = c(errors, "allowed_student_customization contains an invalid ID.")
     }
-    for (field in c("multiple_instances", "chat_history")) {
+        for (field in c(
+          "multiple_instances", "chat_history", "show_final_output"
+        )) {
       if (!is.null(value[[field]]) &&
           (!is.logical(value[[field]]) || length(value[[field]]) != 1L)) {
         errors = c(errors, paste0(field, " must be true or false."))

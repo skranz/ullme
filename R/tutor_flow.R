@@ -18,6 +18,8 @@ ullme_node_field_picker_ui = function(prefix) {
       lapply(fields, function(field) tags$option(
         value=paste0(field$path %||% "")[1],
         title=paste0(field$long %||% field$short %||% "")[1],
+        `data-kind`=paste0(field$kind %||% "field")[1],
+        `data-insert`=paste0(field$insert %||% "", collapse="\n"),
         `data-template`=paste0(field$template %||% "", collapse="\n"),
         `data-nested-template`=paste0(field$nested_template %||% "", collapse="\n"),
         paste0(field$label %||% field$path %||% "Field", " — ", field$short %||% "")
@@ -26,11 +28,11 @@ ullme_node_field_picker_ui = function(prefix) {
   })
   tags$div(
     class="ullme-node-field-picker",
-    tags$span(class="ullme-node-field-picker-label", "Add field"),
+    tags$span(class="ullme-node-field-picker-label", "Insert"),
     tags$select(
       id=paste0(prefix, "_field"),
-      `aria-label`="Add a field to the node YAML",
-      title="Choose a field to insert into the node YAML.",
+      `aria-label`="Insert a field or placeholder into the node YAML",
+      title="Choose a field or runtime placeholder to insert into the node YAML.",
       tags$option(value="", "Choose…"),
       options
     ),

@@ -87,7 +87,10 @@ stopifnot(
 shown_text_save = ullme_save_course_ai_tutor(
   tutorid="tutor1",
   mode="ui",
-  fields=list(shown_text="Welcome to the edited Tutor."),
+  fields=list(
+    shown_text="Welcome to the edited Tutor.",
+    show_final_output=FALSE
+  ),
   app=app
 )
 stopifnot(
@@ -95,6 +98,10 @@ stopifnot(
   identical(
     yaml::read_yaml(file.path(tutor_dir, "tutor.yml"))$shown_text,
     "Welcome to the edited Tutor."
+  ),
+  identical(
+    yaml::read_yaml(file.path(tutor_dir, "tutor.yml"))$show_final_output,
+    FALSE
   ),
   ullme_edit_history_state(
     "tutor_definition", "tutor1", app=app
