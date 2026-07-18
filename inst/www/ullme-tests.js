@@ -60,6 +60,31 @@
     return state.suites.find(function (suite) { return suite.id === state.selectedSuiteId; }) || null;
   }
 
+  function beginBusy(message) {
+    endBusy();
+    if (document.body && document.body.classList) {
+      document.body.classList.add("ullme-tests-is-busy");
+    }
+    var overlay = element("div", "ullme-tests-busy");
+    overlay.id = "ullme_tests_busy";
+    overlay.setAttribute("role", "status");
+    overlay.setAttribute("aria-live", "assertive");
+    var card = element("div", "ullme-tests-busy-card");
+    card.appendChild(element("span", "ullme-tests-spinner"));
+    card.appendChild(element("strong", "", message));
+    card.appendChild(element("span", "", "Please wait…"));
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  function endBusy() {
+    var overlay = byId("ullme_tests_busy");
+    if (overlay) overlay.remove();
+    if (document.body && document.body.classList) {
+      document.body.classList.remove("ullme-tests-is-busy");
+    }
+  }
+
   function listValue(value) {
     if (Array.isArray(value)) return value.map(String);
     if (value == null || value === "") return [];
@@ -143,6 +168,7 @@
     toolbar.appendChild(button("Delete", "ullme-secondary-action ullme-tests-delete-suite", function () {
       var suite = selectedSuite();
       if (!suite || !window.confirm("Delete Test Suite '" + suite.id + "' and all of its inputs, variants, runs, and results?")) return;
+      beginBusy("Deleting Test Suite " + suite.id);
       sendEvent("ullme_test_suite_delete_event", { suiteid: suite.id });
     }));
     root.appendChild(toolbar);
@@ -624,6 +650,7 @@
     var actions = element("div", "ullme-dialog-actions");
     actions.appendChild(button("Cancel", "ullme-secondary-action", closeDialog));
     actions.appendChild(button("Create suite", "ullme-primary-action", function () {
+      beginBusy("Creating Test Suite " + (id.input.value.trim() || "…"));
       sendEvent("ullme_test_suite_create_event", {
         suiteid: id.input.value.trim(), tutorid: tutor.value
       });
@@ -634,6 +661,7 @@
   function closeDialog() { var dialog = byId("ullme_test_suite_dialog"); if (dialog) dialog.remove(); }
 
   function actionComplete(result) {
+    endBusy();
     var variantElements = variantNodeElements();
     if (variantElements.save) variantElements.save.disabled = false;
     if (variantElements.revert && state.variantNode) {

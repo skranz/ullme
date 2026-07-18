@@ -659,7 +659,7 @@ ullme_handle_test_suite_create = function(suiteid=NULL, label=NULL, tutorid=NULL
                                            app=getApp(), ...) {
   result = tryCatch({
     ullme_create_test_suite(suiteid, label, tutorid, app=app)
-    ullme_send_course_state(app=app)
+    ullme_send_test_suite_state(app=app)
     list(ok=TRUE, suiteid=suiteid, message="Test Suite created.")
   }, error=function(error) list(ok=FALSE, message=conditionMessage(error)))
   callJS(.fun="window.ullmeTests.actionComplete", .args=list(result), .app=app)
@@ -670,7 +670,7 @@ ullme_handle_test_suite_create = function(suiteid=NULL, label=NULL, tutorid=NULL
 ullme_handle_test_suite_delete = function(suiteid=NULL, app=getApp(), ...) {
   result = tryCatch({
     ullme_delete_test_suite(suiteid, app=app)
-    ullme_send_course_state(app=app)
+    ullme_send_test_suite_state(app=app)
     list(ok=TRUE, kind="suite_delete", suiteid=suiteid,
          message="Test Suite deleted.")
   }, error=function(error) list(

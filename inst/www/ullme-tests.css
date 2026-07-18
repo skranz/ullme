@@ -5,6 +5,12 @@
 .ullme-tests-toolbar select { min-width: 240px; }
 .ullme-tests-toolbar .ullme-secondary-action { padding: 5px 9px; }
 .ullme-tests-delete-suite { margin-left: auto; padding: 5px 9px; color: var(--ullme-danger, #b42318); }
+.ullme-tests-is-busy, .ullme-tests-is-busy * { cursor: wait !important; }
+.ullme-tests-busy { position: fixed; inset: 0; z-index: 10050; display: grid; place-items: center; background: rgba(248, 250, 249, 0.64); backdrop-filter: blur(1px); cursor: wait; }
+.ullme-tests-busy-card { display: grid; grid-template-columns: auto 1fr; column-gap: 11px; row-gap: 2px; align-items: center; min-width: 240px; padding: 16px 20px; color: var(--ullme-text, #17201c); background: var(--ullme-surface, #fff); border: 1px solid var(--ullme-border, #d9dee7); border-radius: 10px; box-shadow: 0 10px 32px rgba(20, 31, 25, 0.16); }
+.ullme-tests-busy-card > span:last-child { grid-column: 2; color: var(--ullme-muted, #667085); font-size: 12px; }
+.ullme-tests-spinner { grid-row: 1 / span 2; width: 18px; height: 18px; border: 2px solid #cbd5d0; border-top-color: var(--ullme-accent, #247657); border-radius: 50%; animation: ullme-tests-spin 0.75s linear infinite; }
+@keyframes ullme-tests-spin { to { transform: rotate(360deg); } }
 .ullme-tests-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ullme-border, #d9dee7); }
 .ullme-tests-tab { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 14px; color: inherit; cursor: pointer; }
 .ullme-tests-tab-active { border-bottom-color: var(--ullme-accent, #275efe); font-weight: 650; }
