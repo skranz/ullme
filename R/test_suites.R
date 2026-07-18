@@ -120,10 +120,16 @@ ullme_test_suite_variant_records = function(test_dir) {
   lapply(sort(paths), function(path) {
     value = tryCatch(yaml::read_yaml(path, eval.expr=FALSE), error=function(error) list())
     metadata = value$test_variant %||% list()
+    modified_nodes = names(value$nodes %||% list())
+    node_yaml = lapply(value$nodes %||% list(), function(node) {
+      trimws(yaml::as.yaml(node, unicode=TRUE))
+    })
     list(
       id=sub("[.]ya?ml$", "", sub("^tutor_var_", "", basename(path)), ignore.case=TRUE),
       label=paste0(metadata$label %||% basename(path))[1],
-      yaml_content=paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n")
+      yaml_content=paste(readLines(path, warn=FALSE, encoding="UTF-8"), collapse="\n"),
+      modified_nodes=as.list(modified_nodes),
+      node_yaml=node_yaml
     )
   })
 }
@@ -196,10 +202,20 @@ ullme_test_suite_record = function(test_dir) {
     instanceid=paste0(instance$instanceid %||% instance$id %||% "")[1],
     label=paste0(instance$label %||% instance$instanceid %||% instance$id %||% "")[1]
   ))
+  tutor_path = file.path(test_dir, "tutor.yml")
+  tutor_content = if (file.exists(tutor_path)) {
+    paste(readLines(tutor_path, warn=FALSE, encoding="UTF-8"), collapse="\n")
+  } else ""
+  tutor = ullme_normalize_ai_tutor_content(
+    tutor_content,
+    tutorid=paste0(config$suite$source_tutor %||% "test_tutor")[1],
+    source="test"
+  )
   list(
     id=basename(test_dir),
     label=paste0(config$suite$label %||% basename(test_dir))[1],
     source_tutor=paste0(config$suite$source_tutor %||% "")[1],
+    tutor=tutor,
     config=config_for_js,
     instances=instances,
     variants=ullme_test_suite_variant_records(test_dir),
@@ -307,6 +323,58 @@ ullme_save_test_suite_variant = function(suiteid, variantid, label, yaml_content
     changes=list(ullme_change_write(path, ullme_test_suite_yaml(value))), app=app
   ), app=app)
   if (!isTRUE(result$ok)) stop(result$message %||% "Could not save the variant.")
+  invisible(result)
+}
+
+
+ullme_save_test_suite_variant_node = function(suiteid, variantid, nodeid,
+                                               yaml_content="",
+                                               action=c("save", "revert"),
+                                               app=getApp()) {
+  test_dir = ullme_active_test_suite_dir(suiteid, app=app)
+  variantid = ullme_clean_test_input_id(variantid, "Variant")
+  nodeid = ullme_clean_tutor_node_id(nodeid)
+  action = match.arg(action)
+  path = file.path(test_dir, paste0("tutor_var_", variantid, ".yml"))
+  if (!file.exists(path)) stop("The selected Tutor variant does not exist.")
+  value = ullme_tests_read_yaml(path, basename(path))
+  nodes = value$nodes %||% list()
+  if (!is.list(nodes)) nodes = list()
+  if (identical(action, "revert")) {
+    nodes[[nodeid]] = NULL
+  } else {
+    parsed = ullme_tests_read_yaml_text(
+      paste0(yaml_content %||% "", collapse="\n"),
+      paste0("Variant node ", nodeid)
+    )
+    if (!length(parsed) || is.null(names(parsed))) {
+      stop("Variant node YAML must be a non-empty mapping.")
+    }
+    nodes[[nodeid]] = parsed
+  }
+  value$nodes = if (length(nodes)) nodes else NULL
+  metadata = value$test_variant %||% list(label=variantid)
+  value$test_variant = NULL
+  base = ullme_tests_read_yaml(file.path(test_dir, "tutor.yml"), "tutor.yml")
+  merged = utils::modifyList(base, value, keep.null=TRUE)
+  validation = ullme_tutor_validation_state(
+    paste0(base$tutorid %||% "test_tutor")[1], ullme_ai_tutor_yaml(merged)
+  )
+  if (!isTRUE(validation$is_valid)) {
+    stop("The merged Tutor is invalid: ", paste(unlist(validation$errors), collapse="; "))
+  }
+  value = c(list(test_variant=metadata), value)
+  result = ullme_submit_change(ullme_new_change(
+    action="test_suite_variant_node",
+    summary=paste0(if (identical(action, "revert")) "Revert" else "Save",
+      " Test Suite variant node ", nodeid),
+    origin="ui",
+    details=list(kind="test_variant_node", suiteid=suiteid,
+                 variantid=variantid, nodeid=nodeid, action=action),
+    changes=list(ullme_change_write(path, ullme_test_suite_yaml(value))),
+    app=app
+  ), app=app)
+  if (!isTRUE(result$ok)) stop(result$message %||% "Could not save the variant node.")
   invisible(result)
 }
 
@@ -541,6 +609,46 @@ ullme_test_suites_ui = function(app=getApp()) {
 }
 
 
+ullme_test_variant_node_editor_ui = function() {
+  tags$section(
+    id="ullme_test_variant_node_panel",
+    class="ullme-assistant-panel ullme-node-editor-panel ullme-test-variant-node-panel",
+    role="tabpanel",
+    `aria-labelledby`="ullme_test_variant_node_tab",
+    tags$div(
+      class="ullme-node-editor-head",
+      tags$strong(id="ullme_test_variant_node_title", "Variant node")
+    ),
+    tags$label(
+      class="ullme-node-editor-field",
+      tags$span("Node ID"),
+      tags$input(id="ullme_test_variant_node_id", type="text", readonly="readonly")
+    ),
+    tags$label(
+      class="ullme-node-editor-field ullme-node-editor-yaml-field",
+      tags$span("Node YAML override"),
+      tags$textarea(id="ullme_test_variant_node_yaml", spellcheck="false")
+    ),
+    tags$div(
+      id="ullme_test_variant_node_status",
+      class="ullme-node-editor-status", role="status", `aria-live`="polite",
+      "Select a node in the variant diagram."
+    ),
+    tags$div(
+      class="ullme-node-editor-actions",
+      tags$button(
+        id="ullme_test_variant_node_revert", class="ullme-secondary-action",
+        type="button", "Use base node"
+      ),
+      tags$button(
+        id="ullme_test_variant_node_save", class="ullme-primary-action",
+        type="button", "Save override"
+      )
+    )
+  )
+}
+
+
 ullme_handle_test_suite_create = function(suiteid=NULL, label=NULL, tutorid=NULL,
                                            app=getApp(), ...) {
   result = tryCatch({
@@ -581,8 +689,29 @@ ullme_handle_test_suite_variant_save = function(suiteid=NULL, variantid=NULL,
   result = tryCatch({
     ullme_save_test_suite_variant(suiteid, variantid, label, yaml_content, app=app)
     ullme_send_test_suite_state(app=app)
-    list(ok=TRUE, message="Variant saved.")
+    list(ok=TRUE, kind="variant", variantid=variantid, message="Variant saved.")
   }, error=function(error) list(ok=FALSE, message=conditionMessage(error)))
+  callJS(.fun="window.ullmeTests.actionComplete", .args=list(result), .app=app)
+  invisible(result)
+}
+
+
+ullme_handle_test_suite_variant_node_save = function(
+    suiteid=NULL, variantid=NULL, nodeid=NULL, yaml_content="", action="save",
+    app=getApp(), ...) {
+  result = tryCatch({
+    ullme_save_test_suite_variant_node(
+      suiteid=suiteid, variantid=variantid, nodeid=nodeid,
+      yaml_content=yaml_content, action=action, app=app
+    )
+    ullme_send_test_suite_state(app=app)
+    list(ok=TRUE, kind="variant_node", suiteid=suiteid, variantid=variantid,
+         nodeid=nodeid, action=action,
+         message=if (identical(action, "revert"))
+           "The variant uses the base node again." else "Variant node override saved.")
+  }, error=function(error) list(
+    ok=FALSE, kind="variant_node", message=conditionMessage(error)
+  ))
   callJS(.fun="window.ullmeTests.actionComplete", .args=list(result), .app=app)
   invisible(result)
 }
@@ -601,13 +730,15 @@ ullme_handle_test_suite_input_save = function(suiteid=NULL, instanceid=NULL,
 
 
 ullme_handle_test_suite_upload_prepare = function(suiteid=NULL, instanceid=NULL,
-                                                   inputid=NULL, app=getApp(), ...) {
+                                                   inputid=NULL, split=FALSE,
+                                                   app=getApp(), ...) {
   result = tryCatch({
     test_dir = ullme_active_test_suite_dir(suiteid, app=app)
     instanceid = ullme_clean_test_input_id(instanceid, "Instance")
     inputid = ullme_clean_test_input_id(inputid, "Input")
     app$test_suite_upload_target = list(suiteid=suiteid, instanceid=instanceid,
-      inputid=inputid, directory=file.path(test_dir, "instance_inputs", instanceid, inputid))
+      inputid=inputid, split=isTRUE(split),
+      directory=file.path(test_dir, "instance_inputs", instanceid, inputid))
     list(ok=TRUE)
   }, error=function(error) list(ok=FALSE, message=conditionMessage(error)))
   callJS(.fun="window.ullmeTests.uploadReady", .args=list(result), .app=app)
@@ -628,8 +759,11 @@ ullme_handle_test_suite_upload = function(app=getApp(), value, ...) {
       if (!extension %in% c("png", "jpg", "jpeg", "gif", "webp")) {
         stop("Test input uploads must be supported image files.")
       }
+      directory = if (isTRUE(target$split) && NROW(value) > 1L) {
+        file.path(dirname(target$directory), paste0(target$inputid, "_", i))
+      } else target$directory
       changes[[length(changes) + 1L]] = ullme_change_copy(
-        value$datapath[[i]], file.path(target$directory, name), overwrite=TRUE
+        value$datapath[[i]], file.path(directory, name), overwrite=TRUE
       )
     }
     committed = ullme_submit_change(ullme_new_change(
@@ -638,7 +772,12 @@ ullme_handle_test_suite_upload = function(app=getApp(), value, ...) {
     ), app=app)
     if (!isTRUE(committed$ok)) stop(committed$message %||% "Could not store test images.")
     ullme_send_test_suite_state(app=app)
-    list(ok=TRUE, message="Test images uploaded.")
+    list(
+      ok=TRUE,
+      message=if (isTRUE(target$split) && NROW(value) > 1L)
+        paste0("Created ", NROW(value), " separate image inputs.") else
+        "Test images uploaded."
+    )
   }, error=function(error) list(ok=FALSE, message=conditionMessage(error)))
   callJS(.fun="window.ullmeTests.uploadComplete", .args=list(result), .app=app)
   invisible(result)

@@ -95,6 +95,33 @@
   filter: drop-shadow(0 2px 2px rgba(26, 42, 33, 0.08));
 }
 
+.ullme-flow-variant .ullme-flow-node:not(.ullme-flow-node-response):not(.ullme-flow-node-missing) rect {
+  fill: #eef0ef;
+  stroke: #aeb4b0;
+  filter: none;
+}
+
+.ullme-flow-variant .ullme-flow-node-modified rect {
+  fill: #e2f2ea;
+  stroke: #247657;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 2px 3px rgba(36, 118, 87, 0.16));
+}
+
+.ullme-flow-compact {
+  gap: 7px;
+  grid-template-rows: auto minmax(220px, 1fr);
+}
+
+.ullme-flow-compact .ullme-flow-viewport {
+  min-height: 220px;
+  max-height: 52vh;
+}
+
+.ullme-flow-compact .ullme-flow-legend {
+  display: none;
+}
+
 .ullme-flow-node-editable {
   cursor: pointer;
   outline: none;

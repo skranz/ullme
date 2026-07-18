@@ -4,6 +4,7 @@ library(ullme)
 source(file.path("R", "teacherApp.R"))
 source(file.path("R", "tutor_flow.R"))
 source(file.path("R", "tutor_validation.R"))
+source(file.path("R", "test_suites.R"))
 source(file.path("R", "ullme.R"))
 
 app = new.env(parent=emptyenv())
@@ -58,6 +59,8 @@ stopifnot(
   grepl('id="ullme_ai_chat_panel"', teacher_pane_html, fixed=TRUE),
   grepl('id="ullme_node_editor_tab"', teacher_pane_html, fixed=TRUE),
   grepl('id="ullme_node_editor_yaml"', teacher_pane_html, fixed=TRUE),
+  grepl('id="ullme_test_variant_node_tab"', teacher_pane_html, fixed=TRUE),
+  grepl('id="ullme_test_variant_node_panel"', teacher_pane_html, fixed=TRUE),
   grepl('id="ullme_tutor_validation_tab"', teacher_pane_html, fixed=TRUE),
   grepl('id="ullme_tutor_validation_errors"', teacher_pane_html, fixed=TRUE),
   grepl("Create your first course", teacher_pane_html, fixed=TRUE),

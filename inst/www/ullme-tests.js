@@ -3,7 +3,9 @@
 
   var state = {
     suites: [], tutors: [], selectedSuiteId: "", tab: "inputs",
-    pollTimer: null, pendingUpload: false, results: null, courseid: ""
+    pollTimer: null, pendingUpload: false, pendingImageFiles: [],
+    pendingImageTarget: null, results: null, courseid: "",
+    selectedVariantId: "", variantMode: "nodes", variantNode: null
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -69,6 +71,7 @@
     if (state.courseid && courseid !== state.courseid) {
       state.selectedSuiteId = "";
       state.results = null;
+      state.selectedVariantId = "";
     }
     state.courseid = courseid;
     state.suites = suites;
@@ -76,6 +79,7 @@
     if (!state.suites.some(function (suite) { return suite.id === state.selectedSuiteId; })) {
       state.selectedSuiteId = state.suites.length ? state.suites[0].id : "";
       state.results = null;
+      state.selectedVariantId = "";
     }
     render();
     updatePolling();
@@ -119,13 +123,20 @@
       ["settings", "Settings"], ["runs", "Runs & results"]
     ].forEach(function (item) {
       var tab = button(item[1], "ullme-tests-tab" + (state.tab === item[0] ? " ullme-tests-tab-active" : ""), function () {
-        state.tab = item[0]; render();
+        state.tab = item[0];
+        if (state.tab !== "variants") hideVariantNodeEditor();
+        render();
       });
       tabs.appendChild(tab);
     });
     root.appendChild(tabs);
 
     var suite = selectedSuite();
+    if (suite && state.selectedVariantId !== "__new__" && !(suite.variants || []).some(function (variant) {
+      return variant.id === state.selectedVariantId;
+    })) {
+      state.selectedVariantId = (suite.variants || []).length ? suite.variants[0].id : "";
+    }
     var body = element("div", "ullme-tests-body");
     if (state.tab === "inputs") renderInputs(body, suite);
     if (state.tab === "variants") renderVariants(body, suite);
@@ -187,41 +198,152 @@
         inputid: id.input.value.trim(), text: text.input.value
       });
     }));
-    actions.appendChild(button("Upload images", "ullme-secondary-action", function () {
-      state.pendingUpload = true;
-      sendEvent("ullme_test_suite_upload_prepare_event", {
-        suiteid: suite.id, instanceid: instance.value, inputid: id.input.value.trim()
-      });
+    var uploadTarget = function () {
+      return {
+        suiteid: suite.id, instanceid: instance.value,
+        inputid: id.input.value.trim()
+      };
+    };
+    actions.appendChild(button("Choose images", "ullme-secondary-action", function () {
+      chooseImageFiles(uploadTarget());
     }));
     editor.appendChild(actions);
+    var drop = element("div", "ullme-tests-image-drop");
+    drop.tabIndex = 0;
+    drop.appendChild(element("strong", "", "Drop or paste images here"));
+    drop.appendChild(element("span", "", "Multiple images can stay together or become separate inputs."));
+    ["dragenter", "dragover"].forEach(function (name) {
+      drop.addEventListener(name, function (event) {
+        event.preventDefault(); drop.classList.add("ullme-tests-image-drop-active");
+      });
+    });
+    ["dragleave", "drop"].forEach(function (name) {
+      drop.addEventListener(name, function () { drop.classList.remove("ullme-tests-image-drop-active"); });
+    });
+    drop.addEventListener("drop", function (event) {
+      event.preventDefault();
+      queueImageFiles(event.dataTransfer && event.dataTransfer.files, uploadTarget());
+    });
+    editor.addEventListener("paste", function (event) {
+      var files = clipboardImageFiles(event.clipboardData);
+      if (!files.length) return;
+      event.preventDefault(); queueImageFiles(files, uploadTarget());
+    });
+    editor.appendChild(drop);
+  }
+
+  function imageFileList(files) {
+    return Array.prototype.filter.call(files || [], function (file) {
+      return /^image\/(png|jpeg|gif|webp)$/i.test(String(file.type || ""));
+    });
+  }
+
+  function clipboardImageFiles(clipboard) {
+    if (!clipboard) return [];
+    var files = imageFileList(clipboard.files || []);
+    if (files.length) return files;
+    return Array.prototype.map.call(clipboard.items || [], function (item) {
+      return item.kind === "file" ? item.getAsFile() : null;
+    }).filter(function (file) { return file && /^image\//i.test(file.type || ""); });
+  }
+
+  function chooseImageFiles(target) {
+    var picker = document.createElement("input");
+    picker.type = "file"; picker.accept = "image/png,image/jpeg,image/gif,image/webp";
+    picker.multiple = true;
+    picker.addEventListener("change", function () { queueImageFiles(picker.files, target); });
+    picker.click();
+  }
+
+  function queueImageFiles(files, target) {
+    files = imageFileList(files);
+    if (!files.length) {
+      window.alert("Choose or drop a supported PNG, JPEG, GIF, or WebP image.");
+      return;
+    }
+    if (!target.inputid) {
+      window.alert("Enter an Input ID first.");
+      return;
+    }
+    var split = files.length > 1 && window.confirm(
+      "Create one separate test input for each of the " + files.length +
+      " images?\n\nOK: separate inputs with no text\nCancel: keep all images in this input"
+    );
+    state.pendingUpload = true;
+    state.pendingImageFiles = files;
+    state.pendingImageTarget = target;
+    sendEvent("ullme_test_suite_upload_prepare_event", {
+      suiteid: target.suiteid, instanceid: target.instanceid,
+      inputid: target.inputid, split: split
+    });
   }
 
   function renderVariants(root, suite) {
-    var layout = element("div", "ullme-tests-split");
+    var layout = element("div", "ullme-tests-split ullme-tests-variant-layout");
     var list = element("div", "ullme-tests-list");
     var editor = element("div", "ullme-tests-editor");
-    list.appendChild(element("h3", "", "Tutor variants"));
+    var listHead = element("div", "ullme-tests-compact-head");
+    listHead.appendChild(element("h3", "", "Variants"));
+    listHead.appendChild(button("+", "ullme-secondary-action", function () {
+      state.selectedVariantId = "__new__"; state.variantMode = "yaml"; render();
+    }));
+    list.appendChild(listHead);
     (suite.variants || []).forEach(function (variant) {
       var card = element("button", "ullme-tests-list-item");
       card.type = "button";
+      if (variant.id === state.selectedVariantId) card.classList.add("ullme-tests-list-item-active");
       card.appendChild(element("strong", "", variant.label || variant.id));
-      card.appendChild(element("code", "", variant.id));
-      card.addEventListener("click", function () { fillVariantEditor(editor, suite, variant); });
+      card.appendChild(element("code", "", variant.id + " · " +
+        (variant.modified_nodes || []).length + " changed node(s)"));
+      card.addEventListener("click", function () {
+        state.selectedVariantId = variant.id; state.variantMode = "nodes"; render();
+      });
       list.appendChild(card);
     });
-    fillVariantEditor(editor, suite, null);
+    var selected = (suite.variants || []).find(function (variant) {
+      return variant.id === state.selectedVariantId;
+    }) || null;
+    fillVariantEditor(editor, suite, selected);
     layout.appendChild(list); layout.appendChild(editor); root.appendChild(layout);
   }
 
   function fillVariantEditor(editor, suite, variant) {
     editor.innerHTML = "";
-    editor.appendChild(element("h3", "", variant ? "Edit variant" : "New variant"));
+    var head = element("div", "ullme-tests-variant-head");
+    head.appendChild(element("h3", "", variant ? (variant.label || variant.id) : "New variant"));
+    if (variant) {
+      var modes = element("div", "ullme-tests-mode-tabs");
+      [["nodes", "Nodes"], ["yaml", "YAML"]].forEach(function (item) {
+        modes.appendChild(button(item[1], "ullme-tests-mode-tab" +
+          (state.variantMode === item[0] ? " ullme-tests-mode-tab-active" : ""), function () {
+          state.variantMode = item[0]; render();
+        }));
+      });
+      head.appendChild(modes);
+    }
+    editor.appendChild(head);
+    if (variant && state.variantMode === "nodes") {
+      editor.appendChild(element("p", "ullme-tests-hint ullme-tests-variant-hint",
+        "Grey nodes use the base Tutor. Colored nodes contain variant overrides. Click a node to edit it on the right."));
+      if (window.ullmeTutorFlow && window.ullmeTutorFlow.render && suite.tutor) {
+        editor.appendChild(window.ullmeTutorFlow.render(suite.tutor, {
+          variant: true, compact: true,
+          modifiedNodes: variant.modified_nodes || [],
+          onSelect: function (nodeid) { openVariantNodeEditor(suite, variant, nodeid); }
+        }));
+      } else {
+        editor.appendChild(element("p", "ullme-muted", "The Tutor has no workflow diagram."));
+      }
+      return;
+    }
     var id = field("Variant ID", variant ? variant.id : "variant1");
     id.input.readOnly = Boolean(variant);
     var label = field("Label", variant ? variant.label : "New variant");
     var yaml = field("Tutor YAML overrides", variant ? variant.yaml_content : "# Fields here override tutor.yml\n", "textarea");
-    yaml.input.rows = 18;
-    editor.appendChild(id.wrap); editor.appendChild(label.wrap); editor.appendChild(yaml.wrap);
+    yaml.input.rows = 14;
+    var identity = element("div", "ullme-tests-variant-identity");
+    identity.appendChild(id.wrap); identity.appendChild(label.wrap);
+    editor.appendChild(identity); editor.appendChild(yaml.wrap);
     editor.appendChild(element("p", "ullme-tests-hint", "The server merges these fields into the suite Tutor snapshot and validates the complete Tutor before saving."));
     editor.appendChild(button("Save variant", "ullme-primary-action", function () {
       sendEvent("ullme_test_suite_variant_save_event", {
@@ -229,6 +351,80 @@
         label: label.input.value.trim(), yaml_content: yaml.input.value
       });
     }));
+  }
+
+  function dispatchAssistantTab(tab) {
+    document.dispatchEvent(new CustomEvent("ullme:assistant-tab", { detail: { tab: tab } }));
+  }
+
+  function variantNodeElements() {
+    return {
+      tab: byId("ullme_test_variant_node_tab"),
+      title: byId("ullme_test_variant_node_title"),
+      nodeid: byId("ullme_test_variant_node_id"),
+      yaml: byId("ullme_test_variant_node_yaml"),
+      status: byId("ullme_test_variant_node_status"),
+      save: byId("ullme_test_variant_node_save"),
+      revert: byId("ullme_test_variant_node_revert")
+    };
+  }
+
+  function bindVariantNodeEditor() {
+    var elements = variantNodeElements();
+    if (!elements.save || elements.save.dataset.ullmeBound === "true") return;
+    elements.save.dataset.ullmeBound = "true";
+    elements.save.addEventListener("click", function () { submitVariantNode("save"); });
+    elements.revert.addEventListener("click", function () {
+      if (!state.variantNode || !window.confirm("Remove this node override and use the base Tutor node?")) return;
+      submitVariantNode("revert");
+    });
+  }
+
+  function openVariantNodeEditor(suite, variant, nodeid) {
+    bindVariantNodeEditor();
+    var elements = variantNodeElements();
+    var baseYaml = String(suite.tutor && suite.tutor.node_yaml && suite.tutor.node_yaml[nodeid] || "").trim();
+    var overrideYaml = String(variant.node_yaml && variant.node_yaml[nodeid] || "").trim();
+    state.variantNode = { suiteid: suite.id, variantid: variant.id, nodeid: nodeid };
+    if (elements.tab) elements.tab.hidden = false;
+    if (elements.title) elements.title.textContent = "Variant: " + nodeid;
+    if (elements.nodeid) elements.nodeid.value = nodeid;
+    if (elements.yaml) elements.yaml.value = overrideYaml || baseYaml;
+    if (elements.revert) elements.revert.disabled = !overrideYaml;
+    if (elements.status) {
+      elements.status.textContent = overrideYaml
+        ? "This node is modified by the variant."
+        : "This is the base node. Saving creates a variant override.";
+      elements.status.classList.remove("ullme-node-editor-status-error");
+    }
+    dispatchAssistantTab("variant-node");
+    if (elements.yaml) elements.yaml.focus();
+  }
+
+  function submitVariantNode(action) {
+    var elements = variantNodeElements();
+    if (!state.variantNode) return;
+    if (action === "save" && !String(elements.yaml.value || "").trim()) {
+      elements.status.textContent = "Node YAML cannot be empty.";
+      elements.status.classList.add("ullme-node-editor-status-error");
+      return;
+    }
+    elements.save.disabled = true; elements.revert.disabled = true;
+    elements.status.textContent = "Checking the variant and complete Tutor…";
+    sendEvent("ullme_test_suite_variant_node_save_event", {
+      suiteid: state.variantNode.suiteid, variantid: state.variantNode.variantid,
+      nodeid: state.variantNode.nodeid, action: action,
+      yaml_content: action === "save" ? elements.yaml.value : ""
+    });
+  }
+
+  function hideVariantNodeEditor() {
+    var elements = variantNodeElements();
+    if (elements.tab) elements.tab.hidden = true;
+    state.variantNode = null;
+    if (elements.tab && elements.tab.classList.contains("ullme-assistant-tab-active")) {
+      dispatchAssistantTab("help");
+    }
   }
 
   function renderSettings(root, suite) {
@@ -410,24 +606,63 @@
   function closeDialog() { var dialog = byId("ullme_test_suite_dialog"); if (dialog) dialog.remove(); }
 
   function actionComplete(result) {
+    var variantElements = variantNodeElements();
+    if (variantElements.save) variantElements.save.disabled = false;
+    if (variantElements.revert && state.variantNode) {
+      var activeSuite = selectedSuite();
+      var activeVariant = activeSuite && (activeSuite.variants || []).find(function (item) {
+        return item.id === state.variantNode.variantid;
+      });
+      variantElements.revert.disabled = !(activeVariant && activeVariant.node_yaml &&
+        activeVariant.node_yaml[state.variantNode.nodeid]);
+    }
     if (!result || result.ok === false) {
+      if (result && result.kind === "variant_node" && variantElements.status) {
+        variantElements.status.textContent = result.message || "The node override could not be saved.";
+        variantElements.status.classList.add("ullme-node-editor-status-error");
+        return;
+      }
       window.alert((result && result.message) || "The Test Suite action failed.");
       return;
     }
     if (result.suiteid) { state.selectedSuiteId = result.suiteid; closeDialog(); }
+    if (result.kind === "variant" && result.variantid) {
+      state.selectedVariantId = result.variantid;
+      state.variantMode = "nodes";
+      render();
+    }
+    if (result.kind === "variant_node" && state.variantNode) {
+      var suite = selectedSuite();
+      var variant = suite && (suite.variants || []).find(function (item) {
+        return item.id === state.variantNode.variantid;
+      });
+      if (suite && variant) openVariantNodeEditor(suite, variant, state.variantNode.nodeid);
+    }
   }
 
   function uploadReady(result) {
     if (!result || result.ok === false) {
       state.pendingUpload = false;
+      state.pendingImageFiles = [];
+      state.pendingImageTarget = null;
       window.alert((result && result.message) || "The upload could not be prepared."); return;
     }
-    var input = byId("ullme_test_input_upload"); if (input) input.click();
+    var input = byId("ullme_test_input_upload");
+    if (!input || !state.pendingImageFiles.length) return;
+    var transfer = new DataTransfer();
+    state.pendingImageFiles.forEach(function (file) { transfer.items.add(file); });
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   function uploadComplete(result) {
     state.pendingUpload = false;
+    state.pendingImageFiles = [];
+    state.pendingImageTarget = null;
     var input = byId("ullme_test_input_upload"); if (input) input.value = "";
+    if (window.Shiny && Shiny.setInputValue) {
+      Shiny.setInputValue("ullme_test_input_upload", null, { priority: "event" });
+    }
     if (!result || result.ok === false) window.alert((result && result.message) || "The upload failed.");
   }
 

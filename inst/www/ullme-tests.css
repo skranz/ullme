@@ -1,4 +1,5 @@
-.ullme-tests-shell { max-width: 1500px; margin: 0 auto; }
+.ullme-test-suites.ullme-course-content-panel-active { height: 100%; min-height: 0; overflow-y: auto; }
+.ullme-tests-shell { max-width: 1500px; margin: 0 auto; padding-bottom: 32px; }
 .ullme-tests-toolbar { display: flex; gap: 10px; align-items: center; margin: 18px 0 12px; }
 .ullme-tests-toolbar select { min-width: 240px; }
 .ullme-tests-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ullme-border, #d9dee7); }
@@ -21,6 +22,20 @@
 .ullme-tests-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
 .ullme-tests-hint, .ullme-tests-source, .ullme-muted { color: var(--ullme-muted, #667085); font-size: 13px; }
 .ullme-tests-file-list { margin: 8px 0; color: var(--ullme-muted, #667085); font-size: 13px; }
+.ullme-tests-image-drop { display: grid; gap: 4px; margin-top: 14px; padding: 18px; text-align: center; color: var(--ullme-muted, #667085); border: 1px dashed var(--ullme-border, #bfc8d5); border-radius: 9px; background: var(--ullme-subtle, #f8fafb); outline: 0; }
+.ullme-tests-image-drop strong { color: inherit; }
+.ullme-tests-image-drop span { font-size: 12px; }
+.ullme-tests-image-drop-active, .ullme-tests-image-drop:focus-visible { color: var(--ullme-accent, #275efe); border-color: var(--ullme-accent, #275efe); background: rgba(39, 94, 254, 0.06); }
+.ullme-tests-compact-head, .ullme-tests-variant-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ullme-tests-compact-head h3, .ullme-tests-variant-head h3 { margin: 0; }
+.ullme-tests-compact-head .ullme-secondary-action { min-width: 30px; padding: 4px 9px; }
+.ullme-tests-list-item-active { border-color: var(--ullme-accent, #275efe); background: rgba(39, 94, 254, 0.05); }
+.ullme-tests-variant-layout { grid-template-columns: minmax(180px, 0.24fr) minmax(520px, 1fr); }
+.ullme-tests-variant-identity { display: grid; grid-template-columns: minmax(150px, 0.38fr) minmax(220px, 1fr); gap: 10px; }
+.ullme-tests-mode-tabs { display: inline-flex; gap: 2px; padding: 2px; background: var(--ullme-subtle, #eef1f4); border-radius: 7px; }
+.ullme-tests-mode-tab { border: 0; border-radius: 5px; padding: 5px 10px; color: inherit; background: transparent; cursor: pointer; }
+.ullme-tests-mode-tab-active { background: var(--ullme-surface, #fff); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 650; }
+.ullme-tests-variant-hint { margin: 8px 0 10px; }
 .ullme-tests-run-card { position: relative; margin-bottom: 22px; }
 .ullme-tests-status { position: absolute; top: 18px; right: 18px; padding: 3px 9px; border-radius: 999px; background: #eef1f6; font-size: 12px; text-transform: capitalize; }
 .ullme-tests-status-running, .ullme-tests-status-starting { color: #155eef; background: #eff4ff; }
@@ -40,4 +55,5 @@
 .ullme-tests-prompt { color: var(--ullme-muted, #667085); }
 @media (max-width: 900px) {
   .ullme-tests-split, .ullme-tests-results-layout { grid-template-columns: 1fr; }
+  .ullme-tests-variant-identity { grid-template-columns: 1fr; }
 }

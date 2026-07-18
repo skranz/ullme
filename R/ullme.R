@@ -510,6 +510,8 @@ ullme_register_handlers = function(app=getApp()) {
                fun=ullme_handle_test_suite_refresh, app=app)
   eventHandler(eventId="ullme_test_suite_variant_save_event", id=NULL,
                fun=ullme_handle_test_suite_variant_save, app=app)
+  eventHandler(eventId="ullme_test_suite_variant_node_save_event", id=NULL,
+               fun=ullme_handle_test_suite_variant_node_save, app=app)
   eventHandler(eventId="ullme_test_suite_input_save_event", id=NULL,
                fun=ullme_handle_test_suite_input_save, app=app)
   eventHandler(eventId="ullme_test_suite_upload_prepare_event", id=NULL,
@@ -781,6 +783,15 @@ ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE,
           tabindex="-1",
           hidden="hidden",
           "Node editor"
+        ),
+        tags$button(
+          id="ullme_test_variant_node_tab",
+          class="ullme-assistant-tab ullme-node-editor-tab",
+          type="button", role="tab",
+          `data-assistant-tab`="variant-node",
+          `aria-controls`="ullme_test_variant_node_panel",
+          `aria-selected`="false", tabindex="-1", hidden="hidden",
+          "Variant node"
         )
       ) else tags$div(
           class="ullme-ai-pane-heading",
@@ -798,6 +809,7 @@ ullme_chat_pane_ui = function(app=getApp(), show_header=FALSE,
     if (isTRUE(show_help)) ullme_teacher_help_ui(app=app),
     if (isTRUE(show_help)) ullme_tutor_validation_ui(),
     if (isTRUE(show_help)) ullme_tutor_node_editor_ui(),
+    if (isTRUE(show_help)) ullme_test_variant_node_editor_ui(),
     if (isTRUE(show_help)) tags$section(
       id="ullme_ai_chat_panel",
       class="ullme-assistant-panel ullme-ai-chat-panel",
@@ -1008,7 +1020,7 @@ ullme_studio_navigation_ui = function(app=getApp()) {
     lapply(seq_along(items), function(i) {
       item = items[[i]]
       tagList(
-        if (i == 4) tags$div(
+        if (i == 2) tags$div(
           id="ullme_tutor_nav_items",
           class="ullme-dynamic-nav-items",
           `aria-label`="Course AI Tutors"

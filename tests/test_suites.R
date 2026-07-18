@@ -7,17 +7,34 @@ if (requireNamespace("pkgload", quietly=TRUE)) {
   source(file.path("R", "test_suites.R"))
 }
 
-root = tempfile("ullme-test-suites-")
+test_main_root = file.path(tempdir(), "ullme_main")
+dir.create(test_main_root, recursive=TRUE, showWarnings=FALSE)
+root = tempfile("ullme-test-suites-", tmpdir=test_main_root)
 dir.create(root, recursive=TRUE)
 on.exit(unlink(root, recursive=TRUE, force=TRUE), add=TRUE)
-course_dir = file.path(root, "course")
+app = new.env(parent=emptyenv())
+app$glob = list(main_dir=root)
+app$userid = "alice"
+app$role = "teacher"
+app$allowed_roles = "teacher"
+app$semester = "SS26"
+app$courseid = "course"
+app$user_dir = file.path(root, "users", "alice")
+app$pending_changes = list()
+dir.create(app$user_dir, recursive=TRUE)
+dir.create(file.path(root, "teachers", "alice"), recursive=TRUE)
+course_dir = file.path(root, "teachers", "alice", "courses", "SS26", "course")
 test_dir = file.path(course_dir, "tests", "suite1")
 dir.create(file.path(course_dir, "materials"), recursive=TRUE)
 dir.create(file.path(test_dir, "instance_inputs", "week1", "input1"), recursive=TRUE)
 
 writeLines(c(
-  "tutorid: demo", "label: Demo", "start_node: answer", "nodes:",
-  "  answer:", "    prompt: Answer the student briefly."
+  "tutorid: demo", "lang: en", "label: Demo", "description: Test Tutor",
+  "shown_text: Welcome", "default_personality: Helpful",
+  "docs_per_instance: {}", "docs_per_course: {}", "allowed_tools: []",
+  "allowed_student_customization: []", "start_node: answer", "nodes:",
+  "  answer:", "    prompt: Answer the student briefly.", "prompt_fragments:",
+  "  init_prompt: Help the student."
 ), file.path(test_dir, "tutor.yml"))
 writeLines(c(
   "course_docs: []", "instances:", "- instanceid: week1", "  label: Week 1",
@@ -48,14 +65,33 @@ stopifnot(
   identical(record$inputs[[1]]$text, "Please explain the first step.")
 )
 
+# Node-mode editing stores only the selected node in the variant and can
+# return it to the unchanged Tutor snapshot.
+ullme_save_test_suite_variant_node(
+  "suite1", "baseline", "answer", "prompt: A variant-specific answer.", app=app
+)
+record = ullme_test_suite_record(test_dir)
+stopifnot(
+  identical(record$variants[[1]]$modified_nodes, list("answer")),
+  grepl("variant-specific", record$variants[[1]]$node_yaml$answer, fixed=TRUE)
+)
+ullme_save_test_suite_variant_node(
+  "suite1", "baseline", "answer", action="revert", app=app
+)
+record = ullme_test_suite_record(test_dir)
+stopifnot(length(record$variants[[1]]$modified_nodes) == 0L)
+
 ui = htmltools::renderTags(ullme_test_suites_ui())
 ui_html = paste(ui$head, ui$html, collapse="\n")
+node_ui = htmltools::renderTags(ullme_test_variant_node_editor_ui())
+node_ui_html = paste(node_ui$head, node_ui$html, collapse="\n")
 nav = htmltools::renderTags(ullme_studio_navigation_ui())
 nav_html = paste(nav$head, nav$html, collapse="\n")
 stopifnot(
   grepl('id="ullme_test_suites_panel"', ui_html, fixed=TRUE),
   grepl('id="ullme_tests_workspace"', ui_html, fixed=TRUE),
   grepl('id="ullme_test_input_upload"', ui_html, fixed=TRUE),
+  grepl('id="ullme_test_variant_node_yaml"', node_ui_html, fixed=TRUE),
   grepl('data-studio-view="tests"', nav_html, fixed=TRUE),
   grepl("New Test Suite", nav_html, fixed=TRUE)
 )

@@ -231,7 +231,8 @@
     return lines;
   }
 
-  function renderSvg(graph, layout, onSelect) {
+  function renderSvg(graph, layout, onSelect, modifiedNodes) {
+    modifiedNodes = modifiedNodes || {};
     var svg = svgElement("svg", {
       class: "ullme-flow-svg",
       viewBox: "0 0 " + layout.width + " " + layout.height,
@@ -290,8 +291,10 @@
       if (node.unreachable) classes.push("ullme-flow-node-unreachable");
       if (node.missing) classes.push("ullme-flow-node-missing");
       if (!node.response && !node.missing) classes.push("ullme-flow-node-editable");
+      if (modifiedNodes[node.id]) classes.push("ullme-flow-node-modified");
       var group = svgElement("g", {
         class: classes.join(" "),
+        "data-flow-node-id": node.id,
         transform: "translate(" + position.x + " " + position.y + ")"
       });
       group.appendChild(svgElement("rect", {
@@ -339,9 +342,12 @@
     return svg;
   }
 
-  function render(tutor) {
+  function render(tutor, options) {
+    options = options || {};
     var panel = document.createElement("section");
     panel.className = "ullme-tutor-tab-panel ullme-flow-panel";
+    if (options.variant) panel.classList.add("ullme-flow-variant");
+    if (options.compact) panel.classList.add("ullme-flow-compact");
     var graph = buildGraph(tutor);
     if (!graph.nodes.length) {
       var empty = document.createElement("div");
@@ -356,9 +362,12 @@
     var controls = document.createElement("div");
     var viewport = document.createElement("div");
     var layout = graphLayout(graph);
+    var modifiedNodes = {};
+    (options.modifiedNodes || []).forEach(function (id) { modifiedNodes[id] = true; });
     var svg = renderSvg(graph, layout, function (nodeId) {
-      selectNode(tutor, nodeId);
-    });
+      if (typeof options.onSelect === "function") options.onSelect(nodeId);
+      else selectNode(tutor, nodeId);
+    }, modifiedNodes);
     var scale = 1;
     toolbar.className = "ullme-flow-toolbar";
     summary.className = "ullme-flow-summary";
