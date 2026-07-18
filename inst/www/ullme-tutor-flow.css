@@ -242,10 +242,54 @@
 }
 
 .ullme-node-editor-panel.ullme-assistant-panel-active {
-  grid-template-rows: auto auto minmax(180px, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(180px, 1fr) auto auto;
   gap: 12px;
   overflow: hidden;
   padding: 15px 14px 13px;
+}
+
+.ullme-node-field-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 18px;
+  gap: 6px;
+  align-items: center;
+  min-height: 28px;
+  color: #626a65;
+  font-size: 10.5px;
+}
+
+.ullme-node-field-picker-label { white-space: nowrap; }
+
+.ullme-node-field-picker select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  padding: 2px 24px 2px 7px;
+  border: 1px solid #d8dedb;
+  border-radius: 6px;
+  outline: 0;
+  background: #fff;
+  color: #303632;
+  font-size: 10.5px;
+}
+
+.ullme-node-field-picker select:focus {
+  border-color: #6c9f8b;
+  box-shadow: 0 0 0 2px rgba(108, 159, 139, 0.16);
+}
+
+.ullme-node-field-help {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border: 1px solid #cbd3ce;
+  border-radius: 50%;
+  color: #65706a;
+  cursor: help;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .ullme-node-editor-head,

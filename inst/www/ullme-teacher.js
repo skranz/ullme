@@ -768,6 +768,9 @@
       uploadButton.classList.toggle("ullme-material-tab-upload-visible", panelName === "materials");
     }
     showHelpForView(panelName);
+    document.dispatchEvent(new CustomEvent("ullme:studio-view", {
+      detail: { view: panelName }
+    }));
   }
 
   function activateAssistantTab(tabName) {

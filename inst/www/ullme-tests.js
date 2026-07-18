@@ -419,6 +419,8 @@
       title: byId("ullme_test_variant_node_title"),
       nodeid: byId("ullme_test_variant_node_id"),
       yaml: byId("ullme_test_variant_node_yaml"),
+      field: byId("ullme_test_variant_node_field"),
+      fieldHelp: byId("ullme_test_variant_node_field_help"),
       status: byId("ullme_test_variant_node_status"),
       save: byId("ullme_test_variant_node_save"),
       revert: byId("ullme_test_variant_node_revert")
@@ -427,6 +429,16 @@
 
   function bindVariantNodeEditor() {
     var elements = variantNodeElements();
+    if (window.ullmeNodeFields && window.ullmeNodeFields.bind) {
+      window.ullmeNodeFields.bind({
+        select: elements.field, textarea: elements.yaml, help: elements.fieldHelp,
+        onStatus: function (message, duplicate) {
+          if (!elements.status) return;
+          elements.status.textContent = message;
+          elements.status.classList.toggle("ullme-node-editor-status-error", Boolean(duplicate));
+        }
+      });
+    }
     if (!elements.save || elements.save.dataset.ullmeBound === "true") return;
     elements.save.dataset.ullmeBound = "true";
     elements.save.addEventListener("click", function () { submitVariantNode("save"); });
@@ -747,6 +759,30 @@
     } else if (!running && state.pollTimer) {
       window.clearInterval(state.pollTimer); state.pollTimer = null;
     }
+  }
+
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("ullme:studio-view", function (event) {
+      var view = event.detail && event.detail.view;
+      if (view && view !== "tests") hideVariantNodeEditor();
+    });
+  }
+
+  function observeTestSuiteVisibility() {
+    var panel = byId("ullme_test_suites_panel");
+    if (!panel || !window.MutationObserver || panel.dataset.ullmeVisibilityObserved === "true") return;
+    panel.dataset.ullmeVisibilityObserved = "true";
+    var observer = new window.MutationObserver(function () {
+      if (!panel.classList.contains("ullme-course-content-panel-active")) hideVariantNodeEditor();
+    });
+    observer.observe(panel, { attributes: true, attributeFilter: ["class"] });
+  }
+
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function" &&
+      document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", observeTestSuiteVisibility);
+  } else if (typeof document !== "undefined") {
+    observeTestSuiteVisibility();
   }
 
   window.ullmeTests = {

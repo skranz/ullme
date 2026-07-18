@@ -441,6 +441,8 @@
       title: document.getElementById("ullme_node_editor_title"),
       nodeId: document.getElementById("ullme_node_editor_id"),
       yaml: document.getElementById("ullme_node_editor_yaml"),
+      field: document.getElementById("ullme_node_editor_field"),
+      fieldHelp: document.getElementById("ullme_node_editor_field_help"),
       status: document.getElementById("ullme_node_editor_status"),
       create: document.getElementById("ullme_node_editor_new"),
       remove: document.getElementById("ullme_node_editor_delete"),
@@ -532,6 +534,12 @@
 
   function initEditor() {
     var elements = editorElements();
+    if (root.ullmeNodeFields && root.ullmeNodeFields.bind) {
+      root.ullmeNodeFields.bind({
+        select: elements.field, textarea: elements.yaml, help: elements.fieldHelp,
+        onStatus: function (message, duplicate) { setEditorStatus(message, duplicate); }
+      });
+    }
     if (!elements.create || elements.create.dataset.ullmeBound === "true") return;
     elements.create.dataset.ullmeBound = "true";
     elements.create.addEventListener("click", function () {

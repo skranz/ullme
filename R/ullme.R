@@ -612,6 +612,7 @@ ullme_app_ui = function(app=getApp()) {
         src=if (is_teacher) "ullme/ullme-teacher.js" else
           "ullme/ullme-student.js"
       ),
+      if (is_teacher) tags$script(src="ullme/ullme-node-fields.js"),
       if (is_teacher) tags$script(src="ullme/ullme-tutor-flow.js"),
       if (is_teacher) tags$script(src="ullme/ullme-tutor-validation.js"),
       if (is_teacher) tags$script(src="ullme/ullme-tutors.js"),

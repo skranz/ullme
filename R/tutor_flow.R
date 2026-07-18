@@ -1,3 +1,48 @@
+ullme_node_field_catalog = function() {
+  path = system.file("specs", "tutor_node_fields.yml", package="ullme")
+  if (!nzchar(path) || !file.exists(path)) {
+    path = file.path("inst", "specs", "tutor_node_fields.yml")
+  }
+  if (!file.exists(path)) return(list())
+  value = yaml::read_yaml(path, eval.expr=FALSE)
+  value$groups %||% list()
+}
+
+
+ullme_node_field_picker_ui = function(prefix) {
+  groups = ullme_node_field_catalog()
+  options = lapply(groups, function(group) {
+    fields = group$fields %||% list()
+    tags$optgroup(
+      label=paste0(group$label %||% "Fields")[1],
+      lapply(fields, function(field) tags$option(
+        value=paste0(field$path %||% "")[1],
+        title=paste0(field$long %||% field$short %||% "")[1],
+        `data-template`=paste0(field$template %||% "", collapse="\n"),
+        `data-nested-template`=paste0(field$nested_template %||% "", collapse="\n"),
+        paste0(field$label %||% field$path %||% "Field", " — ", field$short %||% "")
+      ))
+    )
+  })
+  tags$div(
+    class="ullme-node-field-picker",
+    tags$span(class="ullme-node-field-picker-label", "Add field"),
+    tags$select(
+      id=paste0(prefix, "_field"),
+      `aria-label`="Add a field to the node YAML",
+      title="Choose a field to insert into the node YAML.",
+      tags$option(value="", "Choose…"),
+      options
+    ),
+    tags$span(
+      id=paste0(prefix, "_field_help"),
+      class="ullme-node-field-help", title="Choose a field to see its description.",
+      `aria-label`="Field description", "?"
+    )
+  )
+}
+
+
 ullme_tutor_node_editor_ui = function() {
   restore.point("ullme_tutor_node_editor_ui")
   tags$section(
@@ -27,6 +72,7 @@ ullme_tutor_node_editor_ui = function() {
         title="Renaming a node also updates start_node, next, and switch_to references."
       )
     ),
+    ullme_node_field_picker_ui("ullme_node_editor"),
     tags$label(
       class="ullme-node-editor-field ullme-node-editor-yaml-field",
       tags$span("Node YAML"),

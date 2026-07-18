@@ -92,6 +92,7 @@ stopifnot(
   grepl('id="ullme_tests_workspace"', ui_html, fixed=TRUE),
   grepl('id="ullme_test_input_upload"', ui_html, fixed=TRUE),
   grepl('id="ullme_test_variant_node_yaml"', node_ui_html, fixed=TRUE),
+  grepl('id="ullme_test_variant_node_field"', node_ui_html, fixed=TRUE),
   !grepl("Quality assurance", ui_html, fixed=TRUE),
   grepl('data-studio-view="tests"', nav_html, fixed=TRUE),
   grepl("New Test Suite", nav_html, fixed=TRUE)

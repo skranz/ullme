@@ -1,0 +1,95 @@
+groups:
+  model:
+    label: Model call
+    fields:
+      - path: prompt
+        label: prompt
+        short: Instructions sent to the model
+        long: The prompt for this model call. It may use supported placeholders such as {{input}}, {{output}}, and {{hist}}.
+        template: |-
+          prompt: |
+            Describe what this workflow node should do.
+      - path: waiting_message
+        label: waiting_message
+        short: Text shown while the model works
+        long: A brief progress message displayed to the student while this node is waiting for the model response.
+        template: 'waiting_message: Thinking…'
+      - path: n_retries
+        label: n_retries
+        short: Retry failed model calls
+        long: Number of additional attempts after a failed model call. Valid values are zero through three.
+        template: 'n_retries: 1'
+      - path: n_parallel
+        label: n_parallel
+        short: Run several model calls
+        long: Number of parallel model calls for this node. Values above one require an aggregate strategy.
+        template: 'n_parallel: 3'
+      - path: aggregate
+        label: aggregate
+        short: Combine parallel outputs
+        long: Strategy for combining parallel model calls. Currently majority_vote is supported and requires output routing.
+        template: 'aggregate: majority_vote'
+  routing:
+    label: Routing
+    fields:
+      - path: next
+        label: next
+        short: Continue with another node
+        long: ID of the workflow node that runs after this node finishes. Do not combine next with switch_to.
+        template: 'next: next_node'
+      - path: switch_input
+        label: switch_input
+        short: Value used for branching
+        long: Selects the value evaluated by switch_to. Supported values are output and image_uploaded.
+        template: 'switch_input: output'
+      - path: switch_to
+        label: switch_to
+        short: Branch-to-node map
+        long: Maps model outputs or image-upload states to target node IDs. A DEFAULT route is recommended.
+        template: |-
+          switch_to:
+            DEFAULT: next_node
+      - path: switch_to.branch
+        label: switch_to → branch
+        short: Add a named branch
+        long: Adds another output label and target node inside an existing switch_to map. Rename branch and next_node as needed.
+        template: |-
+          switch_to:
+            branch: next_node
+        nested_template: 'branch: next_node'
+      - path: switch_to.DEFAULT
+        label: switch_to → DEFAULT
+        short: Add the fallback branch
+        long: Adds the fallback target used when no other switch_to label matches.
+        template: |-
+          switch_to:
+            DEFAULT: next_node
+        nested_template: 'DEFAULT: next_node'
+  conversation:
+    label: Student interaction
+    fields:
+      - path: ask_for_input
+        label: ask_for_input
+        short: Pause for a student reply
+        long: Pauses the workflow and waits for student input. This also requires show_text and a prompt that processes the resumed input.
+        template: 'ask_for_input: true'
+      - path: show_text
+        label: show_text
+        short: Question shown to the student
+        long: Text displayed when ask_for_input pauses the workflow.
+        template: |-
+          show_text: |
+            What information do you need from the student?
+      - path: add_to_history
+        label: add_to_history
+        short: Keep output in workflow history
+        long: Controls whether this node output is added to internal workflow history. The default is true.
+        template: 'add_to_history: false'
+  control:
+    label: Control
+    fields:
+      - path: skip
+        label: skip
+        short: Temporarily bypass this node
+        long: When true, the node does not call the model and follows its configured next or switch route.
+        template: 'skip: true'

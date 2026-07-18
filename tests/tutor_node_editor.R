@@ -14,6 +14,18 @@ stopifnot(
   length(normalized$node_yaml) == length(normalized$nodes),
   grepl("switch_input:", normalized$node_yaml$switch_image, fixed=TRUE)
 )
+field_catalog = ullme_node_field_catalog()
+field_paths = unlist(lapply(field_catalog, function(group) {
+  vapply(group$fields %||% list(), `[[`, character(1), "path")
+}), use.names=FALSE)
+field_ui = htmltools::renderTags(ullme_node_field_picker_ui("test_node"))
+field_html = paste(field_ui$head, field_ui$html, collapse="\n")
+stopifnot(
+  all(c("prompt", "next", "switch_to.DEFAULT", "ask_for_input") %in% field_paths),
+  !anyDuplicated(field_paths),
+  grepl('id="test_node_field"', field_html, fixed=TRUE),
+  grepl("Instructions sent to the model", field_html, fixed=TRUE)
+)
 valid = ullme_validate_tutor_yaml(
   tutorid="ps_tutor_en",
   content=yaml::as.yaml(definition)

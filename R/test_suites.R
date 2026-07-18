@@ -630,6 +630,7 @@ ullme_test_variant_node_editor_ui = function() {
       tags$span("Node ID"),
       tags$input(id="ullme_test_variant_node_id", type="text", readonly="readonly")
     ),
+    ullme_node_field_picker_ui("ullme_test_variant_node"),
     tags$label(
       class="ullme-node-editor-field ullme-node-editor-yaml-field",
       tags$span("Node YAML override"),
