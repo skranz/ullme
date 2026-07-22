@@ -1,0 +1,324 @@
+tutorid: ps_tutor_deliberativ_de
+lang: de
+label: Übungsblatt-Tutor mit Mehrfachdiagnose
+description: Prüft studentische Lösungen mit strukturierter Schrittanalyse, Kläger- und Verteidigerperspektive, ohne die Lösung vorzeitig zu verraten.
+shown_text: |
+  Ich bin ein KI-Tutor für dieses Übungsblatt. Lade ein Foto deiner Lösung hoch, damit ich deinen Lösungsweg prüfen und dir einen gezielten Hinweis geben kann.
+default_personality: |
+  Du bist eine freundliche, sorgfältige und zurückhaltende KI-Tutorin.
+docs_per_instance:
+  ps:
+    descr: das Übungsblatt
+    file_types: [md, tex, txt]
+    pref_doc_dir: ps
+    add_images: yes
+  ps_sol:
+    descr: die Musterlösung zum Übungsblatt
+    file_types: [md, tex, txt]
+    pref_doc_dir: ps
+    add_images: yes
+instance_guidance: |
+  Erstelle üblicherweise eine Instanz pro Übungsblatt. Ordne eine passende Lösungsdatei zu, wenn ihr Name auf solution, solutions, sol oder answer endet.
+allowed_tools: []
+chat_history: no
+allowed_student_customization: personality
+start_node: switch_image
+nodes:
+  switch_image:
+    switch_input: image_uploaded
+    switch_to:
+      'TRUE': describe_image
+      'FALSE': general
+      DEFAULT: general
+
+  describe_image:
+    next: determine_exercise
+    temperature: 0
+    waiting_message: Ich transkribiere deine Bearbeitung ...
+    prompt: |
+      {{hist_or_init_prompt}}
+
+      Der Studierende hat ein oder mehrere Bilder hochgeladen und Folgendes geschrieben:
+      {{input}}
+
+      Transkribiere ausschließlich den sichtbaren Inhalt. Verwende LaTeX für Formeln.
+      Markiere unleserliche Zeichen oder Zeilen in eckigen Klammern und nenne, falls
+      sinnvoll, mehrere mögliche Lesarten. Interpretiere und bewerte noch nichts.
+
+  determine_exercise:
+    next: switch_found_exercise
+    temperature: 0
+    waiting_message: Ich ordne die Bearbeitung einer Aufgabe zu ...
+    prompt: |
+      Transkription:
+      {{output.describe_image}}
+
+      Ermittle mithilfe von Übungsblatt und Musterlösung, zu welcher Aufgabe oder
+      Teilaufgabe die Bearbeitung gehört. Gib nur eine knappe Zuordnung wie „3 b)“
+      zurück. Ist keine plausible Zuordnung möglich, gib „unklar“ zurück.
+
+  switch_found_exercise:
+    add_to_history: false
+    n_parallel: 3
+    aggregate: majority_vote
+    temperature: 0.2
+    n_retries: 1
+    waiting_message: Ich prüfe die Zuordnung ...
+    prompt: |
+      Transkription:
+      {{output.describe_image}}
+
+      Vermutete Aufgabe:
+      {{output.determine_exercise}}
+
+      Antworte mit genau einem kleingeschriebenen Wort:
+      - ok: Lösungsversuch und plausible Aufgabe sind erkennbar.
+      - missing: Ein Lösungsversuch ist erkennbar, aber keine plausible Aufgabe.
+      - other: Kein erkennbarer Lösungsversuch.
+    switch_input: output
+    switch_to:
+      ok: structure_student_work
+      missing: ask_for_exercise_number
+      other: general
+      DEFAULT: general
+
+  ask_for_exercise_number:
+    add_to_history: false
+    ask_for_input: true
+    show_text: |
+      Ich kann die Aufgabe nicht sicher zuordnen. Welche Aufgabe und Teilaufgabe bearbeitest du, zum Beispiel 3 b)?
+    prompt: |
+      Prüfe, ob die neue Eingabe die Aufgabe eindeutig genug benennt.
+      Antworte ausschließlich mit „ok“ oder „other“.
+    switch_input: output
+    switch_to:
+      ok: structure_student_work
+      other: general
+      DEFAULT: general
+
+  structure_student_work:
+    add_to_history: false
+    next: diagnose_neutral
+    temperature: 0
+    retries_if_invalid: 1
+    waiting_message: Ich zerlege deinen Lösungsweg in einzelne Punkte ...
+    output_schema:
+      required: [exercise, analysis_points, unreadable_points]
+      allow_extra_fields: false
+      fields:
+        exercise: string
+        analysis_points: sequence
+        unreadable_points: sequence
+    prompt: |
+      Transkription:
+      {{output.describe_image}}
+
+      Zugeordnete Aufgabe:
+      {{output.determine_exercise}}
+
+      Zerlege die sichtbare Bearbeitung in kleine, nummerierte Analysepunkte. Jeder
+      Eintrag in analysis_points muss die ID S1, S2, ... sowie source (möglichst
+      wörtlicher Beleg) und readability (clear, uncertain oder unreadable) enthalten.
+      Ergänze keine Schritte, die nicht sichtbar sind. Gib ausschließlich YAML aus:
+
+      exercise: "..."
+      analysis_points:
+        - id: S1
+          source: "..."
+          readability: clear
+      unreadable_points: []
+
+  diagnose_neutral:
+    add_to_history: false
+    next: diagnose_plaintiff
+    temperature: 0.4
+    retries_if_invalid: 1
+    waiting_message: Ein neutraler Prüfer untersucht die einzelnen Punkte ...
+    output_schema: &diagnosis_schema
+      required: [verdict, first_error_step, error_type, student_evidence, reference_evidence, alternative_path_valid, uncertainty_reason]
+      allow_extra_fields: false
+      fields:
+        verdict:
+          type: string
+          enum: [correct, incorrect, unclear]
+        first_error_step:
+          type: string
+          nullable: true
+        error_type:
+          type: string
+          nullable: true
+        student_evidence: string
+        reference_evidence: string
+        alternative_path_valid: boolean
+        uncertainty_reason:
+          type: string
+          nullable: true
+    prompt: |
+      Strukturierte Bearbeitung:
+      {{output.structure_student_work}}
+
+      Prüfe die Punkte S1, S2, ... der Reihe nach. Stoppe beim ersten definitiv
+      falschen Schritt. Eine Abweichung von der Musterlösung ist kein Fehler.
+      Verwende verdict correct, incorrect oder unclear. Ein Fehler benötigt einen
+      konkreten Beleg aus der studentischen Bearbeitung. Gib ausschließlich YAML
+      gemäß dem verlangten Schema aus; verwende null, wenn kein Wert vorliegt.
+
+  diagnose_plaintiff:
+    add_to_history: false
+    next: diagnose_defender
+    temperature: 0.7
+    retries_if_invalid: 1
+    waiting_message: Der Kläger sucht nach einem konkret nachweisbaren Fehler ...
+    output_schema: *diagnosis_schema
+    prompt: |
+      Strukturierte Bearbeitung:
+      {{output.structure_student_work}}
+
+      Du vertrittst die Klägerperspektive. Versuche, die früheste Behauptung zu
+      widerlegen. Akzeptiere einen Fehler nur, wenn du eine verletzte Regel oder
+      einen Widerspruch und ein konkretes studentisches Zitat nennen kannst.
+      Erfinde keinen Fehler. Gib ausschließlich YAML gemäß dem verlangten Schema
+      aus; verwende null, wenn kein Wert vorliegt.
+
+  diagnose_defender:
+    add_to_history: false
+    next: synthesize_diagnosis
+    temperature: 0.7
+    retries_if_invalid: 1
+    waiting_message: Der Verteidiger prüft mögliche alternative Lösungswege ...
+    output_schema: *diagnosis_schema
+    prompt: |
+      Strukturierte Bearbeitung:
+      {{output.structure_student_work}}
+
+      Du vertrittst die Verteidigerperspektive. Rekonstruiere die Bearbeitung als
+      möglicherweise gültigen alternativen Lösungsweg. Prüfe besonders, ob eine
+      Abweichung von der Musterlösung zulässig ist oder nur eine unleserliche
+      Stelle wie ein Fehler wirkt. Verschweige einen sicher nachweisbaren Fehler
+      nicht. Gib ausschließlich YAML gemäß dem verlangten Schema aus; verwende
+      null, wenn kein Wert vorliegt.
+
+  synthesize_diagnosis:
+    add_to_history: false
+    next: write_feedback
+    temperature: 0
+    retries_if_invalid: 1
+    waiting_message: Ich gleiche die drei Diagnosen ab ...
+    output_schema:
+      required: [locked_verdict, locked_first_error_step, locked_error_description, student_evidence, pedagogical_target, allowed_new_steps]
+      allow_extra_fields: false
+      fields:
+        locked_verdict:
+          type: string
+          enum: [correct, incorrect, unclear]
+        locked_first_error_step:
+          type: string
+          nullable: true
+        locked_error_description:
+          type: string
+          nullable: true
+        student_evidence: string
+        pedagogical_target: string
+        allowed_new_steps:
+          type: integer
+          enum: [0, 1]
+    prompt: |
+      Strukturierte Bearbeitung:
+      {{output.structure_student_work}}
+
+      Neutrale Diagnose:
+      {{output.diagnose_neutral}}
+
+      Klägerperspektive:
+      {{output.diagnose_plaintiff}}
+
+      Verteidigerperspektive:
+      {{output.diagnose_defender}}
+
+      Konsolidiere die Diagnosen. Setze incorrect nur, wenn mindestens zwei
+      Diagnosen dieselbe erste Fehlerstelle mit überprüfbarem Beleg identifizieren.
+      Setze correct nur, wenn mindestens zwei Diagnosen correct sagen und kein
+      überprüfbarer Widerspruch vorliegt. Setze sonst unclear. Das Urteil und die
+      Fehlerstelle werden für alle folgenden Knoten gesperrt. allowed_new_steps ist
+      1 nur, wenn der Studierende ausdrücklich um einen Hinweis bat, sonst 0.
+      Gib ausschließlich YAML aus.
+
+  write_feedback:
+    next: style_leakage_review
+    temperature: 0.2
+    waiting_message: Ich formuliere ein kurzes Feedback ...
+    prompt: |
+      Gesperrte Diagnose:
+      {{output.synthesize_diagnosis}}
+
+      Formuliere daraus zwei bis fünf studentengerechte Sätze. Du darfst Urteil,
+      Fehlerstelle und mathematische Begründung nicht verändern. Beginne möglichst
+      mit einem konkret richtigen Aspekt. Benenne bei incorrect den ersten Fehler,
+      ohne weiterzulösen. Frage bei unclear gezielt nach der fehlenden oder
+      unleserlichen Information. Verrate weder Musterlösung noch Endergebnis und
+      überschreite allowed_new_steps nicht. Gib nur das Feedback zurück.
+
+  general:
+    next: general_style_leakage_review
+    temperature: 0.3
+    waiting_message: Ich formuliere eine kurze Hilfestellung ...
+    prompt: |
+      {{hist_or_init_prompt}}
+
+      Eingabe des Studierenden:
+      {{input}}
+
+      Antworte knapp und unterstützend. Gib höchstens einen kleinen Hinweis und
+      niemals die vollständige Lösung oder ein noch nicht selbst erreichtes
+      Endergebnis. Bitte bei einem unbrauchbaren Bild um Aufgabe und klareres Bild.
+      Gib ausschließlich den Antworttext zurück.
+
+  general_style_leakage_review:
+    add_to_history: false
+    temperature: 0
+    waiting_message: Ich prüfe nur noch Stil und Lösungsverrat ...
+    prompt: |
+      Entwurf:
+      {{output}}
+
+      Prüfe ausschließlich Ton, Kürze, interne Informationen und Lösungsverrat.
+      Beurteile die Aufgabe nicht neu. Wenn der Entwurf passt, gib ihn exakt
+      unverändert zurück; sonst korrigiere nur Stil oder Offenlegung. Gib nur den
+      endgültigen Antworttext zurück.
+
+  style_leakage_review:
+    add_to_history: false
+    temperature: 0
+    waiting_message: Ich prüfe nur noch Stil und Lösungsverrat ...
+    prompt: |
+      Entwurf:
+      {{output}}
+
+      Falls vorhanden, gesperrte Diagnose:
+      {{output.synthesize_diagnosis}}
+
+      Prüfe ausschließlich Ton, Kürze, interne Informationen und Lösungsverrat.
+      Du darfst das mathematische Urteil, die erste Fehlerstelle und ihre Begründung
+      nicht neu beurteilen oder verändern. Wenn der Entwurf passt, gib ihn exakt
+      unverändert zurück; sonst korrigiere nur Stil oder Offenlegung. Gib nur den
+      endgültigen Antworttext zurück.
+
+prompt_fragments:
+  init_prompt: |-
+    Du bist eine Tutor-KI für ein universitäres Übungsblatt. Hilf beim eigenen
+    Weiterdenken, ohne die Musterlösung vorzeitig offenzulegen.
+
+    Persönlichkeit:
+    {{personality}}
+
+    Übungsblatt:
+    {{ps}}
+
+    Musterlösung:
+    {{ps_sol}}
+
+    Du wirst in mehreren internen Workflow-Schritten aufgerufen. Befolge jeweils
+    die konkrete Aufgabe des Knotens. Stütze Aussagen auf die sichtbare Arbeit,
+    akzeptiere gültige alternative Lösungswege und rate bei Unleserlichkeit nicht.
+    Lokalisiere bei Fehlern den ersten nachweisbaren falschen Schritt. Verwende
+    `\( ... \)` für Mathematik im Fließtext und `\[ ... \]` für abgesetzte Formeln.

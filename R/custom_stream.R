@@ -352,6 +352,7 @@ ullme_custom_stream_body = function(input, model, context=list(),
                                     task_profile="",
                                     messages=NULL,
                                     uploads=NULL,
+                                    temperature=NULL,
                                     app=getApp()) {
   system_prompt = if (is.null(messages)) {
     ullme_custom_stream_system_prompt(
@@ -378,7 +379,7 @@ ullme_custom_stream_body = function(input, model, context=list(),
           uploads=uploads,
           app=app
         ),
-      temperature=1,
+      temperature=temperature %||% 1,
       top_p=0.95,
       max_tokens=profile$max_tokens,
       stream=TRUE
@@ -749,6 +750,7 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
                                         include_thinking=FALSE,
                                         task_profile="",
                                         uploads=NULL,
+                                        temperature=NULL,
                                         on_update=function(...) NULL,
                                         on_event=function(...) NULL,
                                         app=getApp()) {
@@ -895,6 +897,7 @@ ullme_start_custom_ai_stream = function(input, model=NULL, context=list(),
         task_profile=task_profile,
         messages=state$messages,
         uploads=uploads,
+        temperature=temperature,
         app=app
       )
       body_image_parts = sum(vapply(body$messages, function(message) {

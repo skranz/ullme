@@ -258,6 +258,66 @@ ullme_prompt_placeholders = function(text) {
 }
 
 
+ullme_validate_tutor_output_schema = function(schema, label="output_schema") {
+  errors = character(0)
+  if (!is.list(schema) || is.null(names(schema))) {
+    return(paste0(label, " must be a mapping."))
+  }
+  expanded = "fields" %in% names(schema)
+  fields = if (expanded) schema$fields else schema
+  if (!is.list(fields) || is.null(names(fields)) || !length(fields)) {
+    return(paste0(label, if (expanded) ".fields" else "", " must be a non-empty mapping."))
+  }
+  if (expanded) {
+    unknown = setdiff(names(schema), c("required", "fields", "allow_extra_fields"))
+    if (length(unknown)) errors = c(errors, paste0(
+      label, " contains unknown settings: ", paste(unknown, collapse=", "), "."
+    ))
+    required = paste0(unlist(schema$required %||% list(), use.names=FALSE))
+    missing = setdiff(required, names(fields))
+    if (length(missing)) errors = c(errors, paste0(
+      label, ".required names undefined fields: ", paste(missing, collapse=", "), "."
+    ))
+    if (!is.null(schema$allow_extra_fields) &&
+        (!is.logical(schema$allow_extra_fields) ||
+         length(schema$allow_extra_fields) != 1L)) {
+      errors = c(errors, paste0(label, ".allow_extra_fields must be true or false."))
+    }
+  }
+  valid_types = c(
+    "any", "string", "string_or_null", "number", "integer", "boolean",
+    "mapping", "object", "sequence", "array", "null"
+  )
+  for (field in names(fields)) {
+    spec = fields[[field]]
+    field_label = paste0(label, ".fields.", field)
+    if (is.character(spec) && length(spec) == 1L) {
+      if (!spec %in% valid_types) errors = c(errors, paste0(
+        field_label, " has unsupported type '", spec, "'."
+      ))
+    } else if (is.list(spec) && !is.null(names(spec))) {
+      unknown = setdiff(names(spec), c("type", "enum", "required", "nullable"))
+      if (length(unknown)) errors = c(errors, paste0(
+        field_label, " contains unknown settings: ", paste(unknown, collapse=", "), "."
+      ))
+      types = paste0(unlist(spec$type %||% "any", use.names=FALSE))
+      if (any(!types %in% valid_types)) errors = c(errors, paste0(
+        field_label, ".type contains an unsupported value."
+      ))
+      for (flag in c("required", "nullable")) {
+        if (!is.null(spec[[flag]]) &&
+            (!is.logical(spec[[flag]]) || length(spec[[flag]]) != 1L)) {
+          errors = c(errors, paste0(field_label, ".", flag, " must be true or false."))
+        }
+      }
+    } else if (!(is.atomic(spec) || (is.list(spec) && is.null(names(spec))))) {
+      errors = c(errors, paste0(field_label, " must be a type, enum, or mapping."))
+    }
+  }
+  errors
+}
+
+
 ullme_validate_tutor_workflow = function(value, document_ids,
                                           customization_ids) {
   errors = character(0)
@@ -298,7 +358,7 @@ ullme_validate_tutor_workflow = function(value, document_ids,
     errors = c(errors, "prompt_fragments contains an invalid fragment ID.")
   }
   runtime_ids = c(
-    "input", "output", "hist", "hist_or_init_prompt", "image_uploaded"
+    "input", "output", "outputs", "hist", "hist_or_init_prompt", "image_uploaded"
   )
   reserved = intersect(runtime_ids, c(
     document_ids, customization_ids, fragment_ids
@@ -315,7 +375,7 @@ ullme_validate_tutor_workflow = function(value, document_ids,
   unknown_placeholders = function(text) {
     found = ullme_prompt_placeholders(text)
     setdiff(
-      found[!grepl("^output[.][A-Za-z][A-Za-z0-9_]*$", found)],
+      found[!grepl("^outputs?[.][A-Za-z][A-Za-z0-9_]*(?:[.][1-9][0-9]*)?$", found)],
       known_placeholders
     )
   }
@@ -404,6 +464,31 @@ ullme_validate_tutor_workflow = function(value, document_ids,
         errors = c(errors, paste0(label, ".n_retries must be between 0 and 3."))
       }
     }
+    if (!is.null(node$temperature)) {
+      temperature = suppressWarnings(as.numeric(node$temperature)[1])
+      if (length(node$temperature) != 1L || is.na(temperature) ||
+          temperature < 0 || temperature > 2) {
+        errors = c(errors, paste0(label, ".temperature must be between 0 and 2."))
+      }
+    }
+    if (!is.null(node$retries_if_invalid)) {
+      n = suppressWarnings(as.numeric(node$retries_if_invalid)[1])
+      if (length(node$retries_if_invalid) != 1L || is.na(n) ||
+          n < 0 || n > 3 || n != floor(n)) {
+        errors = c(errors, paste0(
+          label, ".retries_if_invalid must be an integer between 0 and 3."
+        ))
+      }
+    }
+    if (!is.null(node$output_schema)) {
+      errors = c(errors, ullme_validate_tutor_output_schema(
+        node$output_schema, paste0(label, ".output_schema")
+      ))
+    } else if (!is.null(node$retries_if_invalid)) {
+      errors = c(errors, paste0(
+        label, ".retries_if_invalid requires output_schema."
+      ))
+    }
     if (!is.null(node$retries_if_empty)) {
       value = suppressWarnings(as.numeric(node$retries_if_empty)[1])
       if (length(node$retries_if_empty) != 1L || is.na(value) ||
@@ -422,13 +507,18 @@ ullme_validate_tutor_workflow = function(value, document_ids,
       ))
     }
     aggregate = paste0(node$aggregate %||% "")[1]
-    if (nzchar(aggregate) && !identical(aggregate, "majority_vote")) {
-      errors = c(errors, paste0(label, ".aggregate must be majority_vote."))
+    if (nzchar(aggregate) && !aggregate %in% c("majority_vote", "collect")) {
+      errors = c(errors, paste0(label, ".aggregate must be majority_vote or collect."))
     }
     if (identical(aggregate, "majority_vote") &&
         (!identical(switch_input, "output") || is.null(switch_to))) {
       errors = c(errors, paste0(
         label, ".aggregate majority_vote requires switch_input: output and switch_to."
+      ))
+    }
+    if (identical(aggregate, "majority_vote") && !is.null(node$output_schema)) {
+      errors = c(errors, paste0(
+        label, ".output_schema cannot be combined with aggregate majority_vote."
       ))
     }
     if (!is.na(parallel_n) && parallel_n > 1L && !nzchar(aggregate)) {

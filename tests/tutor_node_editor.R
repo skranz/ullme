@@ -31,7 +31,8 @@ stopifnot(
     "prompt", "show_before", "show_after", "next",
     "switch_to.DEFAULT", "ask_for_input", "placeholder.hist",
     "placeholder.output_node", "retries_if_empty",
-    "postfix_wait_retry_if_empty"
+    "postfix_wait_retry_if_empty", "temperature", "output_schema",
+    "retries_if_invalid", "placeholder.outputs", "placeholder.outputs_node"
   ) %in% field_paths),
   !anyDuplicated(field_paths),
   grepl('id="test_node_field"', field_html, fixed=TRUE),

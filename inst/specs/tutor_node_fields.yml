@@ -48,11 +48,33 @@ groups:
         short: Run several model calls
         long: Number of parallel model calls for this node. Values above one require an aggregate strategy.
         template: 'n_parallel: 3'
+      - path: temperature
+        label: temperature
+        short: Set sampling temperature
+        long: Optional temperature for this node's model calls, between 0 and 2. Lower values are more deterministic.
+        template: 'temperature: 0.6'
       - path: aggregate
         label: aggregate
         short: Combine parallel outputs
-        long: Strategy for combining parallel model calls. Currently majority_vote is supported and requires output routing.
-        template: 'aggregate: majority_vote'
+        long: Strategy for combining parallel model calls. majority_vote requires output routing; collect retains and numbers every response.
+        template: 'aggregate: collect'
+      - path: output_schema
+        label: output_schema
+        short: Require structured YAML
+        long: Parses the model response as YAML and validates required fields, types, enum values, nullability, and optionally extra fields.
+        template: |-
+          output_schema:
+            required: [verdict]
+            allow_extra_fields: false
+            fields:
+              verdict:
+                type: string
+                enum: [correct, incorrect, unclear]
+      - path: retries_if_invalid
+        label: retries_if_invalid
+        short: Retry invalid structured output
+        long: Number of format-only correction calls after output_schema validation fails. Valid values are zero through three.
+        template: 'retries_if_invalid: 1'
   routing:
     label: Routing
     fields:
@@ -138,6 +160,18 @@ groups:
         short: Output of a named node
         long: The stored model output of a specific completed node. Replace node_id with its ID; when unavailable, the runtime inserts an explanatory fallback and writes a warning to the R console.
         insert: '{{output.node_id}}'
+      - path: placeholder.outputs
+        kind: placeholder
+        label: '{{outputs}}'
+        short: All recent parallel outputs
+        long: Renders every individual output of the immediately preceding node with numbered separators.
+        insert: '{{outputs}}'
+      - path: placeholder.outputs_node
+        kind: placeholder
+        label: '{{outputs.node_id}}'
+        short: All outputs of a named node
+        long: Renders every individual output retained for a specific completed node. A single output can be selected with {{output.node_id.1}}.
+        insert: '{{outputs.node_id}}'
       - path: placeholder.hist
         kind: placeholder
         label: '{{hist}}'

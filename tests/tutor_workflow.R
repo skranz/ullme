@@ -14,10 +14,105 @@ validation = ullme_validate_tutor_yaml(
   "ps_tutor_en", yaml_content
 )
 stopifnot(validation$ok)
+extended_definition_path = file.path(
+  "inst", "ai_tutors", "ps_tutor_deliberativ_de.yml"
+)
+extended_content = paste(
+  readLines(extended_definition_path, warn=FALSE, encoding="UTF-8"),
+  collapse="\n"
+)
+extended_validation = ullme_validate_tutor_yaml(
+  "ps_tutor_deliberativ_de", extended_content
+)
+stopifnot(extended_validation$ok)
 stopifnot(identical(
   ullme_render_prompt_once("{{input}}", list(input="{{literal}}")),
   "{{literal}}"
 ))
+
+stopifnot(
+  length(ullme_tutor_workflow_validate_structured_output(
+    "verdict: correct\nevidence: nachvollziehbar",
+    list(
+      required=list("verdict", "evidence"),
+      allow_extra_fields=FALSE,
+      fields=list(
+        verdict=list(type="string", enum=list("correct", "incorrect")),
+        evidence="string"
+      )
+    )
+  )) == 0L,
+  any(grepl(
+    "missing required fields",
+    ullme_tutor_workflow_validate_structured_output(
+      "verdict: maybe",
+      list(
+        required=list("verdict", "evidence"),
+        fields=list(
+          verdict=list(type="string", enum=list("correct", "incorrect")),
+          evidence="string"
+        )
+      )
+    ),
+    fixed=TRUE
+  ))
+)
+
+# collect retains every answer and a schema retry asks only for corrected YAML.
+collect_answers = c("first", "second", "third")
+collect_call = function(state, node, node_id, prompt, attempt, parallel_call,
+                         on_update) {
+  promises::promise(function(resolve, reject) resolve(list(
+    text=collect_answers[[parallel_call]], thinking=""
+  )))
+}
+collect_state = new.env(parent=emptyenv())
+collect_result = ullme_await_promise(
+  ullme_tutor_workflow_call_node(
+    state=collect_state,
+    node=list(n_parallel=3L, aggregate="collect"),
+    node_id="collect_test",
+    prompt="Answer independently",
+    model_call=collect_call
+  ),
+  seconds=5
+)
+stopifnot(
+  grepl("--- Output 1 ---\nfirst", collect_result, fixed=TRUE),
+  grepl("--- Output 3 ---\nthird", collect_result, fixed=TRUE),
+  identical(collect_state$last_parallel_outputs, as.list(collect_answers))
+)
+
+schema_attempts = 0L
+schema_prompts = character(0)
+schema_call = function(state, node, node_id, prompt, attempt, parallel_call,
+                        on_update) {
+  schema_attempts <<- schema_attempts + 1L
+  schema_prompts <<- c(schema_prompts, prompt)
+  answer = if (schema_attempts == 1L) "not yaml:" else "verdict: correct"
+  promises::promise(function(resolve, reject) resolve(list(
+    text=answer, thinking=""
+  )))
+}
+schema_result = ullme_await_promise(
+  ullme_tutor_workflow_call_node(
+    state=new.env(parent=emptyenv()),
+    node=list(
+      n_parallel=1L,
+      output_schema=list(verdict=list("correct", "incorrect")),
+      retries_if_invalid=1L
+    ),
+    node_id="schema_test",
+    prompt="Judge",
+    model_call=schema_call
+  ),
+  seconds=5
+)
+stopifnot(
+  identical(schema_result, "verdict: correct"),
+  identical(schema_attempts, 2L),
+  grepl("Do not redo or change the analysis", schema_prompts[[2]], fixed=TRUE)
+)
 stopifnot(identical(
   ullme_render_prompt_once("{{output.later}}", list(), strict=FALSE),
   "{{output.later}}"
@@ -220,14 +315,24 @@ debug_calls = list.files(
   full.names=TRUE
 )
 debug_calls = debug_calls[basename(debug_calls) != "000-session.txt"]
+debug_responses = list.files(
+  file.path(main_dir, "debug_session"),
+  pattern="^[0-9]{3}-.*-call-[0-9]{3}[.]json$",
+  full.names=TRUE
+)
 stopifnot(
   length(debug_calls) >= 1L,
+  length(debug_responses) == length(debug_calls),
   any(vapply(debug_calls, function(path) {
     content = paste(readLines(path, warn=FALSE), collapse="\n")
     grepl("instanceid: ps1", content, fixed=TRUE) &&
       grepl("===== SYSTEM PROMPT =====", content, fixed=TRUE) &&
       grepl("===== PROMPT =====", content, fixed=TRUE) &&
       grepl("===== ANSWER =====", content, fixed=TRUE)
+  }, logical(1))),
+  any(vapply(debug_responses, function(path) {
+    response = jsonlite::read_json(path, simplifyVector=FALSE)
+    grepl("Fake AI answer", response$response$text %||% "", fixed=TRUE)
   }, logical(1)))
 )
 stopifnot(

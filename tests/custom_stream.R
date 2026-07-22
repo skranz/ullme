@@ -91,6 +91,15 @@ image_body = ullme_custom_stream_body(
 )
 stopifnot(length(image_body$tools %||% list()) == 0)
 
+temperature_body = ullme_custom_stream_body(
+  "Use deterministic sampling.",
+  model="nvidia/nemotron-3-nano-30b-a3b",
+  messages=list(list(role="user", content="Test")),
+  temperature=0.25,
+  app=app
+)
+stopifnot(identical(temperature_body$temperature, 0.25))
+
 instance_builder_body = ullme_custom_stream_body(
   "Build instances.",
   model="nvidia/nemotron-3-nano-30b-a3b",

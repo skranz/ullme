@@ -275,6 +275,11 @@ ullme_normalize_ai_tutor_definition = function(definition, tutorid, source) {
       collapse="\n"
     )
     node$aggregate = paste0(node$aggregate %||% "")[1]
+    node$temperature = if (is.null(node$temperature)) NULL else
+      as.numeric(node$temperature)[1]
+    node$retries_if_invalid = as.integer(
+      node$retries_if_invalid %||% 0L
+    )[1]
     node$ask_for_input = isTRUE(node$ask_for_input)
     node$add_to_history = !identical(node$add_to_history, FALSE)
     node

@@ -11,7 +11,7 @@ ullme_render_prompt_once = function(text, values=list(), strict=TRUE) {
     key = substr(token, 3L, nchar(token) - 2L)
     value = values[[key]]
     if (is.null(value)) {
-      if (grepl("^output[.][A-Za-z][A-Za-z0-9_]*$", key)) {
+      if (grepl("^outputs?[.][A-Za-z][A-Za-z0-9_]*(?:[.][1-9][0-9]*)?$", key)) {
         if (!isTRUE(strict)) next
         value = paste0(key, " not available")
         warning(value, call.=FALSE, immediate.=TRUE)
@@ -27,6 +27,15 @@ ullme_render_prompt_once = function(text, values=list(), strict=TRUE) {
     )
   }
   text
+}
+
+
+ullme_tutor_workflow_format_outputs = function(outputs) {
+  outputs = paste0(unlist(outputs %||% list(), use.names=FALSE))
+  if (!length(outputs)) return("")
+  paste(vapply(seq_along(outputs), function(i) {
+    paste0("--- Output ", i, " ---\n", outputs[[i]])
+  }, character(1)), collapse="\n\n")
 }
 
 
@@ -92,14 +101,28 @@ ullme_tutor_workflow_values = function(state) {
   output_values = if (length(node_outputs)) {
     stats::setNames(node_outputs, paste0("output.", names(node_outputs)))
   } else list()
+  parallel_outputs = state$node_parallel_outputs %||% list()
+  parallel_values = list()
+  if (length(parallel_outputs)) {
+    for (node_id in names(parallel_outputs)) {
+      outputs = parallel_outputs[[node_id]]
+      parallel_values[[paste0("outputs.", node_id)]] =
+        ullme_tutor_workflow_format_outputs(outputs)
+      for (i in seq_along(outputs)) {
+        parallel_values[[paste0("output.", node_id, ".", i)]] = outputs[[i]]
+      }
+    }
+  }
+  latest_outputs = state$last_parallel_outputs %||% list()
   c(fragments, list(
     input=state$input %||% "",
     output=state$output %||% "",
+    outputs=ullme_tutor_workflow_format_outputs(latest_outputs),
     hist=history,
     hist_or_init_prompt=if (nzchar(history)) history else
       ullme_tutor_workflow_init_prompt(tutor, app=state$app),
     image_uploaded=if (length(state$uploads %||% list())) "TRUE" else "FALSE"
-  ), output_values)
+  ), output_values, parallel_values)
 }
 
 
@@ -117,7 +140,16 @@ ullme_tutor_workflow_append_text = function(...) {
 
 
 ullme_tutor_workflow_prompt = function(state, node) {
-  ullme_tutor_workflow_render(state, node$prompt %||% "", strict=TRUE)
+  prompt = ullme_tutor_workflow_render(
+    state, node$prompt %||% "", strict=TRUE
+  )
+  if (is.null(node$output_schema)) return(prompt)
+  paste0(
+    prompt,
+    "\n\nReturn only a YAML mapping that satisfies this output schema. ",
+    "Do not wrap it in explanatory prose.\n\n",
+    trimws(yaml::as.yaml(node$output_schema, unicode=TRUE))
+  )
 }
 
 
@@ -134,6 +166,8 @@ ullme_tutor_workflow_new = function(tutor, input, uploads=list(),
   state$conversation = conversation %||% list()
   state$internal_history = list()
   state$node_outputs = list()
+  state$node_parallel_outputs = list()
+  state$last_parallel_outputs = list()
   state$shown_messages = list()
   state$trace = list()
   state$output = ""
@@ -199,6 +233,116 @@ ullme_tutor_workflow_vote = function(outputs, node) {
 }
 
 
+ullme_tutor_workflow_parse_yaml_output = function(text) {
+  text = trimws(paste0(text %||% "", collapse="\n"))
+  if (grepl("^```", text)) {
+    text = sub("^```(?:yaml|yml)?[[:space:]]*", "", text, perl=TRUE)
+    text = sub("[[:space:]]*```[[:space:]]*$", "", text, perl=TRUE)
+  }
+  tryCatch(yaml::yaml.load(text, eval.expr=FALSE), error=function(error) error)
+}
+
+
+ullme_tutor_workflow_schema_fields = function(schema) {
+  if ("fields" %in% names(schema)) schema$fields else schema
+}
+
+
+ullme_tutor_workflow_validate_structured_output = function(text, schema) {
+  value = ullme_tutor_workflow_parse_yaml_output(text)
+  if (inherits(value, "error")) {
+    return(paste0("invalid YAML: ", conditionMessage(value)))
+  }
+  if (!is.list(value) || is.null(names(value))) {
+    return("the YAML root must be a mapping")
+  }
+  expanded = "fields" %in% names(schema)
+  fields = ullme_tutor_workflow_schema_fields(schema)
+  required = if (expanded) {
+    paste0(unlist(schema$required %||% list(), use.names=FALSE))
+  } else names(fields)
+  individually_required = names(fields)[vapply(fields, function(spec) {
+    is.list(spec) && !is.null(names(spec)) && isTRUE(spec$required)
+  }, logical(1))]
+  required = unique(c(required, individually_required))
+  missing = setdiff(required, names(value))
+  errors = if (length(missing)) paste0(
+    "missing required fields: ", paste(missing, collapse=", ")
+  ) else character(0)
+  if (expanded && identical(schema$allow_extra_fields, FALSE)) {
+    extra = setdiff(names(value), names(fields))
+    if (length(extra)) errors = c(errors, paste0(
+      "unexpected fields: ", paste(extra, collapse=", ")
+    ))
+  }
+  matches_type = function(item, type) {
+    switch(type,
+      any=TRUE,
+      string=is.character(item) && length(item) == 1L,
+      string_or_null=is.null(item) || (is.character(item) && length(item) == 1L),
+      number=is.numeric(item) && length(item) == 1L,
+      integer=length(item) == 1L &&
+        (is.integer(item) || (is.numeric(item) && item == floor(item))),
+      boolean=is.logical(item) && length(item) == 1L,
+      mapping=is.list(item) && !is.null(names(item)),
+      object=is.list(item) && !is.null(names(item)),
+      sequence=(is.list(item) && is.null(names(item))) ||
+        (is.atomic(item) && length(item) > 1L),
+      array=(is.list(item) && is.null(names(item))) ||
+        (is.atomic(item) && length(item) > 1L),
+      `null`=is.null(item),
+      FALSE
+    )
+  }
+  for (field in intersect(names(fields), names(value))) {
+    spec = fields[[field]]
+    item = value[[field]]
+    if (is.character(spec) && length(spec) == 1L) {
+      types = spec
+      enum = NULL
+      nullable = identical(spec, "string_or_null")
+    } else if (is.list(spec) && !is.null(names(spec))) {
+      types = paste0(unlist(spec$type %||% "any", use.names=FALSE))
+      enum = spec$enum
+      nullable = isTRUE(spec$nullable)
+    } else {
+      types = "any"
+      enum = spec
+      nullable = FALSE
+    }
+    if (is.null(item) && nullable) next
+    if (!any(vapply(types, function(type) matches_type(item, type), logical(1)))) {
+      errors = c(errors, paste0(
+        "field ", field, " must have type ", paste(types, collapse=" or ")
+      ))
+      next
+    }
+    if (!is.null(enum)) {
+      choices = if (is.list(enum)) enum else as.list(enum)
+      if (!any(vapply(choices, function(choice) identical(item, choice), logical(1)))) {
+        errors = c(errors, paste0(
+          "field ", field, " must be one of: ",
+          paste(paste0(unlist(choices, use.names=FALSE)), collapse=", ")
+        ))
+      }
+    }
+  }
+  errors
+}
+
+
+ullme_tutor_workflow_schema_retry_prompt = function(prompt, outputs, errors) {
+  paste0(
+    prompt,
+    "\n\nYour previous answer did not match the required YAML schema. Do not redo ",
+    "or change the analysis. Return the same analysis again, changing only its ",
+    "format so it is valid YAML and satisfies the schema. Return YAML only.\n\n",
+    "Validation errors:\n- ", paste(errors, collapse="\n- "),
+    "\n\nPrevious answer(s):\n", ullme_tutor_workflow_format_outputs(outputs)
+  )
+}
+
+
 ullme_tutor_workflow_model_call = function(state, node, node_id, prompt,
                                             attempt=1L, parallel_call=1L,
                                             on_update=function(...) NULL) {
@@ -232,6 +376,7 @@ ullme_tutor_workflow_model_call = function(state, node, node_id, prompt,
       include_thinking=isTRUE(state$app$chat_debug),
       task_profile="",
       uploads=state$uploads,
+      temperature=node$temperature %||% NULL,
       on_update=on_update,
       app=state$app
     )
@@ -247,7 +392,8 @@ ullme_tutor_workflow_model_call = function(state, node, node_id, prompt,
         system_prompt=system_prompt,
         prompt=prompt,
         answer=result$text %||% "",
-        thinking=result$thinking %||% ""
+        thinking=result$thinking %||% "",
+        response=result
       )
       result
     },
@@ -262,7 +408,8 @@ ullme_tutor_workflow_model_call = function(state, node, node_id, prompt,
         prompt=prompt,
         answer=partial_text,
         thinking=partial_thinking,
-        error=conditionMessage(error)
+        error=conditionMessage(error),
+        response=list(text=partial_text, thinking=partial_thinking)
       )
       stop(error)
     }
@@ -276,6 +423,8 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
                                            model_call=ullme_tutor_workflow_model_call) {
   attempts_left = as.integer(node$n_retries %||% 0L)
   empty_retries_left = as.integer(node$retries_if_empty %||% 0L)
+  invalid_retries_left = as.integer(node$retries_if_invalid %||% 0L)
+  attempt_prompt = prompt
   attempt = 0L
   run_attempt = NULL
   run_attempt = function() {
@@ -284,7 +433,7 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
     calls = lapply(seq_len(n), function(i) {
       callback = if (n == 1L) on_final_update else function(...) NULL
       model_call(
-        state, node, node_id, prompt,
+        state, node, node_id, attempt_prompt,
         attempt=attempt,
         parallel_call=i,
         on_update=callback
@@ -295,6 +444,25 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
       combined,
       onFulfilled=function(results) {
         outputs = lapply(results, function(result) result$text %||% "")
+        if (!is.null(node$output_schema)) {
+          schema_errors = unlist(lapply(seq_along(outputs), function(i) {
+            errors = ullme_tutor_workflow_validate_structured_output(
+              outputs[[i]], node$output_schema
+            )
+            if (length(errors)) paste0("output ", i, ": ", errors) else NULL
+          }), use.names=FALSE)
+          if (length(schema_errors)) {
+            if (invalid_retries_left <= 0L) stop(
+              "Tutor node '", node_id, "' returned invalid structured YAML: ",
+              paste(schema_errors, collapse="; ")
+            )
+            invalid_retries_left <<- invalid_retries_left - 1L
+            attempt_prompt <<- ullme_tutor_workflow_schema_retry_prompt(
+              prompt, outputs, schema_errors
+            )
+            return(run_attempt())
+          }
+        }
         output = if (identical(node$aggregate %||% "", "majority_vote")) {
           voted = tryCatch(
             ullme_tutor_workflow_vote(outputs, node),
@@ -306,6 +474,8 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
             return(run_attempt())
           }
           voted
+        } else if (identical(node$aggregate %||% "", "collect")) {
+          ullme_tutor_workflow_format_outputs(outputs)
         } else {
           paste0(outputs[[1]] %||% "")
         }
@@ -322,6 +492,7 @@ ullme_tutor_workflow_call_node = function(state, node, node_id, prompt,
             immediate.=TRUE
           )
         }
+        state$last_parallel_outputs = outputs
         output
       },
       onRejected=function(error) {
@@ -411,8 +582,12 @@ ullme_tutor_workflow_advance = function(state,
       )
       return(promises::then(call, onFulfilled=function(output) {
         call_finished_at = Sys.time()
+        parallel_outputs = state$last_parallel_outputs %||% list(
+          paste0(output %||% "", collapse="\n")
+        )
         state$output = paste0(output %||% "", collapse="\n")
         state$node_outputs[[node_id]] = state$output
+        state$node_parallel_outputs[[node_id]] = parallel_outputs
         state$trace[[length(state$trace) + 1L]] = list(
           node=node_id,
           skipped=FALSE,
@@ -429,7 +604,8 @@ ullme_tutor_workflow_advance = function(state,
             state$tutor, app=state$app
           ),
           prompt=rendered,
-          output=state$output
+          output=state$output,
+          outputs=parallel_outputs
         )
         state$node_call_seq = state$node_call_seq + 1L
         ullme_ai_interaction_workflow_node(

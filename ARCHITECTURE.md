@@ -445,7 +445,10 @@ The explicit development option `studentApp(chat_debug=TRUE)` is an exception:
 it creates `main_dir/debug_session/` and records every model call in the current
 process, including the complete system prompt, rendered node prompt, answer,
 thinking/error text, Tutor, instance, node, retry attempt, and parallel-call
-index. Constructing another debug-enabled Student App removes every old file
+index. Each call writes a human-readable text file and a JSON file containing
+the structured model response. Filenames include a per-node call counter so
+retries, parallel calls, and repeated visits to a node remain distinct.
+Constructing another debug-enabled Student App removes every old file
 below that directory with `file.remove()` before writing the new session header;
 empty legacy directories may remain. This log is independent of
 `never_save_chats` and must not be enabled in privacy-sensitive deployments.

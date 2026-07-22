@@ -65,6 +65,7 @@ ullme_debug_session_init = function(app=getApp()) {
   if (!identical(app$role, "student") || !isTRUE(app$chat_debug)) {
     app$debug_session_dir = NULL
     app$debug_session_call_seq = 0L
+    app$debug_session_node_call_seq = list()
     return(invisible(NULL))
   }
   directory = ullme_debug_session_dir(app=app)
@@ -75,6 +76,7 @@ ullme_debug_session_init = function(app=getApp()) {
     mustWork=TRUE
   )
   app$debug_session_call_seq = 0L
+  app$debug_session_node_call_seq = list()
   writeLines(
     c(
       "uLLMe student debug session",
@@ -100,9 +102,15 @@ ullme_debug_session_model_call_start = function(state, node_id,
   app$debug_session_call_seq = as.integer(
     app$debug_session_call_seq %||% 0L
   ) + 1L
+  node = paste0(node_id %||% "")[1]
+  node_calls = app$debug_session_node_call_seq %||% list()
+  node_call = as.integer(node_calls[[node]] %||% 0L) + 1L
+  node_calls[[node]] = node_call
+  app$debug_session_node_call_seq = node_calls
   list(
     index=app$debug_session_call_seq,
-    node=paste0(node_id %||% "")[1],
+    node=node,
+    node_call=node_call,
     attempt=as.integer(attempt)[1],
     parallel_call=as.integer(parallel_call)[1],
     started_at=format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
@@ -113,21 +121,25 @@ ullme_debug_session_model_call_start = function(state, node_id,
 ullme_debug_session_model_call_finish = function(record, state,
                                                   system_prompt, prompt,
                                                   answer="", thinking="",
-                                                  error="") {
+                                                  error="", response=NULL) {
   if (is.null(record)) return(invisible(NULL))
   app = state$app
   directory = app$debug_session_dir
   if (is.null(directory) || !dir.exists(directory)) return(invisible(NULL))
   safe_node = gsub("[^A-Za-z0-9_-]+", "-", record$node)
   if (!nzchar(safe_node)) safe_node = "unknown-node"
-  path = file.path(
-    directory,
-    sprintf("%03d-%s.txt", record$index, safe_node)
+  stem = sprintf(
+    "%03d-%s-call-%03d",
+    record$index, safe_node, as.integer(record$node_call %||% 1L)
   )
+  path = file.path(directory, paste0(stem, ".txt"))
+  json_path = file.path(directory, paste0(stem, ".json"))
+  finished_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")
+  status = if (nzchar(paste0(error)[1])) "error" else "completed"
   head = c(
     "ULLME STUDENT MODEL CALL",
     paste0("started_at: ", record$started_at),
-    paste0("finished_at: ", format(Sys.time(), "%Y-%m-%dT%H:%M:%OS%z")),
+    paste0("finished_at: ", finished_at),
     paste0("userid: ", app$userid %||% ""),
     paste0("teacherid: ", app$teacherid %||% ""),
     paste0("semester: ", app$semester %||% ""),
@@ -135,10 +147,11 @@ ullme_debug_session_model_call_finish = function(record, state,
     paste0("tutorid: ", app$tutorid %||% state$tutor$tutorid %||% ""),
     paste0("instanceid: ", app$instanceid %||% ""),
     paste0("node: ", record$node),
+    paste0("node_call: ", record$node_call %||% 1L),
     paste0("attempt: ", record$attempt),
     paste0("parallel_call: ", record$parallel_call),
     paste0("model: ", state$model %||% ""),
-    paste0("status: ", if (nzchar(paste0(error)[1])) "error" else "completed")
+    paste0("status: ", status)
   )
   sections = c(
     head,
@@ -165,5 +178,36 @@ ullme_debug_session_model_call_finish = function(record, state,
     )
   }
   writeLines(sections, path, useBytes=TRUE)
+  if (is.null(response)) {
+    response = list(
+      text=paste0(answer %||% "", collapse="\n"),
+      thinking=paste0(thinking %||% "", collapse="\n")
+    )
+  }
+  jsonlite::write_json(
+    list(
+      started_at=record$started_at,
+      finished_at=finished_at,
+      userid=app$userid %||% "",
+      teacherid=app$teacherid %||% "",
+      semester=app$semester %||% "",
+      courseid=app$courseid %||% "",
+      tutorid=app$tutorid %||% state$tutor$tutorid %||% "",
+      instanceid=app$instanceid %||% "",
+      node=record$node,
+      node_call=record$node_call %||% 1L,
+      attempt=record$attempt,
+      parallel_call=record$parallel_call,
+      model=state$model %||% "",
+      status=status,
+      response=response,
+      error=if (nzchar(paste0(error)[1])) paste0(error)[1] else NULL
+    ),
+    json_path,
+    auto_unbox=TRUE,
+    null="null",
+    pretty=TRUE,
+    digits=NA
+  )
   invisible(path)
 }

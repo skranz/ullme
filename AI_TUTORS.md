@@ -78,9 +78,16 @@ prompt_fragments:
 - `waiting_message` replaces the temporary activity text while the node runs.
 - `ask_for_input: true` shows `show_text`, suspends the workflow, and processes
   the student's next submission with that node's prompt.
-- `n_parallel`, `aggregate: majority_vote`, and `n_retries` support classifier
-  nodes. Values are trimmed, case-normalized, restricted to declared routes,
-  and must produce an absolute majority.
+- `n_parallel` runs several independent calls. `aggregate: majority_vote`
+  supports classifier nodes: values are trimmed, case-normalized, restricted
+  to declared routes, and must produce an absolute majority.
+- `aggregate: collect` keeps every parallel response. The combined response is
+  available as `{{output}}`; `{{outputs}}` renders the individual responses
+  with numbered separators.
+- `temperature` optionally overrides the model temperature for a node (from
+  `0` through `2`).
+- `output_schema` parses and validates a node's response as YAML.
+  `retries_if_invalid` can request up to three format-only correction calls.
 
 The runtime stops workflows after 40 node executions to contain accidental
 cycles. Node IDs and all route targets are validated when YAML is saved.
@@ -92,10 +99,45 @@ available in node prompts are:
 
 - `{{input}}`: the student submission that started or resumed the workflow;
 - `{{output}}`: the immediately preceding model output;
+- `{{output.node_id}}`: the combined output of a named completed node;
+- `{{outputs}}`: all individual outputs of the immediately preceding node;
+- `{{outputs.node_id}}`: all individual outputs of a named completed node;
+- `{{output.node_id.1}}`: one numbered output of a named completed node;
 - `{{hist}}`: prior visible conversation plus retained internal node outputs;
 - `{{hist_or_init_prompt}}`: the workflow history (the init prompt is already
   the system message); and
 - `{{image_uploaded}}`: `TRUE` or `FALSE`.
+
+Structured output schemas use either an explicit form:
+
+```yaml
+output_schema:
+  required: [verdict, first_error_step]
+  allow_extra_fields: false
+  fields:
+    verdict:
+      type: string
+      enum: [correct, incorrect, unclear]
+    first_error_step:
+      type: string
+      nullable: true
+    confidence:
+      type: number
+retries_if_invalid: 1
+```
+
+or a compact form in which every listed field is required:
+
+```yaml
+output_schema:
+  verdict: [correct, incorrect, unclear]
+  student_evidence: string
+```
+
+Supported types are `any`, `string`, `string_or_null`, `number`, `integer`,
+`boolean`, `mapping`/`object`, `sequence`/`array`, and `null`. The runtime
+appends the schema to the model prompt automatically. A model may wrap its YAML
+in a single fenced code block; the stored output remains unchanged.
 
 Uploaded images remain available to later calls in the same workflow, including
 after a clarification pause. Internal calls are not rendered or added to the

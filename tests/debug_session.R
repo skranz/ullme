@@ -56,12 +56,38 @@ stopifnot(
   grepl("Complete answer", content, fixed=TRUE),
   grepl("Internal reasoning", content, fixed=TRUE)
 )
+json_path = sub("[.]txt$", ".json", call_path)
+json = jsonlite::read_json(json_path, simplifyVector=FALSE)
+stopifnot(
+  file.exists(json_path),
+  identical(json$node, "answer_node"),
+  identical(json$node_call, 1L),
+  identical(json$response$text, "Complete answer"),
+  identical(json$response$thinking, "Internal reasoning")
+)
+
+second_record = ullme_debug_session_model_call_start(
+  state,
+  node_id="answer_node"
+)
+second_path = ullme_debug_session_model_call_finish(
+  second_record,
+  state,
+  system_prompt="System",
+  prompt="Prompt",
+  response=list(text="Second answer", thinking="")
+)
+stopifnot(
+  identical(second_record$node_call, 2L),
+  grepl("answer_node-call-002[.]txt$", second_path)
+)
 
 ullme_debug_session_init(app=app)
 remaining = list.files(debug_dir, recursive=TRUE, all.files=TRUE, no..=TRUE)
 stopifnot(
   identical(remaining, "000-session.txt"),
-  identical(app$debug_session_call_seq, 0L)
+  identical(app$debug_session_call_seq, 0L),
+  identical(app$debug_session_node_call_seq, list())
 )
 
 ullme_clear_debug_session_dir(debug_dir)
