@@ -1,7 +1,7 @@
 ullme_custom_stream_supported = function(app=getApp(), task_profile="") {
   provider = paste0(app$api_config$provider %||% "")[1]
   task_profile %in% c("", "instance_builder") &&
-    provider %in% c("nvidia", "local")
+    provider %in% c("nvidia", "uulm_api")
 }
 
 

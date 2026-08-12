@@ -158,12 +158,6 @@ ullme_speech_to_text_models = function(provider="nvidia") {
 }
 
 
-ullme_local_base_url = function() {
-  restore.point("ullme_local_base_url")
-  "http://127.0.0.1:8000/v1"
-}
-
-
 ullme_nvidia_chat_profile = function(model, task_profile="") {
   restore.point("ullme_nvidia_chat_profile")
   model = tolower(paste0(model)[1])

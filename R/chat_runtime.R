@@ -19,7 +19,7 @@ ullme_ai_connection_status = function(model=NULL, waiting=FALSE,
   provider = switch(
     paste0(config$provider %||% "")[1],
     nvidia="NVIDIA NIM",
-    local="the local model server",
+    uulm_api="the Ulm University model server",
     fake="the test model",
     paste0(config$provider %||% "the model provider")[1]
   )

@@ -35,8 +35,9 @@ ullme_teacherid = function(app=getApp()) {
                       instanceid=NULL,
                       uses_fake_ai=NULL, max_upload_mb=100,
                       api_key_file=NULL,
-                      api_provider=c("fake", "nvidia", "local"),
+                      api_provider=c("fake", "nvidia", "uulm_api"),
                       api_model=NULL, api_base_url=NULL,
+                      allow_model_selection=TRUE,
                       render_chat_markdown=TRUE,
                       catch_chat_errors=TRUE,
                       chat_debug=FALSE,
@@ -68,7 +69,7 @@ ullme_teacherid = function(app=getApp()) {
     if (isTRUE(uses_fake_ai)) {
       api_provider = "fake"
     } else if (identical(api_provider, "fake")) {
-      api_provider = "local"
+      api_provider = "uulm_api"
     }
   }
   app$api_config = ullme_api_config(
@@ -152,6 +153,11 @@ ullme_teacherid = function(app=getApp()) {
   glob$courseid = ullme_optional_app_parameter(
     courseid, ullme_clean_courseid, "courseid"
   )
+  if (!is.logical(allow_model_selection) ||
+      length(allow_model_selection) != 1L ||
+      is.na(allow_model_selection)) {
+    stop("allow_model_selection must be TRUE or FALSE.")
+  }
   glob$semester = ullme_optional_app_parameter(
     semester,
     function(value) {
@@ -187,6 +193,7 @@ ullme_teacherid = function(app=getApp()) {
   app$studentid = NULL
   app$is.authenticated = identical(login_check, "none")
   app$uses_fake_ai = identical(app$api_config$provider, "fake")
+  app$allow_model_selection = isTRUE(allow_model_selection)
   app$render_chat_markdown = isTRUE(render_chat_markdown)
   app$adapt_mathjax = isTRUE(adapt_mathjax)
   app$catch_chat_errors = isTRUE(catch_chat_errors)
@@ -1496,7 +1503,7 @@ ullme_composer_ui = function(app=getApp()) {
         placeholder = "Ask anything",
         `aria-label` = "Chat message"
       ),
-      tags$select(
+      if (isTRUE(app$allow_model_selection)) tags$select(
         id = "ullme_model_select",
         class = "ullme-model-select",
         `aria-label` = "Model",

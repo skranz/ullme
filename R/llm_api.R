@@ -2,7 +2,7 @@
 ullme_api_provider = function(provider) {
   restore.point("ullme_api_provider")
   provider = tolower(trimws(paste0(provider)[1]))
-  match.arg(provider, c("fake", "nvidia", "local"))
+  match.arg(provider, c("fake", "nvidia", "uulm_api"))
 }
 
 
@@ -45,10 +45,11 @@ ullme_api_config = function(api_provider="fake", api_key_file=NULL,
       stop("api_model is not in the configured NVIDIA model allowlist.")
     }
     credentials = ullme_api_credentials_file(api_key_file, required=TRUE)
-  } else if (identical(provider, "local")) {
-    base_url = paste0(api_base_url %||% ullme_local_base_url())[1]
-    model = paste0(api_model %||% "local-model")[1]
-    credentials = ullme_api_credentials_file(api_key_file, required=FALSE)
+  } else if (identical(provider, "uulm_api")) {
+    base_url = paste0(api_base_url %||% ullme_uulm_api_base_url())[1]
+    model = paste0(api_model %||% ullme_uulm_api_default_model())[1]
+    ullme_api_key(api_key_file, required=TRUE)
+    credentials = ullme_api_credentials_file(api_key_file, required=TRUE)
   } else {
     base_url = ""
     model = paste0(api_model %||% "fake")[1]
@@ -73,7 +74,7 @@ ullme_api_models = function(config, timeout=15, image_and_text=FALSE) {
   restore.point("ullme_api_models")
   if (identical(config$provider, "fake")) return("fake")
   request = httr2::request(paste0(sub("/+$", "", config$base_url), "/models"))
-  if (identical(config$provider, "nvidia")) {
+  if (!is.null(config$credentials)) {
     request = httr2::req_headers(
       request,
       Authorization=paste("Bearer", config$credentials())
@@ -169,7 +170,8 @@ ullme_refresh_model_catalog = function(app=getApp()) {
   restore.point("ullme_refresh_model_catalog")
   app$api_models = app$api_config$model
   app$api_models_error = NULL
-  if (!identical(app$api_config$provider, "fake")) {
+  if (isTRUE(app$allow_model_selection) &&
+      !identical(app$api_config$provider, "fake")) {
     discovered = tryCatch(
       ullme_api_models(app$api_config),
       error=function(e) {
@@ -208,7 +210,8 @@ ullme_safe_ai_error = function(error, config=NULL) {
   if (nzchar(key)) message = gsub(key, "[API key]", message, fixed=TRUE)
   lower = tolower(message)
   if (grepl("401|unauthori|invalid api key|authentication", lower)) {
-    return("NVIDIA rejected the API credentials. Check api_key_file.")
+    provider = paste0(config$provider %||% "The model provider")[1]
+    return(paste0(provider, " rejected the API credentials. Check api_key_file."))
   }
   if (grepl("429|rate.?limit|too many requests", lower)) {
     return("The model provider is rate-limiting requests. Please try again shortly.")

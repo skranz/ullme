@@ -82,6 +82,26 @@ and one copyable URL per enabled Tutor or Tutor instance using query arguments
 `sem`, `tutor`, and `inst`. `studentApp()` accepts these aliases, chooses a
 default semester for the course when `sem` is missing, and lets students switch
 semester, Tutor, and instance in the header when alternatives exist.
+
+## Ulm University API
+
+The student and teacher apps can use the OpenAI-compatible Ulm University
+endpoint. The base URL and API-key file are supplied only when the app is
+created; they are not editable in the UI. Model selection is enabled by
+default, and the selector is populated from the endpoint's model catalog.
+
+```r
+app = teacherApp(
+  main_dir="C:/libraries/ullme/ullme_main",
+  api_provider="uulm_api",
+  api_key_file="C:/libraries/ullme/local_key.txt"
+)
+```
+
+The same arguments work with `studentApp()`. The default model is
+`google/gemma-4-12B-it`; the advertised DeepSeek models remain available in
+the selector. Set `allow_model_selection=FALSE` at app startup to use the
+configured model without showing a selector or requesting the model catalog.
 Assistant output is rendered as CommonMark Markdown by default. Pass
 `render_chat_markdown=FALSE` to either constructor for literal plain text.
 By default, `adapt_mathjax=TRUE` also normalizes `$...$` and `$$...$$` in
